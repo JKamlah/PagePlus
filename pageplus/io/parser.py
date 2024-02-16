@@ -1,6 +1,8 @@
-import lxml.etree as ET
 from pathlib import Path
 from typing import Tuple
+
+import lxml.etree as ET
+
 
 def parse_xml(filepath: Path = '') -> Tuple[ET.Element, ET._ElementTree, str]:
     """"
@@ -18,4 +20,3 @@ def parse_xml(filepath: Path = '') -> Tuple[ET.Element, ET._ElementTree, str]:
     # Extracting namespace from the root tag
     namespace = tree.xpath('namespace-uri(.)')
     return tree, root, namespace
-

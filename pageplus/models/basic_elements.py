@@ -17,7 +17,7 @@ from pageplus.io.logger import logging
 class CoordElement:
     """ Class to represent and modify coordinates element."""
     xml_element: ET._Element
-    ns: str   # Namespace for the XML element
+    ns: str  # Namespace for the XML element
     parent: None
 
     # IO methods
@@ -61,7 +61,7 @@ class CoordElement:
             return LinearRing(coord_tuples) if len(coord_tuples) > 3 else Polygon(coord_tuples).exterior
 
         if returntype == "mrr":
-                return Polygon(coord_tuples).minimum_rotated_rectangle
+            return Polygon(coord_tuples).minimum_rotated_rectangle
 
         return Polygon(coord_tuples)
 
@@ -88,6 +88,7 @@ class CoordElement:
         coords.set('points', coordstr)
 
         # Conversion methods
+
     @staticmethod
     def convert_coordinates_str_to_tuples(coordstr: str) -> list:
         """
@@ -181,7 +182,8 @@ class CoordElement:
         if parent_coords is not None:
             parent_coords_tuples = CoordElement.convert_coordinates_str_to_tuples(parent_coords.attrib['points'])
             if len(parent_coords_tuples) <= 2:
-                logging.warning(f"{self.get_parent_element().attrib['id']}: Parent region has insufficient coord points.")
+                logging.warning(
+                    f"{self.get_parent_element().attrib['id']}: Parent region has insufficient coord points.")
                 return False
 
             parent_polygon = Polygon(parent_coords_tuples)
@@ -195,7 +197,7 @@ class CoordElement:
     @staticmethod
     def _remove_adjacent_duplicates(lst):
         """ Removes adjacent duplicate elements from the list. """
-        result = [lst[0]] + [lst[i] for i in range(1, len(lst)) if lst[i] != lst[i-1]]
+        result = [lst[0]] + [lst[i] for i in range(1, len(lst)) if lst[i] != lst[i - 1]]
         # Check if the first and last item are the same (for closed shapes)
         if len(result) > 1 and result[0] == result[-1]:
             result.pop()
@@ -206,6 +208,7 @@ class CoordElement:
         """
         Splits two overlapping LinearRings into separate non-overlapping rings.
         """
+
         def centerline_linestrings(fst_ls: LineString, snd_ls: LineString) -> LineString:
             # Calculates a centerline between two LineStrings
             more_pts, less_pts = (fst_ls, snd_ls) if len(fst_ls.coords) > len(snd_ls.coords) else (snd_ls, fst_ls)
@@ -213,11 +216,12 @@ class CoordElement:
             for pt in more_pts.coords:
                 pt = Point(pt)
                 pt, nearest_pt = nearest_points(pt, less_pts)
-                mid_pt = line_interpolate_point(LineString([pt, nearest_pt]), pt.distance(nearest_pt)/2)
+                mid_pt = line_interpolate_point(LineString([pt, nearest_pt]), pt.distance(nearest_pt) / 2)
                 centerline_pts.append(normalize(mid_pt))
             return LineString(centerline_pts)
 
-        def centerlines_between_overlapping_linearrings(fst_lr: LinearRing, snd_lr: LinearRing) -> tuple[LineString, LineString]:
+        def centerlines_between_overlapping_linearrings(fst_lr: LinearRing, snd_lr: LinearRing) -> tuple[
+            LineString, LineString]:
             # Determines centerlines between two overlapping LinearRings
             fst_ls, snd_ls = LineString(), LineString()
             if snd_lr.intersects(fst_lr) or not fst_lr.within(snd_lr):
@@ -250,7 +254,6 @@ class CoordElement:
         snd_lr = sorted(split(Polygon(snd_lr), snd_ls).geoms, key=lambda x: x.area, reverse=True)[0].exterior
 
         return fst_lr, snd_lr
-
 
     @staticmethod
     def fit_first_into_second_linearring(fst_lr: LinearRing, snd_lr: LinearRing) -> LinearRing:
@@ -289,12 +292,12 @@ class CoordElement:
         if parent_coords is None or not isinstance(parent_coords, LinearRing):
             parent_element = self.get_parent_element().find(f"{{{self.ns}}}Coords")
             if parent_element is not None and parent_element.attrib['points'] != '0,0 0,0':
-                parent_coords = Polygon(CoordElement.convert_coordinates_str_to_tuples(parent_element.attrib['points'])).exterior
+                parent_coords = Polygon(
+                    CoordElement.convert_coordinates_str_to_tuples(parent_element.attrib['points'])).exterior
             else:
                 return
         fitted_coords = CoordElement.fit_first_into_second_linearring(coords, parent_coords)
         self.update_coordinates(fitted_coords)
-
 
     def simplify(self, tolerance: int = 1):
         """
@@ -385,6 +388,7 @@ class CoordElement:
         Translates a LinearRing by specified x, y, and z offsets.
         """
         return affinity.translate(poly, xoff=xoff, yoff=yoff, zoff=zoff)
+
 
 @dataclass
 class Region(CoordElement):

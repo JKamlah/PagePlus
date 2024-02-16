@@ -1,8 +1,9 @@
-import typer
-from typing_extensions import Annotated
-from rich.progress import track
-from typing import List, Optional
 from pathlib import Path
+from typing import List, Optional
+
+import typer
+from rich.progress import track
+from typing_extensions import Annotated
 
 from pageplus.io.logger import logging
 from pageplus.io.utils import collect_xml_files, determine_output_path
@@ -10,11 +11,14 @@ from pageplus.models.page import Page
 
 app = typer.Typer()
 
+
 @app.command()
 def repair(
-    inputs: Annotated[List[Path], typer.Argument(exists=True, help="Paths to the files to be repaired.")],
-    outputdir: Annotated[Optional[Path], typer.Option(help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")] = None,
-    dry_run: Annotated[bool, typer.Option(help="If True, the function will not write any files.")] = False,
+        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths to the files to be repaired.")],
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")] = None,
+        overwrite: Annotated[bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
+        dry_run: Annotated[bool, typer.Option(help="If True, the function will not write any files.")] = False,
 ):
     """
     Repairs PAGE XML files, attempting to fix issues in text regions and lines.
@@ -64,16 +68,19 @@ def repair(
         repair_page(page)
 
         if not dry_run:
-            fout = determine_output_path(xml_file, outputdir, filename)
+            fout = xml_file if overwrite else determine_output_path(xml_file, outputdir, filename)
             logging.info(f'Wrote modified xml file to output directory: {fout}')
             page.save_xml(fout)
 
 
 @app.command()
 def delete_text(
-    inputs: Annotated[List[Path], typer.Argument(exists=True, help="Paths to the PAGE XML files to be processed.")],
-    outputdir: Annotated[Optional[Path], typer.Option(help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")]= None,
-    level: Annotated[str, typer.Option(help="Deletion level: region, word, or line.", case_sensitive=False)] = 'region',
+        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths to the PAGE XML files to be processed.")],
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")] = None,
+        overwrite: Annotated[bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
+        level: Annotated[
+            str, typer.Option(help="Deletion level: region, word, or line.", case_sensitive=False)] = 'region',
 ):
     """
     Deletes text elements at the specified level in PAGE XML files.
@@ -95,15 +102,17 @@ def delete_text(
         page = Page(xml_file)
         page.delete_textlevel(level)
 
-        fout = determine_output_path(xml_file, outputdir, filename)
+        fout = xml_file if overwrite else determine_output_path(xml_file, outputdir, filename)
         logging.info(f'Wrote modified xml file to output directory: {fout}')
         page.save_xml(fout)
 
 
 @app.command()
 def delete_textlines(
-    inputs: Annotated[List[Path], typer.Argument(exists=True, help="Paths to the PAGE XML files to be processed.")],
-    outputdir: Annotated[Optional[Path], typer.Option(help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")] = None
+        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths to the PAGE XML files to be processed.")],
+        overwrite: Annotated[bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")] = None
 ):
     """
     Deletes text lines from PAGE XML files and saves the modified files.
@@ -129,17 +138,22 @@ def delete_textlines(
                 page.delete_element(line.xml_element)
 
         # Determine output file path and write the modified XML file
-        fout = determine_output_path(xml_file, outputdir, filename)
+        fout = xml_file if overwrite else determine_output_path(xml_file, outputdir, filename)
         logging.info(f'Wrote modified xml file to output directory: {fout}')
         page.save_xml(fout)
 
 
 @app.command()
 def extend_lines(
-    inputs: Annotated[List[Path], typer.Argument(exists=True, help="Paths to the PAGE XML files to be processed.")],
-    outputdir: Annotated[Optional[Path], typer.Option(help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")]= None,
-    cut_overlaps: Annotated[bool, typer.Option(help="Fit the extended target into the parent region.")] = True,
-    dry_run: Annotated[bool, typer.Option( help="Perform a dry run without writing any files.")] = False
+        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths to the PAGE XML files to be processed.")],
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")] = None,
+        distance: Annotated[int, typer.Option(help="Distance (in pixel) of extension.")] = 16,
+        dim: Annotated[str, typer.Option(help="Dimension in which the buffer is performed")] = "all",
+        rectify: Annotated[bool, typer.Option(help="Rectify the polygons")] = True,
+        overwrite: Annotated[bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
+        cut_overlaps: Annotated[bool, typer.Option(help="Fit the extended target into the parent region.")] = True,
+        dry_run: Annotated[bool, typer.Option(help="Perform a dry run without writing any files.")] = False
 ):
     """
     Extends the text lines and baselines in PAGE XML files.
@@ -151,13 +165,15 @@ def extend_lines(
         dry_run: If set, no files will be written.
     """
     xml_files = collect_xml_files(map(Path, inputs))
+
     def process_overlapping_lines(textregion, idx, line):
         """
         Processes overlapping lines in a text region.
         """
-        predecessor_line = textregion.textlines[idx-1]
-        predecessor_line_coords, line_coords = line.split_overlapping_linearrings(predecessor_line.get_coordinates('linearring'),
-                                                                                   line.get_coordinates('linearring'))
+        predecessor_line = textregion.textlines[idx - 1]
+        predecessor_line_coords, line_coords = line.split_overlapping_linearrings(
+            predecessor_line.get_coordinates('linearring'),
+            line.get_coordinates('linearring'))
         line.update_coordinates(line_coords)
         predecessor_line.update_coordinates(predecessor_line_coords)
         if not xml_files:
@@ -171,22 +187,24 @@ def extend_lines(
         for textregion in page.regions.textregions:
             for idx, line in enumerate(textregion.textlines):
                 try:
-                    line.buffer(distance=16, direction="all", rectangle=True)
+                    line.buffer(distance=distance, direction=dim, rectangle=rectify)
                     line.fit_into_parent()
                     if cut_overlaps and idx > 0:
                         process_overlapping_lines(textregion, idx, line)
                 except Exception as e:
                     logging.error(f"Error processing line {line.get_id()}: {e}")
-
         if not dry_run:
-            fout = determine_output_path(xml_file, outputdir, filename)
+            fout = xml_file if overwrite else determine_output_path(xml_file, outputdir, filename)
             logging.info(f'Wrote modified xml file to output directory: {fout}')
             page.save_xml(fout)
 
+
 @app.command()
-def pseudolinepolygon(inputs: Annotated[List[Path], typer.Argument(exists=True, help="Paths to the PAGE XML files to be processed.")],
-outputdir: Annotated[Optional[Path], typer.Option(help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")]= None
-):
+def pseudolinepolygon(
+        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths to the PAGE XML files to be processed.")],
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")] = None,
+        overwrite: Annotated[bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False):
     """
     Processes PAGE XML files to compute pseudo text line polygons.
 
@@ -215,17 +233,23 @@ outputdir: Annotated[Optional[Path], typer.Option(help="Filename of the output d
                 except Exception as e:
                     logging.error(f"Error processing line {line.get_id()}: {e}")
 
-        fout = determine_output_path(xml_file, outputdir, filename)
+        fout = xml_file if overwrite else determine_output_path(xml_file, outputdir, filename)
         logging.info(f'Wrote modified xml file to output directory: {fout}')
         page.save_xml(fout)
 
 
 @app.command()
 def sort_and_merge(
-    inputs: Annotated[List[Path], typer.Argument(exists=True, help="Paths to the PAGE XML files to be processed.")],
-    outputdir: Annotated[Optional[Path], typer.Option( help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")]= None,
-    merge_lines_gap_x: Annotated[int, typer.Option(help="Merges two textlines if the gap between them is less than the provided value in the x-coordinate.", min=0)] = 64,
-    merge_lines_gap_y: Annotated[int, typer.Option(help="Merges two textlines if the gap between them is less than the provided value in the y-coordinate.", min=0)] = 10):
+        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths to the PAGE XML files to be processed.")],
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")] = None,
+        overwrite: Annotated[bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
+        merge_lines_gap_x: Annotated[int, typer.Option(
+            help="Merges two textlines if the gap between them is less than the provided value in the x-coordinate.",
+            min=0)] = 64,
+        merge_lines_gap_y: Annotated[int, typer.Option(
+            help="Merges two textlines if the gap between them is less than the provided value in the y-coordinate.",
+            min=0)] = 10):
     """
     Sorts and merges text lines in PAGE XML files based on specified gap thresholds.
 
@@ -242,7 +266,7 @@ def sort_and_merge(
         raise FileNotFoundError('No XML files found in the input paths.')
 
     def process_page_for_sorting_and_merging(page, merge_lines_gap_x, merge_lines_gap_y):
-    # Sorts and merges text lines in a single Page object.
+        # Sorts and merges text lines in a single Page object.
         for textregion in page.regions.textregions:
             textregion.sort_lines()
             textregion.merge_splitted_lines(merge_lines_gap_x, merge_lines_gap_y)
@@ -254,9 +278,10 @@ def sort_and_merge(
         page = Page(xml_file)
         process_page_for_sorting_and_merging(page, merge_lines_gap_x, merge_lines_gap_y)
 
-        fout = determine_output_path(xml_file, outputdir, filename)
+        fout = xml_file if overwrite else determine_output_path(xml_file, outputdir, filename)
         logging.info(f'Wrote modified xml file to output directory: {fout}')
         page.save_xml(fout)
+
 
 if __name__ == "__main__":
     app()

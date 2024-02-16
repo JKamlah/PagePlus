@@ -11,6 +11,6 @@ def write_xml(page, filepath: Path) -> None:
     """
     filepath.parent.mkdir(parents=True, exist_ok=True)
     page.tree.write(str(filepath.absolute()),
-                        xml_declaration=True,
-                        standalone=True,
-                        encoding='utf-8')
+                    xml_declaration=True,
+                    standalone=True,
+                    encoding='utf-8')

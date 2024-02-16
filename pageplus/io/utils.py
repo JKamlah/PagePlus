@@ -1,12 +1,37 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Tuple, Iterator, List
 
 import lxml.etree as ET
+from dotenv import load_dotenv
 
 
-def collect_xml_files(inputpaths: Iterator[Path], exclude: Tuple[str, ...] = ('metadata.xml', 'mets.xml', 'METS.xml')) -> List[Path]:
+def get_env_paths(env_key) -> List[Path]:
+    """
+    Retrieves a list of Path objects from an environment variable.
+
+    This function takes an environment variable key, retrieves its value,
+    and splits the value by ':' to form paths. It returns a list of Path
+    objects corresponding to these paths, but only includes paths that exist.
+
+    Parameters:
+    env_key (str): The key of the environment variable to retrieve paths from.
+
+    Returns:
+    List[Path]: A list of Path objects that exist, derived from the environment variable's value.
+    """
+    load_dotenv()
+    env_val = os.getenv(env_key)
+    print(env_val)
+    print([Path(str_val) for str_val in env_val.split(':')])
+    return [Path(str_val) for str_val in env_val.split(':') if Path(str_val).exists()] \
+        if env_val is not None else []
+
+
+def collect_xml_files(inputpaths: Iterator[Path],
+                      exclude: Tuple[str, ...] = ('metadata.xml', 'mets.xml', 'METS.xml')) -> List[Path]:
     """
     Collects XML files from given input paths, excluding specified filenames.
 
@@ -19,11 +44,19 @@ def collect_xml_files(inputpaths: Iterator[Path], exclude: Tuple[str, ...] = ('m
     """
     xml_files = []
     for inputpath in inputpaths:
-        if inputpath.is_file() and inputpath.suffix == '.xml' and inputpath.name not in exclude and is_page_xml(inputpath):
+
+        if str(inputpath).isupper() and not '/' in str(inputpath):
+            for fpaths in get_env_paths(str(inputpath)):
+                xml_files.extend([xml_file for xml_file in Path(fpaths).glob('*.xml') if
+                                  xml_file.name not in exclude and is_page_xml(xml_file)])
+        if inputpath.is_file() and inputpath.suffix == '.xml' and inputpath.name not in exclude and is_page_xml(
+                inputpath):
             xml_files.append(inputpath)
         elif inputpath.is_dir():
-            xml_files.extend([xml_file for xml_file in inputpath.rglob('*.xml') if xml_file.name not in exclude and is_page_xml(xml_file)])
+            xml_files.extend([xml_file for xml_file in inputpath.glob('*.xml') if
+                              xml_file.name not in exclude and is_page_xml(xml_file)])
     return sorted(xml_files)
+
 
 def is_page_xml(file_path: Path) -> bool:
     """
@@ -46,6 +79,7 @@ def is_page_xml(file_path: Path) -> bool:
         # Not an XML file, or XML is malformed
         return False
 
+
 def determine_output_path(xml_file, outputdir, filename):
     """
     Determines the output path for the repaired XML file.
@@ -62,5 +96,3 @@ def determine_output_path(xml_file, outputdir, filename):
         return xml_file.parent / 'PagePlusOutput' / filename
     else:
         return Path(outputdir) / filename
-
-

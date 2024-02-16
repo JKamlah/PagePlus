@@ -1,8 +1,11 @@
 from __future__ import annotations
-from dataclasses import dataclass
+
 from collections import Counter
+from dataclasses import dataclass
 
 from pageplus.io.logger import logging
+
+
 @dataclass
 class PageCounter:
     textregions: int = 0
@@ -23,7 +26,7 @@ class PageCounter:
                         f"Overall glyphs:       {self.glyphs}")
         logging.info(log_message)
 
-    def __add__(self, other: 'PageCounter') -> 'PageCounter':
+    def __add__(self, other: PageCounter) -> PageCounter:
         """
         Adds the counts of another PageCounter instance to this instance.
         """
@@ -36,16 +39,19 @@ class PageCounter:
         self.glyphs += other.glyphs
         return self
 
+
 @dataclass
 class SubCounter:
     subs: Counter = None
+
     def statistics(self, pre_text: str = "") -> None:
         if pre_text != "":
             pre_text += "\n"
         logging.info(f"{pre_text}"
                      f"Overall substitution count\n"
                      f"{self.subs.total()}\n"
-                     f"All substitutions\n"+'\n'.join([f'{k}: \t{v:04d}' for k, v in self.subs.most_common()]))
+                     f"All substitutions\n" + '\n'.join([f'{k}: \t{v:04d}' for k, v in self.subs.most_common()]))
+
     def __add__(self, other: SubCounter) -> SubCounter:
         if isinstance(other, SubCounter):
             self.subs.update(other.subs)

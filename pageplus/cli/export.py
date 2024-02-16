@@ -1,18 +1,19 @@
-from typing import List, Optional
-from pathlib import Path
-from enum import Enum
 import csv
+from enum import Enum
+from pathlib import Path
+from typing import List, Optional
 
+import typer
 from rich.progress import track
 from shapely import LineString
-import typer
 from typing_extensions import Annotated
 
 from pageplus.io.logger import logging
-from pageplus.io.utils import collect_xml_files, determine_output_path
+from pageplus.io.utils import collect_xml_files
 from pageplus.models.page import Page
 
 app = typer.Typer()
+
 
 class ReadingOrderMode(str, Enum):
     """ Reading order modes"""
@@ -20,13 +21,17 @@ class ReadingOrderMode(str, Enum):
     document = "document"
     rog = "reading-order-group"
 
+
 @app.command()
 def fulltext(
-    inputs: Annotated[List[Path], typer.Argument(exists=True, help="Iterable of paths to the PAGE XML files.")],
-    outputdir: Annotated[Optional[Path], typer.Option(help="Path to the output directory where the text files will be saved. If not specified, an output directory named Fulltext will be created in each input file’s parent directory.")]= None,
-    dehyphenate: Annotated[bool, typer.Option(help="Dehyphenate the textlines (no impact on coordinates)")] = False,
-    ro: Annotated[bool, typer.Option(help="Use the region reading order (default: Textline order)")] = False,
-    ro_mode: Annotated[ReadingOrderMode, typer.Option(help="Choose the reading order mode auto (try reading order group than document), reading-order-group (only) or document (only)", case_sensitive=False)] = ReadingOrderMode.auto,
+        inputs: Annotated[List[str], typer.Argument(exists=True, help="Iterable of paths to the PAGE XML files.")],
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Path to the output directory where the text files will be saved. If not specified, an output directory named Fulltext will be created in each input file’s parent directory.")] = None,
+        dehyphenate: Annotated[bool, typer.Option(help="Dehyphenate the textlines (no impact on coordinates)")] = False,
+        ro: Annotated[bool, typer.Option(help="Use the region reading order (default: Textline order)")] = False,
+        ro_mode: Annotated[ReadingOrderMode, typer.Option(
+            help="Choose the reading order mode auto (try reading order group than document), reading-order-group (only) or document (only)",
+            case_sensitive=False)] = ReadingOrderMode.auto,
 ):
     """
     Extracts full text from PAGE XML files and saves it as text files.
@@ -45,13 +50,13 @@ def fulltext(
     xml_files = collect_xml_files(map(Path, inputs))
     if not xml_files:
         raise FileNotFoundError('No XML files found in the input directory.')
-    for xml_file in track(xml_files, description="Extracting fulltext.." ):
+    for xml_file in track(xml_files, description="Extracting fulltext.."):
         filename = xml_file.stem  # Extracts the filename without the extension
         logging.info(f'Processing file: {filename}')
 
         # Determine the output file path
         text_output_path = Path(f"{xml_file.parent}/Fulltext/{xml_file.with_suffix('.txt').name}") if outputdir is None \
-    else outputdir / filename
+            else Path(outputdir).joinpath(filename).with_suffix('.txt')
         text_output_path.parent.mkdir(parents=True, exist_ok=True)
         logging.info(f'Writing text file to: {text_output_path}')
 
@@ -62,12 +67,14 @@ def fulltext(
                                                              dehyphenate=dehyphenate)
             fout.write(extracted_text)
 
+
 @app.command()
 def dsv(
-    inputs: Annotated[List[Path], typer.Argument(exists=True, help="Iterable of paths to the PAGE XML files.")],
-    outputdir: Annotated[Optional[Path], typer.Option(help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")]= None,
-    delimiter: Annotated[str, typer.Option(help="Delimiter to use for separating values")] = '\t',
-    dehyphenate: Annotated[bool, typer.Option(help="Dehyphenate the textlines (no impact on coordinates)")]= False
+        inputs: Annotated[List[str], typer.Argument(exists=True, help="Iterable of paths to the PAGE XML files.")],
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")] = None,
+        delimiter: Annotated[str, typer.Option(help="Delimiter to use for separating values")] = '\t',
+        dehyphenate: Annotated[bool, typer.Option(help="Dehyphenate the textlines (no impact on coordinates)")] = False
 ):
     """
     Extracts text and coordinates from PAGE XML files and saves them as delimiter-separated values (DSV) files.
@@ -81,7 +88,6 @@ def dsv(
         dehyphenate: If True, dehyphenates the text lines in the output.
         outputdir: Path to the output directory where the DSV files will be saved.
     """
-    # You
     xml_files = collect_xml_files(map(Path, inputs))
     # raise error if no xml files are found
     if not xml_files:
@@ -134,13 +140,13 @@ def dsv(
         filepath.parent.mkdir(parents=True, exist_ok=True)
         logging.info('Wrote separated value file to output directory: ' + str(filepath))
         with open(filepath, 'w') as tsvfile:
-            #csv writer to write in tsv file
+            # csv writer to write in tsv file
             tsv_writer = csv.writer(tsvfile, delimiter=delimiter)
-            #write header in tsv file
+            # write header in tsv file
             tsv_writer.writerow(line_infos.keys())
-            #write rows
+            # write rows
             tsv_writer.writerows(zip(*line_infos.values()))
-            #close csv file
+            # close csv file
             tsvfile.close()
 
 

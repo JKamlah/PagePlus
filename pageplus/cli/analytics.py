@@ -1,20 +1,22 @@
-import typer
-from typing_extensions import Annotated
-from rich.progress import track
-from typing import List
 from pathlib import Path
+from typing import List
 
+import typer
+from rich.progress import track
+from typing_extensions import Annotated
+
+from pageplus.analytics.counter import PageCounter
 from pageplus.io.logger import logging
 from pageplus.io.utils import collect_xml_files
 from pageplus.models.page import Page
-from pageplus.analytics.counter import PageCounter
 
 app = typer.Typer()
 
+
 @app.command()
 def statistics(
-    inputs: Annotated[List[Path],
-    typer.Argument(exists=True, help="Paths to the XML files to be checked.")]
+        inputs: Annotated[List[str],
+        typer.Argument(exists=True, help="Paths to the XML files to be checked.")]
 ):
     """
     Statistics about PAGE XML files.

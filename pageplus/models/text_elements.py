@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Optional, List, Any
 
 import lxml.etree as ET
 import numpy as np
@@ -18,8 +18,8 @@ from pageplus.models.basic_elements import Region, CoordElement
 
 @dataclass
 class TextRegion(Region):
-    textlines: Optional[list] = None
-    parent: Optional[None] = None # Page object
+    parent: Optional[None] = field(default_factory=Any)  # Page object
+    textlines: Optional[List[Textline]] = field(default_factory=list)
 
     def __post_init__(self):
         self.textlines = [Textline(e, self.ns, parent=self) for e in self.xml_element.iter(f"{{{self.ns}}}TextLine")]
@@ -71,9 +71,11 @@ class TextRegion(Region):
             for j in range(i + 1, len(sorted_textlines)):
                 line1, line2 = sorted_textlines[i][2], sorted_textlines[j][2]
                 if self._baselines_near_same_height(line1, line2):
-                    logging.info(f"RO-Lineheight: In textregion {self.get_id()} the lines {self.textlines[sorted_textlines[i][0]].get_id()} ({self.textlines[sorted_textlines[i][0]].get_text()}) and {self.textlines[sorted_textlines[j][0]].get_id()} ({self.textlines[sorted_textlines[j][0]].get_text()}) at the same height")
+                    logging.info(
+                        f"RO-Lineheight: In textregion {self.get_id()} the lines {self.textlines[sorted_textlines[i][0]].get_id()} ({self.textlines[sorted_textlines[i][0]].get_text()}) and {self.textlines[sorted_textlines[j][0]].get_id()} ({self.textlines[sorted_textlines[j][0]].get_text()}) at the same height")
                     if self._should_swap_baselines(line1, line2):
-                        logging.info(f"RO-Lineswap: In textregion {self.get_id()} the lines {self.textlines[sorted_textlines[i][0]].get_id()} and {self.textlines[sorted_textlines[j][0]].get_id()} got swapped.")
+                        logging.info(
+                            f"RO-Lineswap: In textregion {self.get_id()} the lines {self.textlines[sorted_textlines[i][0]].get_id()} and {self.textlines[sorted_textlines[j][0]].get_id()} got swapped.")
                     sorted_textlines[i], sorted_textlines[j] = sorted_textlines[j], sorted_textlines[i]
 
         # Apply the final sorting
@@ -95,7 +97,6 @@ class TextRegion(Region):
         """ Helper function to determine if two lines should be swapped based on their horizontal positions """
         return line2.bounds[0] < line1.bounds[2]
 
-
     def sort_lines(self, mode: str = 'single_col'):
         """
         Sorts text lines based on their vertical positions and adjusts for lines that are horizontally misaligned.
@@ -106,7 +107,7 @@ class TextRegion(Region):
 
         # Sorting after y coordinates
         orig_sorted_textlines = [(idx, textline.get_coordinates(returntype="linearring").minimum_rotated_rectangle)
-                             for idx, textline in enumerate(self.textlines)]
+                                 for idx, textline in enumerate(self.textlines)]
         sorted_textlines = sorted(orig_sorted_textlines, key=lambda x: x[1].centroid.y)
 
         # More complex sorting considering the proximity of lines and their horizontal positions
@@ -116,9 +117,11 @@ class TextRegion(Region):
                 if len(sorted_textlines[i]) < 3 or len(sorted_textlines[j]) < 3: continue
                 line1, line2 = sorted_textlines[i][2], sorted_textlines[j][2]
                 if self._textlines_near_same_height(line1, line2):
-                    logging.info(f"RO-Lineheight: In textregion {self.get_id()} the lines {self.textlines[sorted_textlines[i][0]].get_id()} ({self.textlines[sorted_textlines[i][0]].get_text()}) and {self.textlines[sorted_textlines[j][0]].get_id()} ({self.textlines[sorted_textlines[j][0]].get_text()}) at the same height")
+                    logging.info(
+                        f"RO-Lineheight: In textregion {self.get_id()} the lines {self.textlines[sorted_textlines[i][0]].get_id()} ({self.textlines[sorted_textlines[i][0]].get_text()}) and {self.textlines[sorted_textlines[j][0]].get_id()} ({self.textlines[sorted_textlines[j][0]].get_text()}) at the same height")
                     if self._should_swap_textlines(line1, line2):
-                        logging.info(f"RO-Lineswap: In textregion {self.get_id()} the lines {self.textlines[sorted_textlines[i][0]].get_id()} and {self.textlines[sorted_textlines[j][0]].get_id()} got swapped.")
+                        logging.info(
+                            f"RO-Lineswap: In textregion {self.get_id()} the lines {self.textlines[sorted_textlines[i][0]].get_id()} and {self.textlines[sorted_textlines[j][0]].get_id()} got swapped.")
                     sorted_textlines[i], sorted_textlines[j] = sorted_textlines[j], sorted_textlines[i]
 
     def _textlines_near_same_height(self, line1: Polygon, line2: Polygon) -> bool:
@@ -134,7 +137,6 @@ class TextRegion(Region):
         """ Helper function to determine if two lines should be swapped based on their horizontal positions """
         return line2.bounds[0] < line1.bounds[2]
 
-
     def merge_splitted_lines(self, max_x_diff: int = 64, max_y_diff: int = 12):
         """
         Merges text lines that are close to each other based on x and y difference thresholds.
@@ -149,7 +151,8 @@ class TextRegion(Region):
 
             if self._can_merge_lines(current_baseline, previous_baseline, max_x_diff, max_y_diff):
                 try:
-                    new_polygon, new_baseline = self._merge_line_polygons_and_baselines(i, previous_baseline, current_baseline)
+                    new_polygon, new_baseline = self._merge_line_polygons_and_baselines(i, previous_baseline,
+                                                                                        current_baseline)
                     self.textlines[i].update_coordinates(new_polygon.exterior, inputtype="polygon")
                     self.textlines[i].update_baseline_coords(new_baseline)
                     self.textlines[i].update_text(f"{self.textlines[i - 1].get_text()} {self.textlines[i].get_text()}")
@@ -157,7 +160,8 @@ class TextRegion(Region):
                     baseline_tuples[i] = new_baseline
                     baseline_tuples.pop(i - 1)
                 except GEOSException:
-                    logging.warning(f"A conflict occurred while merging lines {self.textlines[i - 1].get_id()} and {self.textlines[i].get_id()}")
+                    logging.warning(
+                        f"A conflict occurred while merging lines {self.textlines[i - 1].get_id()} and {self.textlines[i].get_id()}")
                     i += 1
                     continue
             else:
@@ -170,18 +174,20 @@ class TextRegion(Region):
         if not current_baseline or not previous_baseline:
             return False
         return abs(previous_baseline[-1][0] - current_baseline[0][0]) <= max_x_diff and \
-               abs(previous_baseline[-1][1] - current_baseline[0][1]) <= max_y_diff
+            abs(previous_baseline[-1][1] - current_baseline[0][1]) <= max_y_diff
 
     def _merge_line_polygons_and_baselines(self, line_index, previous_baseline, current_baseline):
         """
         Merges the polygons and baselines of two lines.
         """
         widths = [LineString([c1, c2]).length for line in self.textlines[line_index - 1:line_index + 1]
-                  for c1, c2 in zip(line.get_coordinates(returntype='polygon').minimum_rotated_rectangle.exterior.coords[:-1],
-                                    line.get_coordinates(returntype='polygon').minimum_rotated_rectangle.exterior.coords[1:])]
+                  for c1, c2 in
+                  zip(line.get_coordinates(returntype='polygon').minimum_rotated_rectangle.exterior.coords[:-1],
+                      line.get_coordinates(returntype='polygon').minimum_rotated_rectangle.exterior.coords[1:])]
         mean_width = np.median(widths)
         polygon_to_polygon_bridge = self._calculate_bridge_region(previous_baseline,
-                                                                  self.textlines[line_index - 1].get_coordinates('tuple'),
+                                                                  self.textlines[line_index - 1].get_coordinates(
+                                                                      'tuple'),
                                                                   current_baseline,
                                                                   self.textlines[line_index].get_coordinates('tuple'),
                                                                   mean_width)
@@ -189,13 +195,16 @@ class TextRegion(Region):
         new_baseline = previous_baseline + current_baseline
         return new_polygon, new_baseline
 
-    def _calculate_bridge_region(self, previous_baseline, previous_textline, current_baseline, current_textline, mean_width):
+    def _calculate_bridge_region(self, previous_baseline, previous_textline, current_baseline, current_textline,
+                                 mean_width):
         """
         Calculates a bridge region between two polygons based on their baselines and mean width.
         """
         # Calculate a region between the two regions
-        bridge_coords = [tuple for tuple in previous_textline if tuple[0] > previous_baseline[-1][0] - int(mean_width * 0.75)] + \
-                        [tuple for tuple in current_textline if tuple[0] < current_baseline[0][0] + int(mean_width * 0.75)]
+        bridge_coords = [tuple for tuple in previous_textline if
+                         tuple[0] > previous_baseline[-1][0] - int(mean_width * 0.75)] + \
+                        [tuple for tuple in current_textline if
+                         tuple[0] < current_baseline[0][0] + int(mean_width * 0.75)]
         return concave_hull(Polygon(bridge_coords), ratio=1.0)
 
     def _unify_polygons(self, line_index, bridge_polygon):
@@ -242,16 +251,19 @@ class TextRegion(Region):
         Subtracts overlapping areas between two regions.
         """
         big, small = (1, 0) if regions[0]['region_linearring'][0].minimum_rotated_rectangle.area < \
-                                   regions[1]['region_linearring'][0].minimum_rotated_rectangle.area else (0, 1)
-        big_polygon, small_polygon = [Polygon(region['region_linearring'][0]) for region in (regions[big], regions[small])]
+                               regions[1]['region_linearring'][0].minimum_rotated_rectangle.area else (0, 1)
+        big_polygon, small_polygon = [Polygon(region['region_linearring'][0]) for region in
+                                      (regions[big], regions[small])]
         difference = big_polygon.difference(small_polygon)
 
         if isinstance(difference, (Polygon, LinearRing)):
-            regions[big]['region_linearring'][0] = difference.exterior if isinstance(difference, Polygon) else difference
+            regions[big]['region_linearring'][0] = difference.exterior if isinstance(difference,
+                                                                                     Polygon) else difference
         elif isinstance(difference, MultiLineString):
             regions[big]['region_linearring'][0] = difference.convex_hull.exterior
 
-        regions[big]['region_coordstr'][0] = self.convert_coordinates_tuples_to_str(regions[big]['region_linearring'][0].coords)
+        regions[big]['region_coordstr'][0] = self.convert_coordinates_tuples_to_str(
+            regions[big]['region_linearring'][0].coords)
         return regions
 
     def contains_textline(self, id: str) -> bool:
@@ -259,6 +271,7 @@ class TextRegion(Region):
         Checks if the text region contains a text line with the specified ID.
         """
         return any(textline.get_id() == id for textline in self.textlines)
+
 
 @dataclass
 class Textline(CoordElement):
@@ -323,7 +336,8 @@ class Textline(CoordElement):
             return False
 
         # Remove adjacent duplicates
-        baseline_tuples = [baseline_tuples[0]]+[x for idx, x in enumerate(baseline_tuples[1:]) if x != baseline_tuples[idx]]
+        baseline_tuples = [baseline_tuples[0]] + [x for idx, x in enumerate(baseline_tuples[1:]) if
+                                                  x != baseline_tuples[idx]]
         if len(baseline_tuples) == 1:
             logging.warning(f"{self.get_id()}: Baseline has just one point")
             return False
@@ -345,8 +359,10 @@ class Textline(CoordElement):
                     pts_outside.append(point)
                     if update:
                         pt_distance = textline_polygon.distance(pt)
-                        pred_distance = Point(new_baseline_tuples[-1]).distance(pt) if new_baseline_tuples else float('inf')
-                        succ_distance = Point(baseline_tuples[idx + 1]).distance(pt) if idx != len(baseline_tuples) - 1 else float('inf')
+                        pred_distance = Point(new_baseline_tuples[-1]).distance(pt) if new_baseline_tuples else float(
+                            'inf')
+                        succ_distance = Point(baseline_tuples[idx + 1]).distance(pt) if idx != len(
+                            baseline_tuples) - 1 else float('inf')
 
                         # Replace with nearest point if it's closer than predecessor and successor
                         if pt_distance < pred_distance and pt_distance < succ_distance:
@@ -368,10 +384,11 @@ class Textline(CoordElement):
                                     f"{self.get_parent_element().attrib['id']}. Points outside {pts_replaced}")
 
         except TopologicalError:
-            logging.warning(f"{self.get_id()}: Baseline or parentregion {self.get_parent_element().attrib['id']} is invalid.")
+            logging.warning(
+                f"{self.get_id()}: Baseline or parentregion {self.get_parent_element().attrib['id']} is invalid.")
             return False
         if update:
-           self.update_baseline_coords(baseline_tuples)
+            self.update_baseline_coords(baseline_tuples)
         return True
 
     def _compute_baseline(self) -> list:
@@ -435,7 +452,6 @@ class Textline(CoordElement):
             textline_linearring = self._translate(textline_linearring, xoff=xoff, yoff=0, zoff=0)
             self.update_coordinates(textline_linearring)
 
-
     def translate_textlinepolygon(self, xoff=0, yoff=0) -> None:
         """
         Translate the textline polygon by the specified x and y offsets.
@@ -479,12 +495,13 @@ class Textline(CoordElement):
             extended_baseline = [self.find_nearest_intersection_polygon_linestring(
                 textline_polygon, LineString(((textline_polygon.bounds[0],
                                                baseline_coords[0][1]), baseline_coords[0])),
-                                           (textline_polygon.bounds[0], baseline_coords[0][1]))]
+                (textline_polygon.bounds[0], baseline_coords[0][1]))]
 
             # Extend the baseline with intermediate points
             if baseline_coords[1:-1]:
                 mr_textline_polygon = textline_polygon.minimum_rotated_rectangle
-                extended_baseline.extend([coord for coord in baseline_coords[1:-1] if mr_textline_polygon.contains(Point(coord))])
+                extended_baseline.extend(
+                    [coord for coord in baseline_coords[1:-1] if mr_textline_polygon.contains(Point(coord))])
 
             # Extend the last baseline coordinate to the maximum x value of the textline bounding box
             extended_baseline.append(self.find_nearest_intersection_polygon_linestring(textline_polygon,

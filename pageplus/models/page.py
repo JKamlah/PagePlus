@@ -7,24 +7,24 @@ from typing import Tuple, Optional, List
 import lxml.etree as ET
 from shapely.geometry import LinearRing, Polygon, MultiPoint
 
-from pageplus.models.table_elements import TableRegion
-from pageplus.models.text_elements import TextRegion
 from pageplus.io.parser import parse_xml
 from pageplus.io.writer import write_xml
+from pageplus.models.table_elements import TableRegion
+from pageplus.models.text_elements import TextRegion
 
 
 @dataclass
 class Regions:
-    textregions: Optional[List[TextRegion]] = None
-    tableregions: Optional[List[TableRegion]] = None
+    textregions: Optional[List[TextRegion]] = field(default=None)
+    tableregions: Optional[List[TableRegion]] = field(default=None)
 
 
 @dataclass
 class Page:
     filename: Path
-    tree: Optional[ET._ElementTree] = None
-    root: Optional[ET.Element] = None
-    ns: Optional[str] = None
+    tree: Optional[ET._ElementTree] = field(default=None)
+    root: Optional[ET.Element] = field(default=None)
+    ns: Optional[str] = field(default=None)
     regions: Regions = field(default_factory=Regions)
 
     def __post_init__(self):
@@ -144,10 +144,10 @@ class Page:
             for ro_ids in self.get_region_reading_order_ids():
                 region = self.root.find(f'.//*[@id="{ro_ids}"]')
                 fulltext = [unicode_ele.text for textline in region.iterfind(f".//{{{self.ns}}}TextLine")
-                    for unicode_ele in textline.iterfind(f'.//{{{self.ns}}}Unicode') if unicode_ele.text]
+                            for unicode_ele in textline.iterfind(f'.//{{{self.ns}}}Unicode') if unicode_ele.text]
         else:
             fulltext = [unicode_ele.text for textline in self.root.iterfind(f'.//{{{self.ns}}}TextLine')
-                    for unicode_ele in textline.iterfind(f'.//{{{self.ns}}}Unicode') if unicode_ele.text]
+                        for unicode_ele in textline.iterfind(f'.//{{{self.ns}}}Unicode') if unicode_ele.text]
 
         if dehyphenate and fulltext:
             fulltext = self.dehyphe(fulltext)
@@ -241,4 +241,3 @@ class Page:
         for regiontypes, regions in self.regions.__dict__.items():
             for region in regions:
                 yield region
-

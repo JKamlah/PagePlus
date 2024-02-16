@@ -1,8 +1,9 @@
-import typer
-from typing_extensions import Annotated
-from rich.progress import track
-from typing import List
 from pathlib import Path
+from typing import List
+
+import typer
+from rich.progress import track
+from typing_extensions import Annotated
 
 from pageplus.io.logger import logging
 from pageplus.io.utils import collect_xml_files
@@ -10,9 +11,10 @@ from pageplus.models.page import Page
 
 app = typer.Typer()
 
+
 @app.command()
 def validate_all(
-    inputs: Annotated[List[Path], typer.Argument(exists=True, help="Paths to the files to be validated.")]):
+        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths to the files to be validated.")]):
     """
     Validates PAGE XML files.
 
@@ -52,7 +54,6 @@ def validate_all(
         if region.counter(level='textlines') == 0:
             logging.info(f"{region.get_id()}: Region contains no text.")
 
-
     for xml_file in track(sorted(xml_files), description="Validating files..."):
         filename = xml_file.name
         logging.info('Validating file: ' + filename)
@@ -67,6 +68,7 @@ def validate_all(
         for tableregion in page.regions.tableregions:
             for tablecell in tableregion.tablecells:
                 validate_region(tablecell)
+
 
 if __name__ == "__main__":
     app()
