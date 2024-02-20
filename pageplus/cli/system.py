@@ -1,7 +1,11 @@
 from pathlib import Path
+import tempfile
+import shutil
 
+from dotenv import load_dotenv, dotenv_values
 import typer
 from rich import print
+
 
 app = typer.Typer()
 
@@ -25,20 +29,31 @@ def clean_logs() -> None:
         except OSError as e:
             print(f"Error: {e} - {log_file}")
 
+@app.command()
+def clean_temp() -> None:
+    """
+    Cleans all folders containing 'PagePlus' in their names within the specified temp folder.
+    Which are no longer defined in the dot environment file.
+    """
+    load_dotenv()
+    envs = dotenv_values()
+    for pp_folder in Path(tempfile.gettempdir()).glob('*PagePlus_*'):
+        if str(pp_folder) not in list(envs.values()):
+            try:
+                shutil.rmtree(pp_folder)
+                print(f"Deleted folder: {pp_folder}")
+            except Exception as e:
+                print(f"Error deleting folder {pp_folder}: {e}")
 
 @app.command()
 def create_empty_dotenv() -> None:
     """
     This will also overwrite an existing .env file
     Returns:
-
     """
     path = Path(__file__).parents[2].joinpath('.env')
     with open(path, 'w') as f:
-        f.write("""ESCRIPTORIUM_URL=''
-ESCRIPTORIUM_USERNAME=''
-ESCRIPTORIUM_PASSWORD=''
-ESCRIPTORIUM_DATAFOLDER=''""")
+        pass
 
 
 if __name__ == "__main__":
