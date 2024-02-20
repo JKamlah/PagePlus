@@ -33,10 +33,10 @@ def get_env_paths(env_key) -> List[Path]:
 def collect_xml_files(inputpaths: Iterator[Path],
                       exclude: Tuple[str, ...] = ('metadata.xml', 'mets.xml', 'METS.xml')) -> List[Path]:
     """
-    Collects XML files from given input paths, excluding specified filenames.
+    Collects XML files from given input paths or environmental names pointing to an existing path, excluding specified filenames.
 
     Args:
-    - inputpaths: An iterator of Path objects representing files or directories to search.
+    - inputpaths: An iterator of Path objects representing files, directories or environmental names pointing to an existing path to search.
     - exclude: A tuple of filenames to exclude from the search.
 
     Returns:
@@ -44,17 +44,16 @@ def collect_xml_files(inputpaths: Iterator[Path],
     """
     xml_files = []
     for inputpath in inputpaths:
-
-        if str(inputpath).isupper() and not '/' in str(inputpath):
-            for fpaths in get_env_paths(str(inputpath)):
-                xml_files.extend([xml_file for xml_file in Path(fpaths).glob('*.xml') if
-                                  xml_file.name not in exclude and is_page_xml(xml_file)])
         if inputpath.is_file() and inputpath.suffix == '.xml' and inputpath.name not in exclude and is_page_xml(
                 inputpath):
             xml_files.append(inputpath)
         elif inputpath.is_dir():
             xml_files.extend([xml_file for xml_file in inputpath.glob('*.xml') if
                               xml_file.name not in exclude and is_page_xml(xml_file)])
+        elif str(inputpath).isupper() and not '/' in str(inputpath):
+            for fpaths in get_env_paths(str(inputpath)):
+                xml_files.extend([xml_file for xml_file in Path(fpaths).glob('*.xml') if
+                                  xml_file.name not in exclude and is_page_xml(xml_file)])
     return sorted(xml_files)
 
 
