@@ -5,7 +5,7 @@ import lxml.etree as ET
 
 
 def parse_xml(filepath: Path = '') -> Tuple[ET.Element, ET._ElementTree, str]:
-    """"
+    """
     Parses an XML file and returns its root element, the ElementTree object, and the XML namespace.
 
     Parameters:

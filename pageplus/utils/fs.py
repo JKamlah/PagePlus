@@ -7,6 +7,19 @@ from typing import Tuple, Iterator, List
 import lxml.etree as ET
 from dotenv import load_dotenv
 
+def str_to_env(string: str) -> str:
+    # Remove leading non-alphabetic characters
+    string = string.lstrip('0123456789')
+
+    # Replace invalid characters with underscores and convert to uppercase
+    valid_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_"
+    string = ''.join(c if c in valid_chars else '_' for c in string).upper()
+
+    # Ensure the string does not start with a digit (handled above) and is not empty
+    if not string or string[0].isdigit():
+        raise ValueError("The resulting environment variable name is invalid or empty.")
+
+    return string
 
 def get_env_paths(env_key) -> List[Path]:
     """

@@ -1,6 +1,9 @@
 from pathlib import Path
-import tempfile
 import shutil
+import subprocess
+import sys
+import tempfile
+
 
 from dotenv import load_dotenv, dotenv_values
 import typer
@@ -9,6 +12,25 @@ from rich import print
 
 app = typer.Typer()
 
+@app.command()
+def update_pip() -> None:
+    """
+    Updates pip version
+
+    Returns:
+    None
+    """
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", "pip"])
+
+@app.command()
+def update_pageplus() -> None:
+    """
+    Updates PagePlus dependencies
+
+    Returns:
+    None
+    """
+    subprocess.check_call(["poetry", "update"])
 
 @app.command()
 def clean_logs() -> None:
@@ -53,8 +75,11 @@ def create_empty_dotenv() -> None:
     """
     path = Path(__file__).parents[2].joinpath('.env')
     with open(path, 'w') as f:
-        pass
+        f.write("""PAGEPLUS_ORIGINAL=''
+PAGEPLUS_MODIFIED='PagePlusOutput'""")
 
+if not Path(__file__).parents[2].joinpath('.env').exists():
+    create_empty_dotenv()
 
 if __name__ == "__main__":
     app()

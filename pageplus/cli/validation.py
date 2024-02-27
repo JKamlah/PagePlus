@@ -6,7 +6,7 @@ from rich.progress import track
 from typing_extensions import Annotated
 
 from pageplus.io.logger import logging
-from pageplus.io.utils import collect_xml_files
+from pageplus.utils.fs import collect_xml_files
 from pageplus.models.page import Page
 
 app = typer.Typer()

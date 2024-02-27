@@ -1,4 +1,3 @@
-import dataclasses
 import json
 import os
 import re
@@ -13,7 +12,7 @@ from importlib import util
 from io import BytesIO
 from pathlib import Path
 from shutil import rmtree
-from typing import Dict, Tuple, Union, List
+from typing import List
 
 import typer
 from rich import print
@@ -34,30 +33,38 @@ if (spec := util.find_spec('escriptorium_connector')) is None:
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-I", "escriptorium-connector"])
 
 else:
+    import logging
+
     from escriptorium_connector import EscriptoriumConnector
     from dotenv import load_dotenv, find_dotenv, get_key, set_key, dotenv_values
-    import logging
+
+    from pageplus.utils.constants import DotEnvPrefixes, WorkState, Bool2OnOff, WORKSPACE_PREFIX
+    from pageplus.utils.fs import str_to_env
 
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
-
-    ES_PREFIX = "ESCRIPTORIUM_"
-    class DocumentFilterOptions(str, Enum):
-        """
-        Filter options for eScriptorium documents
-        """
-        project = "project"
-        document = "document"
-        transcription = "transcription"
+    SERVICE = DotEnvPrefixes.ESCRIPTORIUM.lower()
+    PREFIX = DotEnvPrefixes.ESCRIPTORIUM + '_'
+    PREFIX_WS = DotEnvPrefixes.ESCRIPTORIUM + '_' + WORKSPACE_PREFIX
 
 
-    class DataState(str, Enum):
+    class DataFilter(str, Enum):
         """
-        State of the data
+        Filter options of the data for escriptorium
         """
-        original = "original"
-        modified = "modified"
+        PROJECT = "Project"
+        DOCUMENT = "Document"
+        TRANSCRIPTION = "Transcription"
+
+
+    class DataLevel(str, Enum):
+        """
+        Level of escriptorium data
+        """
+        PROJECT = "Project"
+        DOCUMENT = "Document"
+        PAGE = "Page"
 
 
     @app.command()
@@ -67,8 +74,13 @@ else:
         Returns:
         None
         """
-        dotfile = find_dotenv()
-        set_key(dotfile, ES_PREFIX+"URL", url)
+        try:
+            dotfile = find_dotenv()
+            set_key(dotfile, PREFIX + "URL", url)
+            print("[green]The url updated successfully.[green]")
+        except Exception as e:
+            print(f"[red]Failed to update the url: {e}[red]")
+
 
     @app.command()
     def set_credentials(name: Annotated[str, typer.Argument(help="Username for eScriptorium")],
@@ -78,9 +90,14 @@ else:
         Returns:
         None
         """
-        dotfile = find_dotenv()
-        set_key(dotfile, ES_PREFIX+"USERNAME", name)
-        set_key(dotfile, ES_PREFIX+"PASSWORD", password)
+        try:
+            dotfile = find_dotenv()
+            set_key(dotfile, f"{PREFIX}USERNAME", name)
+            set_key(dotfile, f"{PREFIX}PASSWORD", password)
+            print("[green]Credentials updated successfully.[green]")
+        except Exception as e:
+            print(f"[red]Failed to update credentials: {e}[red]")
+
 
     @app.command()
     def set_api_url(url: Annotated[str, typer.Argument(help="API url for eScriptorium")]) -> None:
@@ -91,7 +108,7 @@ else:
         None
         """
         dotfile = find_dotenv()
-        set_key(dotfile, ES_PREFIX+"API_URL", url)
+        set_key(dotfile, PREFIX + "API_URL", url)
 
 
     @app.command()
@@ -107,19 +124,34 @@ else:
             print(f"DISCLAIMER: Please don't use this method currently for the instance of UB-Mannheim."
                   f"Since there currently some problems. You can anyways still set the API-Key with the force flag.")
         else:
-            set_key(dotfile, ES_PREFIX+"API_KEY", key)
+            set_key(dotfile, PREFIX + "API_KEY", key)
 
 
     @app.command()
     def valid_login() -> bool:
         envs = dotenv_values()
-        check = all([envs.get(ES_PREFIX+'URL', None), envs.get(ES_PREFIX+'USERNAME', None), envs.get(ES_PREFIX+'PASSWORD', None)])
-        check_api = all([envs.get(ES_PREFIX+'API_KEY', None), any([envs.get(ES_PREFIX+'URL', None), envs.get(ES_PREFIX+'API_URL', None)])])
+        check = all(
+            [envs.get(PREFIX + 'URL', None), envs.get(PREFIX + 'USERNAME', None), envs.get(PREFIX + 'PASSWORD', None)])
+        check_api = all([envs.get(PREFIX + 'API_KEY', None),
+                         any([envs.get(PREFIX + 'URL', None), envs.get(PREFIX + 'API_URL', None)])])
         if not check and not check_api:
-            print(f"Missing login information: Ensure that the URL, username, and password or "
-                  f"API URL and key are correctly configured.")
+            print(
+                f"[red bold]Missing login information:[/red bold] [red]Ensure that the URL, username, and password or "
+                f"API URL and key are correctly configured.[/red]")
             return False
         return True
+
+
+    def get_envgroup(group: DotEnvPrefixes) -> dict:
+        """
+        Filters dotenv values for a specific Prefix
+        Returns:
+            dict
+        """
+        load_dotenv()
+        envs = dotenv_values()
+        return dict([(var, key) for (var, key) in envs.items() if group.value.upper() in var.upper()])
+
 
     @app.command()
     def show_envs() -> None:
@@ -131,21 +163,34 @@ else:
         table = Table(title="eScriptorium's environment variables")
         table.add_column("Environment variable name", justify="right", style="cyan", no_wrap=True)
         table.add_column("Environment variable value")
-        [table.add_row(var, key) if "password" not in var.lower() else table.add_row(var, key[:3] + '***') for
-         (var, key) in dotenv_values().items() if "escriptorium" in var.lower()]
+        [table.add_row(var, key) if var != PREFIX+"PASSWORD" else table.add_row(var, key[:3] + '***') for
+         (var, key) in dotenv_values().items() if var.startswith(PREFIX)]
+        print(table)
+
+    @app.command()
+    def show_workspaces() -> None:
+        """
+        Print all workspaces
+        Returns:
+        None
+        """
+        table = Table(title="eScriptorium's workspaces")
+        table.add_column("eScriptorium workspace", justify="right", style="cyan", no_wrap=True)
+        table.add_column("Workspace folder")
+        [table.add_row(var.replace(PREFIX_WS, ''), key) for (var, key) in dotenv_values().items()
+         if var.startswith(PREFIX_WS)]
         print(table)
 
 
     @app.command()
-    def find_documents(filter_by: Annotated[DocumentFilterOptions, typer.Option("--filter-by", "-f",
-                                                                                help="Filter the document search by "
-                                                                                     "the name of the 'project', "
-                                                                                     "'document' or 'transcription'",
-                                                                                case_sensitive=False)] = 'document',
-                       search_term: Annotated[
-                           Optional[str], typer.Option("--search-term", "-s",
+    def find_documents(filter_by: Annotated[List[DataFilter], typer.Option("--filter-by", "-f",
+                                                                    help="Filter the document search by "
+                                                                         "the name of the 'project', "
+                                                                         "'document' or 'transcription'",
+                                                                    case_sensitive=False)],
+                       search_term: Annotated[List[str], typer.Option("--search-term", "-s",
                                                        help="RegEx search term for the filter option (Use . to find "
-                                                            "all documents)")] = '.',
+                                                            "all documents)")],
                        case_sensitive: Annotated[Optional[bool], typer.Option(
                            help="De-/Activate case sensitivity for the regex search")] = False) -> None:
         """
@@ -157,18 +202,21 @@ else:
         envs = dotenv_values()
         if not valid_login():
             return
-        escr = EscriptoriumConnector(envs.get(ES_PREFIX+'URL', None),
-                                     envs.get(ES_PREFIX+'USERNAME', None),
-                                     envs.get(ES_PREFIX+'PASSWORD', None),
-                                     envs.get(ES_PREFIX+'API_KEY', None),
-                                     envs.get(ES_PREFIX+'API_URL', None))
+        escr = EscriptoriumConnector(envs.get(PREFIX + 'URL', None),
+                                     envs.get(PREFIX + 'USERNAME', None),
+                                     envs.get(PREFIX + 'PASSWORD', None),
+                                     envs.get(PREFIX + 'API_KEY', None),
+                                     envs.get(PREFIX + 'API_URL', None))
+        if len(filter_by) != len(search_term):
+            print("Please provide for each filter a search term")
+            return
 
         with Status("Searching for documents") as status:
             try:
                 documents = escr.get_documents()
             except:
-                print(f"Missing login information: Ensure that the URL, username, and password or "
-                  f"API URL and key are correctly configured.")
+                print(f"[red]Missing login information: Ensure that the URL, username, and password or "
+                      f"API URL and key are correctly configured.[/red]")
                 return
 
         print(f"[bold green]eScriptorium Document Search Report[/bold green] - [white]Version 1.0[/white]")
@@ -177,11 +225,13 @@ else:
         flag = 0 if case_sensitive else re.IGNORECASE
         if filter_by is not None:
             for idx, document in enumerate(documents.results[::-1]):
-                if not ((filter_by == "project" and re.match(search_term, document.project, flags=flag)) or
-                        (filter_by == "document" and re.match(search_term, document.name, flags=flag)) or
-                        (filter_by == "transcription" and any(
-                            [re.match(search_term, trans.name, flags=flag) for trans in document.transcriptions]))):
-                    del documents.results[count - 1 - idx]
+                for f, s in zip(filter_by, search_term):
+                    if not ((f == "Project" and re.match(s, document.project, flags=flag)) or
+                            (f == "Document" and re.match(s, document.name, flags=flag)) or
+                            (f == "Transcription" and any(
+                                [re.match(s, trans.name, flags=flag) for trans in document.transcriptions]))):
+                        del documents.results[count - 1 - idx]
+                        break
             print(f"Documents meeting filter criteria: {len(documents.results)}")
         table = Table(title="")
         table.add_column("Project", style="green")
@@ -197,8 +247,7 @@ else:
 
 
     @app.command()
-    def load_document(document_pk: Annotated[int,
-                      typer.Argument(help="Document's primary key (pk).")],
+    def load_document(document_pk: Annotated[int, typer.Argument(help="Document's primary key (pk).")],
                       transcription_pk: Annotated[int,
                       typer.Argument(help="Transcription's primary key (pk).")],
                       pages: Annotated[Optional[List[int]],
@@ -208,13 +257,13 @@ else:
                                                                          help="Path to store the loaded document. If "
                                                                               "not set it get stored in a temporary "
                                                                               "folder.")] = None,
-                      envname: Annotated[Optional[str], typer.Option("--envname", "-e",
-                                                                     help="Name of enviormental variable, which "
-                                                                          "stores the path to loaded document. The "
-                                                                          "name get's appended to 'ESCRIPTORIUM_' and "
-                                                                          "automatically cast to uppercase. E.g. "
-                                                                          "new_data -> ESCRIPTORIUM_NEW_DATA.")] =
-                      "DATAFOLDER") -> None:
+                      workspace: Annotated[Optional[str], typer.Option("--workspace", "-w",
+                                                                       help="Name of enviormental variable, which "
+                                                                            "stores the path to loaded document. The "
+                                                                            "name get's appended to 'ESCRIPTORIUM_' and "
+                                                                            "automatically cast to uppercase. E.g. "
+                                                                            "new_data -> ESCRIPTORIUM_NEW_DATA.")] =
+                      "MAIN") -> None:
         """
         Loads pages of a document with a specific transcription to work with PagePlus.
         For more information abouth the pk values and page numbers see the --find-documents function.
@@ -224,52 +273,52 @@ else:
         # Create a Path object for the directory
         load_dotenv()
         envs = dotenv_values()
+        workspace = str_to_env(workspace)
         if not valid_login():
             return
-        escr = EscriptoriumConnector(envs.get(ES_PREFIX+'URL', None),
-                                     envs.get(ES_PREFIX+'USERNAME', None),
-                                     envs.get(ES_PREFIX+'PASSWORD', None),
-                                     envs.get(ES_PREFIX+'API_KEY', None),
-                                     envs.get(ES_PREFIX+'API_URL', None))
+        escr = EscriptoriumConnector(envs.get(PREFIX + 'URL', None),
+                                     envs.get(PREFIX + 'USERNAME', None),
+                                     envs.get(PREFIX + 'PASSWORD', None),
+                                     envs.get(PREFIX + 'API_KEY', None),
+                                     envs.get(PREFIX + 'API_URL', None))
 
         parts_pk = [part.pk for idx, part in enumerate(escr.get_document_parts(document_pk).results) if
                     not pages or (idx + 1 in pages)]
 
-        with Status("Downloading documents") as status:
+        with Status("Downloading document") as status:
             zipped_pagexmls_binary = escr.download_part_pagexml_transcription(document_pk, parts_pk, transcription_pk)
 
         zipped_pagexmls = zipfile.ZipFile(BytesIO(zipped_pagexmls_binary))
 
-        datafolder = Path(tempfile.mkdtemp(prefix="PagePlus_")) if folderpath is None else Path(folderpath)
-        datafolder.mkdir(parents=True, exist_ok=True)
+        wsfolder = Path(tempfile.mkdtemp(prefix="PagePlus_")) if folderpath is None else Path(folderpath)
+        wsfolder.mkdir(parents=True, exist_ok=True)
 
-        dotfile = find_dotenv()
-
-        with open(datafolder.joinpath('metadata_pageplus.json'), 'w') as meta:
-            json.dump({'document_pk': document_pk,
-                       'parts_pk': parts_pk,
-                       'transcription_pk': transcription_pk,
-                       'downloaded at': datetime.now().strftime('%H_%M_%d_%m_%Y'),
-                       'downloaded from': get_key(dotfile, ES_PREFIX+'URL'),
-                       'downloaded by': get_key(dotfile, ES_PREFIX+'USERNAME')},
+        with open(wsfolder.joinpath('metadata.pageplus.json'), 'w') as meta:
+            json.dump({SERVICE: {'document_pk': document_pk,
+                                   'parts_pk': parts_pk,
+                                   'transcription_pk': transcription_pk,
+                                   'downloaded at': datetime.now().strftime('%H_%M_%d_%m_%Y'),
+                                   'downloaded from': envs.get(PREFIX + 'URL', ''),
+                                   'downloaded by': envs.get(PREFIX + 'USERNAME', '')}},
                       meta, indent=4)
 
-        zipped_pagexmls.extractall(datafolder)
+        zipped_pagexmls.extractall(wsfolder)
 
-        foldername = ES_PREFIX + envname.upper()
-        current_folder = get_key(dotfile, foldername)
-        if current_folder is not None and current_folder != '' and Path(current_folder).exists():
+        ws_absolute = PREFIX_WS + workspace
+        current_folder = envs.get(ws_absolute, '')
+        if current_folder != '' and Path(current_folder).exists():
             rmtree(current_folder)
-        set_key(dotfile, foldername, str(datafolder))
-        print(f"The data was successfully stored in {str(datafolder)}")
-        print(f"And be access via [bold green]{foldername}[/bold green]")
+        set_key(find_dotenv(), ws_absolute, str(wsfolder.absolute()))
+        print(f"The data was successfully stored in: [bold purple]{str(wsfolder.absolute())}[/bold purple]")
+        print(f"And be access via the eScriptorium workspace: [bold green]{workspace}[/bold green]")
+
 
     @app.command()
     def update_document(
-            datafolder: Annotated[
-                str, typer.Option('--datafolder', '-f',
-                                  help="A path or an environmental name pointing to an existing path")] = "DATAFOLDER",
-            datastate: Annotated[Optional[DataState], typer.Option('--datastate', '-s',
+            workspace: Annotated[
+                str, typer.Option('--workspace', '-w',
+                                  help="A path or an environmental name pointing to an existing path")] = "MAIN",
+            workstate: Annotated[Optional[WorkState], typer.Option('--workstate', '-s',
                                                                    help="Choose the documents inside this folder with "
                                                                         "'original', or the 'modified' scripts inside "
                                                                         "the subfolder (PagePlusOutput).",
@@ -278,11 +327,10 @@ else:
                                                      help="Document's primary key (pk). (Not necessary if "
                                                           "environmental is used, but can also overwrite)")] = None,
             transcription_pk: Annotated[int, typer.Option("--transcription-pk", "-t",
-                                                          help="Transcription's primary key (pk). (Not necessary if "
-                                                               "environmental is used, but can also overwrite)")] =
-            None,
+                                                          help="Transcription's primary key (pk)")] = None,
             pages: Annotated[Optional[List[int]], typer.Option("--pages", "-p",
-                                                               help="Page selection. If not set all pages get uploaded.")] = None,
+                                                               help=f"Page selection. "
+                                                                    f"If not set all pages get uploaded.")] = None,
             transcription_name: Annotated[str, typer.Option("--transcription-name", "-n",
                                                             help="Transcription's name. Overwrites transcription pk! "
                                                                  "(Not necessary if environmental is used, "
@@ -295,34 +343,33 @@ else:
         """
         load_dotenv()
         envs = dotenv_values()
-        escr = EscriptoriumConnector(envs[ES_PREFIX+'URL'],
-                                     envs[ES_PREFIX+'USERNAME'],
-                                     envs[ES_PREFIX+'PASSWORD'])
-        overwrite = {True: "on", False: "off"}.get(overwrite)
+        workspace= str_to_env(workspace)
+        escr = EscriptoriumConnector(envs[PREFIX + 'URL'],
+                                     envs[PREFIX + 'USERNAME'],
+                                     envs[PREFIX + 'PASSWORD'])
+        overwrite = Bool2OnOff.get(overwrite)
 
         # Create a BytesIO object to hold the zip file in memory
         file_data = BytesIO()
-        if ES_PREFIX + datafolder.upper() in envs['ESCRIPTORIUM']:
-            datafolder = Path(envs[ES_PREFIX + datafolder.upper()])
-            metadata = json.loads(datafolder.joinpath('metadata_pageplus.json').open('r').read())
+        if PREFIX_WS + workspace in get_envgroup(DotEnvPrefixes.ESCRIPTORIUM).keys():
+            wsfolder = Path(envs[PREFIX_WS + workspace])
+            metadata = json.loads(wsfolder.joinpath('metadata.pageplus.json').open('r').read())
+            metadata = metadata.get(SERVICE, '')
             document_pk = metadata.get('document_pk', None) if document_pk is None else document_pk
             transcription_pk = metadata.get('transcription_pk', None) if transcription_pk is None else transcription_pk
-            datafolder = datafolder.joinpath({'original': '', 'modified': 'PagePlusOutput'}.get(datastate))
-        elif Path(datafolder).exists() is not None:
-            datafolder = Path(datafolder)
+            wsfolder = wsfolder.joinpath(envs.get(DotEnvPrefixes.PAGEPLUS + workstate, ''))
         else:
             return
-
         if transcription_name is None and transcription_pk is not None:
             transcription_name = escr.get_document_transcription(document_pk, transcription_pk).name
         if transcription_name is None:
             return
-        if not datafolder.exists() or document_pk is None or transcription_name is None:
+        if not wsfolder.exists() or document_pk is None or transcription_name is None:
             return
         # Create a ZipFile object with the BytesIO object as file, in write mode
         with zipfile.ZipFile(file_data, 'w', zipfile.ZIP_DEFLATED) as zip_file:
             # Recursively add files to the zip file
-            [zip_file.write(file) for idx, file in enumerate(sorted([file for file in datafolder.glob('*.xml') if
+            [zip_file.write(file) for idx, file in enumerate(sorted([file for file in wsfolder.glob('*.xml') if
                                                                      file.is_file() and file.name.lower not in [
                                                                          'metadata.xml', 'mets.xml']])) if
              not pages or idx + 1 in pages]
@@ -334,54 +381,52 @@ else:
         file_data.seek(0, 0)
 
         # Update transcription in eS
-        with Status("Uploading documents") as status:
+        with Status("Updating document") as status:
             escr.upload_part_transcription(document_pk, transcription_name, transcription_name + '.zip', file_data,
-                                       override=overwrite)
-
+                                           override=overwrite)
+        print("Updating completed!")
 
     @app.command()
-    def copy_document(
-            datafolder: Annotated[
-                str, typer.Option('--datafolder', '-f', help="Environmental name pointing to an existing path")],
-            datastate: Annotated[Optional[DataState], typer.Option('--datastate', '-s',
-                                                                   help="Choose the documents inside this folder with "
-                                                                        "'original', or the 'modified' scripts inside "
-                                                                        "the subfolder (PagePlusOutput).",
-                                                                   case_sensitive=False)],
-            outputdir: Annotated[Path, typer.Option('--outputdir', '-o',
-                                                    help="Path to the output directory where the text files will be saved")]) -> None:
+    def copy_workspace(workspace: Annotated[str,
+                       typer.Argument(help=f"Workspace name pointing to an existing path")],
+                       destination_path: Annotated[Path,
+                       typer.Argument(help="Path to the output directory where the text files will be saved")]) \
+            -> None:
         """
-        Copy pages of from an enviromental path to another location
+        Copy pages of from a workspace path to another location
         Returns:
         None
         """
-        datafolder = Path(get_key(find_dotenv(), ES_PREFIX + datafolder.upper())).joinpath(
-            {'original': '', 'modified': 'PagePlusOutput'}.get(datastate))
-        if datafolder.exists():
-            Path(outputdir).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(datafolder, outputdir)
+        load_dotenv()
+        envs = dotenv_values()
+        workspace = str_to_env(workspace)
+        wsfolder = Path(get_key(find_dotenv(), PREFIX_WS + workspace)).joinpath(
+            envs.get(DotEnvPrefixes.PAGEPLUS, ''))
+        if wsfolder.exists():
+            Path(destination_path).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(wsfolder, destination_path)
 
 
     @app.command()
-    def open_datafolder(datafolder: Annotated[
-        str, typer.Option('--datafolder', '-f', help="Environmental name pointing to an existing path")],
-                        ) -> None:
+    def open_workspace(workspace: Annotated[
+        str, typer.Argument(help=f"Workspace name pointing to an existing path")] = "MAIN") -> None:
         """
-        Open a folder in the file explorer, works for Windows, macOS, and Linux.
+        Open a workspace folder in the file explorer, works for Windows, macOS, and Linux.
         """
-        datafolder = Path(get_key(find_dotenv(), ES_PREFIX + datafolder.upper()))
-        if datafolder == '' or datafolder is None or not Path(datafolder).exists():
-            print(f"{datafolder} can't be opened!")
+        workspace= str_to_env(workspace)
+        wsfolder = Path(get_key(find_dotenv(), PREFIX_WS + workspace))
+        if wsfolder == '' or wsfolder is None or not Path(wsfolder).exists():
+            print(f"{wsfolder} can't be opened!")
             return
         if sys.platform == "win32":
             # Windows
-            os.startfile(datafolder)
+            os.startfile(wsfolder)
         elif sys.platform == "darwin":
             # macOS
-            subprocess.run(["open", datafolder])
+            subprocess.run(["open", wsfolder])
         else:
             # Linux and other Unix-like OS
-            subprocess.run(["xdg-open", datafolder])
+            subprocess.run(["xdg-open", wsfolder])
 
 if __name__ == "__main__":
     app()
