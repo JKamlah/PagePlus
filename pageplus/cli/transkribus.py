@@ -37,20 +37,21 @@ else:
     import logging
 
     from transkribus_utils.transkribus_utils import PagePlusTranskribusUtils
-    from dotenv import load_dotenv, find_dotenv, get_key, set_key, dotenv_values
+    from dotenv import load_dotenv, find_dotenv, get_key, set_key, dotenv_values, unset_key
 
-    from pageplus.utils.constants import DotEnvPrefixes, WorkState, WORKSPACE_PREFIX
+    from pageplus.utils.constants import Environments, WorkState
     from pageplus.utils.fs import str_to_env
 
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
-    SERVICE = DotEnvPrefixes.TRANSKRIBUS.lower()
-    PREFIX = DotEnvPrefixes.TRANSKRIBUS + '_'
-    PREFIX_WS = DotEnvPrefixes.TRANSKRIBUS + '_' + WORKSPACE_PREFIX
+    ENV = Environments.TRANSKRIBUS.value
+    PREFIX = Environments.TRANSKRIBUS.as_prefix()
+    PREFIX_WS = Environments.TRANSKRIBUS.as_prefix_workspace()
+    PREFIX_LOADED_WS = Environments.TRANSKRIBUS.as_prefix_loaded_workspace()
 
 
-    @app.command()
+    @app.command(rich_help_panel="Package")
     def update_package() -> None:
         """
         Updates PagePlus-transkribus-utils based on acdh-transkribus-utils
@@ -101,7 +102,7 @@ else:
         READER = "Reader"
 
 
-    @app.command()
+    @app.command(rich_help_panel="Settings")
     def set_url(url: Annotated[str, typer.Argument(help="URL to Transkribus")]) -> None:
         """
         Write the URL of the Transkribus instance if it not refers to the official url
@@ -113,7 +114,7 @@ else:
         set_key(dotfile, PREFIX + "URL", url)
 
 
-    @app.command()
+    @app.command(rich_help_panel="Settings")
     def set_credentials(name: Annotated[str, typer.Argument(help="Username for Transkribus")],
                         password: Annotated[str, typer.Argument(help="Password for Transkribus")]) -> None:
         """
@@ -126,7 +127,7 @@ else:
         set_key(dotfile, PREFIX + "PASSWORD", password)
 
 
-    @app.command()
+    @app.command(rich_help_panel="Settings")
     def valid_login() -> bool:
         envs = dotenv_values()
         check = all([envs.get(PREFIX + 'USERNAME', None), envs.get(PREFIX + 'PASSWORD', None)])
@@ -136,34 +137,95 @@ else:
         return True
 
 
-    @app.command()
-    def show_envs() -> None:
+    def filter_envs(pattern: str) -> dict:
         """
-        Print your current credentials from the .env file
+        Filters dotenv values for a specific pattern (e.g. services, prefixes, ..)
+        Returns:
+            dict
+        """
+        load_dotenv()
+        envs = dotenv_values()
+        return dict(sorted([(var, key) for (var, key) in envs.items() if var.startswith(pattern)], key=lambda x: x[0]))
+
+    @app.command(rich_help_panel="Settings")
+    def show_settings() -> None:
+        """
+        Print your current settings from the .env file
         Returns:
         None
         """
-        table = Table(title="Transkribus's environment variables")
-        table.add_column("Environment variable name", justify="right", style="cyan", no_wrap=True)
-        table.add_column("Environment variable value")
-        [table.add_row(var, key) if var != PREFIX+"PASSWORD" else table.add_row(var, key[:3] + '***') for
-         (var, key) in dotenv_values().items() if var.startswith(PREFIX)]
+        table = Table(title=f"[green]{ENV} settings[/green]")
+        table.add_column("Setting", justify="right", style="cyan", no_wrap=True)
+        table.add_column("Value")
+        [table.add_row(var.replace(PREFIX, ''), key) if var != PREFIX+"PASSWORD" else
+         table.add_row(var.replace(PREFIX, ''), key[:3] + '***') for
+         (var, key) in filter_envs(PREFIX).items() if not
+         (var.startswith(PREFIX_WS) or var.startswith(PREFIX_LOADED_WS))]
         print(table)
 
-    @app.command()
+    @app.command(rich_help_panel="Workspace")
     def show_workspaces() -> None:
         """
         Print all workspaces
         Returns:
         None
         """
-        table = Table(title="Transkribus workspaces")
-        table.add_column("Transkribus workspace", justify="right", style="cyan", no_wrap=True)
+        table = Table(title=f"[green]{ENV} workspaces[/green]")
+        table.add_column(f"{ENV} workspace", justify="right", style="cyan", no_wrap=True)
         table.add_column("Workspace folder")
-        [table.add_row(var.replace(PREFIX_WS, ''), key) for (var, key) in dotenv_values().items()
-         if var.startswith(PREFIX_WS)]
+        [table.add_row('[green bold]Loaded workspace[/green bold]', f"[cyan]{key}[/cyan]")
+         for (var, key) in filter_envs(PREFIX_LOADED_WS).items()]
+        [table.add_row(var.replace(PREFIX_WS, ''), key) for (var, key) in filter_envs(PREFIX_WS).items()]
         print(table)
 
+    @app.command(rich_help_panel="Workspace")
+    def load_workspace(workspace: Annotated[str, typer.Argument(help="Set environmental name")]) -> None:
+        """
+        Set default workspace
+        Returns:
+        None
+        """
+        dotfile = find_dotenv()
+        workspace = str_to_env(workspace)
+        if get_key(dotfile, PREFIX_WS+workspace):
+            set_key(dotfile, PREFIX_LOADED_WS, workspace)
+        else:
+            print("[red]Warning: {workspace} workspace not found![/red]")
+
+    @app.command(rich_help_panel="Workspace")
+    def update_workspaces() -> None:
+        """
+        Check if the workspaces still exist and updates the dotenv
+        Returns:
+        None
+        """
+        dotenv_path = find_dotenv()
+        for (var, key) in filter_envs(PREFIX_WS).items():
+            if not Path(key).exists():
+                print(f"Workspace {var.replace(PREFIX_WS, '')} does not exist anymore and will be deleted!")
+                unset_key(dotenv_path, var)
+        for (var, key) in filter_envs(PREFIX_LOADED_WS).items():
+            workspace = PREFIX_WS+get_key(dotenv_path, PREFIX_LOADED_WS)
+            if not get_key(dotenv_path, workspace):
+                print(f"Loaded workspace does not exist anymore and will set to empty!")
+                set_key(find_dotenv(), var, '')
+
+    @app.command(rich_help_panel="Workspace")
+    def delete_workspaces(workspace: Annotated[str, typer.Argument(help="Set environmental name")]) -> None:
+        """
+        Deletes an existing workspace
+        Returns:
+        None
+        """
+        dotenv_path = find_dotenv()
+        workspace = PREFIX_WS + str_to_env(workspace)
+        wsfolder = Path(get_key(dotenv_path, workspace))
+        if wsfolder.exists():
+            shutil.rmtree(str(wsfolder.absolute()))
+        unset_key(dotenv_path, workspace)
+        if get_key(dotenv_path, PREFIX_LOADED_WS) == workspace.replace(PREFIX_WS, ''):
+            set_key(dotenv_path, PREFIX_LOADED_WS, '')
+        print(f"Workspace {workspace.replace(PREFIX_WS, '')} was deleted!")
 
     def valid_filter(filter_by: list, search_term: list) -> bool:
         valid = True
@@ -189,7 +251,7 @@ else:
         return False
 
 
-    @app.command()
+    @app.command(rich_help_panel="Document")
     def find_documents(filter_by: Annotated[List[DataFilter], typer.Option("--filter-by", "-f",
                                                                            help="Filter the document search by "
                                                                                 "the name of the 'Collection', "
@@ -294,7 +356,7 @@ else:
         print(table)
 
 
-    @app.command()
+    @app.command(rich_help_panel="Document")
     def load_local(
             inputdir: Annotated[
                 Path, typer.Argument(help="Path to the output directory where the text files will be saved")],
@@ -308,18 +370,17 @@ else:
         load_dotenv()
         envs = dotenv_values()
         workspace = str_to_env(workspace)
-        wsfolder = PREFIX_WS + workspace
-        if wsfolder in envs.values() and not overwrite:
-            print("[red bold]Warning:[/red bold] The environment variable {wsfolder_name} already exists."
+        if PREFIX_WS + workspace in envs.values() and not overwrite:
+            print(f"[red bold]Warning:[/red bold] The environment variable {workspace} already exists."
                   "Please set overwrite to True, if you want to overwrite the environment variable.")
         if inputdir.is_dir():
             dotfile = find_dotenv()
-            set_key(dotfile, wsfolder, str(inputdir.absolute()))
+            set_key(dotfile, PREFIX_WS + workspace, str(inputdir.absolute()))
         else:
-            print("[red]Warning:[/red] The inputdir does not point to an existing folder.")
+            print(f"[red]Warning:[/red] The inputdir does not point to an existing folder.")
 
 
-    @app.command()
+    @app.command(rich_help_panel="Document")
     def load_document(collection_id: Annotated[int,
     typer.Argument(help="Collection identifier (collId).")],
                       document_id: Annotated[int,
@@ -364,22 +425,22 @@ else:
                 transcript = tsclient.get_transcript(fulldoc_md)
                 pagedata.append((fulldoc_md, transcript))
 
-        wsfolder = Path(tempfile.mkdtemp(prefix="PagePlus_")) if folderpath is None else Path(folderpath)
+        wsfolder = Path(tempfile.mkdtemp(prefix=Environments.PAGEPLUS.as_prefix())) if folderpath is None else Path(folderpath)
         wsfolder.mkdir(parents=True, exist_ok=True)
 
         dotfile = find_dotenv()
-        metadata = {SERVICE: {'collection': {}}}
+        metadata = {ENV: {'collection': {}}}
 
         for idx, (md, transcript) in enumerate(pagedata):
             doc_md = md.get('extra_info')
             if idx == 0:
                 col_md = md.get('extra_info').get('collectionList').get('colList')[0]
-                metadata[SERVICE]['collection'].update(col_md)
-                metadata[SERVICE]['collection']['document'] = {}
+                metadata[ENV]['collection'].update(col_md)
+                metadata[ENV]['collection']['document'] = {}
                 for key in ['docId', 'title', 'uploadTimestamp', 'uploader', 'uploaderId', 'nrOfPages', 'status']:
-                    metadata[SERVICE]['collection']['document'][key] = doc_md.get(key)
-                metadata[SERVICE]['collection']['document']['page'] = defaultdict(dict)
-            page_info = metadata[SERVICE]['collection']['document']['page'][md.get('page_id')]
+                    metadata[ENV]['collection']['document'][key] = doc_md.get(key)
+                metadata[ENV]['collection']['document']['page'] = defaultdict(dict)
+            page_info = metadata[ENV]['collection']['document']['page'][md.get('page_id')]
             page_info['fileName'] = md.get('file_name')
             page_info['transcriptURL'] = md.get('transcript_url')
             page_info['timestamp'] = md.get('timestamp')
@@ -413,10 +474,10 @@ else:
         print(f"And be access via the Transkribus workspace: [bold green]{workspace}[/bold green]")
 
 
-    @app.command()
+    @app.command(rich_help_panel="Document")
     def update_document(
             workspace: Annotated[
-                str, typer.Argument(help="An environmental name pointing to an existing path")] = "MAIN",
+                str, typer.Argument(help="An environmental name pointing to an existing path")] = None,
             workstate: Annotated[Optional[WorkState], typer.Option('--workstate', '-s',
                                                                    help="Choose the documents inside this folder with "
                                                                         "'original', or the 'modified' scripts inside "
@@ -452,7 +513,10 @@ else:
         envs = dotenv_values()
         if not valid_login():
             return
-        workspace = str_to_env(workspace)
+        workspace = envs.get(PREFIX_LOADED_WS, '') if not workspace else str_to_env(workspace)
+        if workspace == '':
+            print("Please provide a valid workspace or load workspace.")
+            return
         # TODO: https://transkribus.eu/TrpServer/rest/collections/colID/docId/page/text
 
         tsclient = PagePlusTranskribusUtils(envs.get(PREFIX + 'USERNAME', None),
@@ -463,10 +527,10 @@ else:
             wsfolder = Path(envs[PREFIX_WS + workspace])
             if use_metadata:
                 metadata = json.loads(wsfolder.joinpath('metadata.pageplus.json').open('r').read())
-                collection_id = metadata[SERVICE]['collection']['colId']
-                document_id = metadata[SERVICE]['collection']['document']['docId']
-                page_names = [p["fileName"] for p in metadata[SERVICE]['collection']['document']['page'].values()]
-                wsfolder = wsfolder.joinpath(envs.get(DotEnvPrefixes.PAGEPLUS + workstate, ''))
+                collection_id = metadata[ENV]['collection']['colId']
+                document_id = metadata[ENV]['collection']['document']['docId']
+                page_names = [p["fileName"] for p in metadata[ENV]['collection']['document']['page'].values()]
+                wsfolder = wsfolder.joinpath(envs.get(Environments.PAGEPLUS.as_prefix_workstate(workstate), ''))
         else:
             return
         if not pages:
@@ -489,11 +553,13 @@ else:
                                                   overwrite, status, note, parent, nr_is_page_id, tool_name)
 
 
-    @app.command()
-    def copy_workspace(workspace: Annotated[str,
-                       typer.Argument(help=f"Workspace name pointing to an existing path")],
-                       destination_path: Annotated[Path,
-                       typer.Argument(help="Path to the output directory where the text files will be saved")]) \
+    @app.command(rich_help_panel="Workspace")
+    def copy_workspace(destination_path: Annotated[Path,
+                       typer.Argument(help="Path to the output directory where the text files will be saved")],
+                        workspace: Annotated[str,
+                       typer.Argument(help=f"Workspace name pointing to an existing path")] = None,
+                       new_workspace: Annotated[str,
+                       typer.Option(help=f"If set a new workspace is created.")] = "") \
             -> None:
         """
         Copy pages of from a workspace path to another location
@@ -502,22 +568,31 @@ else:
         """
         load_dotenv()
         envs = dotenv_values()
-        workspace = str_to_env(workspace)
-        wsfolder = Path(get_key(find_dotenv(), PREFIX_WS + workspace)).joinpath(
-            envs.get(DotEnvPrefixes.PAGEPLUS, ''))
+        workspace = envs.get(PREFIX_LOADED_WS, '') if not workspace else str_to_env(workspace)
+        if workspace == '':
+            print("Please provide a valid workspace or load workspace.")
+            return
+        wsfolder = Path(get_key(find_dotenv(), PREFIX_WS + workspace))
         if wsfolder.exists():
             Path(destination_path).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(wsfolder, destination_path)
+            if new_workspace != "":
+                new_workspace = str_to_env(new_workspace)
+                set_key(find_dotenv(), PREFIX_WS+new_workspace, str(Path(destination_path).absolute()))
 
-
-    @app.command()
+    @app.command(rich_help_panel="Workspace")
     def open_workspace(workspace: Annotated[
-        str, typer.Argument(help=f"Workspace name pointing to an existing path")] = "MAIN") -> None:
+        str, typer.Argument(help=f"Workspace name pointing to an existing path")] = None) -> None:
         """
         Open a workspace folder in the file explorer, works for Windows, macOS, and Linux.
         """
-        workspace = str_to_env(workspace)
-        wsfolder = Path(get_key(find_dotenv(), PREFIX_WS + workspace))
+        load_dotenv()
+        envs = dotenv_values()
+        workspace = envs.get(PREFIX_LOADED_WS, '') if not workspace else str_to_env(workspace)
+        if workspace == '':
+            print("Please provide a valid workspace or load workspace.")
+            return
+        wsfolder = Path(envs.get(PREFIX_WS + workspace, None))
         if wsfolder == '' or wsfolder is None or not Path(wsfolder).exists():
             print(f"{wsfolder} can't be opened!")
             return
@@ -567,9 +642,9 @@ else:
         TAG_PROPERTY_LINK = "Tags"
 
 
-    @app.command()
+    @app.command(rich_help_panel="Document")
     def to_prima(workspace: Annotated[
-        str, typer.Argument(help="Environmental name pointing to an existing path")],
+        str, typer.Argument(help="Environmental name pointing to an existing path")] = None,
                  workstate: Annotated[Optional[WorkState], typer.Option('--workstate', '-s',
                                                                         help="Choose the documents inside this folder with "
                                                                              "'original', or the 'modified' scripts inside "
@@ -592,9 +667,12 @@ else:
 
         load_dotenv()
         envs = dotenv_values()
-        workspace = str_to_env(workspace)
+        workspace = envs.get(PREFIX_LOADED_WS, '') if not workspace else str_to_env(workspace)
+        if workspace == '':
+            print("Please provide a valid workspace or load workspace.")
+            return
         wsfolder = Path(get_key(find_dotenv(), PREFIX_WS + workspace)).joinpath(
-            envs.get(DotEnvPrefixes.PAGEPLUS + workstate, ''))
+            envs.get(Environments.PAGEPLUS.as_prefix_workstate(workstate), ''))
         outputdir = wsfolder if overwrite else Path(outputdir)
         outputdir.mkdir(parents=True, exist_ok=True)
         if wsfolder.exists() and outputdir is not None:

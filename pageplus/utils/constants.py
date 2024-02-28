@@ -1,28 +1,41 @@
 from __future__ import annotations
 from enum import Enum
 
-WORKSPACE_PREFIX = 'WS_'
-
-class DotEnvPrefixes(str, Enum):
-    """
-    Prefixes for dotenvs variables
-    """
-    USER = "USER"
-    PAGEPLUS = "PAGEPLUS"
-    METS = "METS"
-    IIIF = "IIIF"
-    ESCRIPTORIUM = "ESCRIPTORIUM"
-    TRANSKRIBUS = "TRANSKRIBUS"
-    DINGLEHOPPER = "DINGLEHOPPER"
-    OPENAI = "OPENAI"
-    H2O = "H2O"
-
 class WorkState(str, Enum):
     """
     State of the current data
     """
-    ORIGINAL = "ORIGINAL"
-    MODIFIED = "MODIFIED"
+    ORIGINAL = "original"
+    MODIFIED = "modified"
+
+class Environments(str, Enum):
+    """
+    Service names are used as prefixes with _ for dotenvs variables
+    """
+    USER = "User"
+    PAGEPLUS = "PagePlus"
+    METS = "METS"
+    IIIF = "IIIF"
+    ESCRIPTORIUM = "eScriptorium"
+    TRANSKRIBUS = "Transkribus"
+    DINGLEHOPPER = "Dinglehopper"
+    OPENAI = "OpenAI"
+    H2O = "H2O"
+
+    def as_prefix(self):
+        return f"{self.name.upper()}_"
+
+    def as_prefix_workspace(self):
+        return f"{self.name.upper()}_WS_"
+
+    def as_prefix_loaded_workspace(self):
+        return f"{self.name.upper()}_LOADED_WS"
+
+    def as_prefix_workstate(self, state: WorkState):
+        if state == "original":
+            return f"{self.name.upper()}_ORIGINAL"
+        else:
+            return f"{self.name.upper()}_MODIFIED"
 
 
 # Converts boolean values to on and off

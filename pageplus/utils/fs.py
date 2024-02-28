@@ -7,9 +7,10 @@ from typing import Tuple, Iterator, List
 import lxml.etree as ET
 from dotenv import load_dotenv
 
-def str_to_env(string: str) -> str:
+def str_to_env(string: str, substring=True) -> str:
     # Remove leading non-alphabetic characters
-    string = string.lstrip('0123456789')
+    if not substring:
+        string = string.lstrip('0123456789')
 
     # Replace invalid characters with underscores and convert to uppercase
     valid_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_"

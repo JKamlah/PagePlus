@@ -36,17 +36,29 @@ else:
     import logging
 
     from escriptorium_connector import EscriptoriumConnector
-    from dotenv import load_dotenv, find_dotenv, get_key, set_key, dotenv_values
+    from dotenv import load_dotenv, find_dotenv, get_key, set_key, dotenv_values, unset_key
 
-    from pageplus.utils.constants import DotEnvPrefixes, WorkState, Bool2OnOff, WORKSPACE_PREFIX
+    from pageplus.utils.constants import Environments, WorkState, Bool2OnOff
     from pageplus.utils.fs import str_to_env
 
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
-    SERVICE = DotEnvPrefixes.ESCRIPTORIUM.lower()
-    PREFIX = DotEnvPrefixes.ESCRIPTORIUM + '_'
-    PREFIX_WS = DotEnvPrefixes.ESCRIPTORIUM + '_' + WORKSPACE_PREFIX
+    ENV = Environments.ESCRIPTORIUM.value
+    PREFIX = Environments.ESCRIPTORIUM.as_prefix()
+    PREFIX_WS = Environments.ESCRIPTORIUM.as_prefix_workspace()
+    PREFIX_LOADED_WS = Environments.ESCRIPTORIUM.as_prefix_loaded_workspace()
+
+    @app.command(rich_help_panel="Package")
+    def update_package() -> None:
+        """
+        Updates PagePlus-transkribus-utils based on acdh-transkribus-utils
+        by Peter Andorfer, Matthias Schlögl, Carl Friedrich Haak!
+        """
+        """
+        Updates escriptorium-connector by Bronson Brown-deVost!
+        """
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-I", "escriptorium-connector"])
 
 
     class DataFilter(str, Enum):
@@ -67,7 +79,7 @@ else:
         PAGE = "Page"
 
 
-    @app.command()
+    @app.command(rich_help_panel="Settings")
     def set_url(url: Annotated[str, typer.Argument(help="URL to eScriptorium")]) -> None:
         """
         Write the URL of the eScritpriums instance (e.g. https://www.escriptorium.fr) to the .env file
@@ -82,7 +94,7 @@ else:
             print(f"[red]Failed to update the url: {e}[red]")
 
 
-    @app.command()
+    @app.command(rich_help_panel="Settings")
     def set_credentials(name: Annotated[str, typer.Argument(help="Username for eScriptorium")],
                         password: Annotated[str, typer.Argument(help="Password for eScriptorium")]) -> None:
         """
@@ -99,7 +111,7 @@ else:
             print(f"[red]Failed to update credentials: {e}[red]")
 
 
-    @app.command()
+    @app.command(rich_help_panel="Settings")
     def set_api_url(url: Annotated[str, typer.Argument(help="API url for eScriptorium")]) -> None:
         """
         Set if api url differs from base-url/api and api-key should be used
@@ -111,7 +123,7 @@ else:
         set_key(dotfile, PREFIX + "API_URL", url)
 
 
-    @app.command()
+    @app.command(rich_help_panel="Settings")
     def set_api_key(key: Annotated[str, typer.Argument(help="API key for eScriptorium")],
                     force: Annotated[bool, typer.Option(help="Force to set the API key")] = False) -> None:
         """
@@ -127,7 +139,7 @@ else:
             set_key(dotfile, PREFIX + "API_KEY", key)
 
 
-    @app.command()
+    @app.command(rich_help_panel="Settings")
     def valid_login() -> bool:
         envs = dotenv_values()
         check = all(
@@ -142,47 +154,99 @@ else:
         return True
 
 
-    def get_envgroup(group: DotEnvPrefixes) -> dict:
+    def filter_envs(pattern: str) -> dict:
         """
-        Filters dotenv values for a specific Prefix
+        Filters dotenv values for a specific pattern (e.g. services, prefixes, ..)
         Returns:
             dict
         """
         load_dotenv()
         envs = dotenv_values()
-        return dict([(var, key) for (var, key) in envs.items() if group.value.upper() in var.upper()])
+        return dict(sorted([(var, key) for (var, key) in envs.items() if var.startswith(pattern)], key=lambda x: x[0]))
 
 
-    @app.command()
-    def show_envs() -> None:
+    @app.command(rich_help_panel="Settings")
+    def show_settings() -> None:
         """
-        Print your current credentials from the .env file
+        Print your current settings from the .env file
         Returns:
         None
         """
-        table = Table(title="eScriptorium's environment variables")
-        table.add_column("Environment variable name", justify="right", style="cyan", no_wrap=True)
-        table.add_column("Environment variable value")
-        [table.add_row(var, key) if var != PREFIX+"PASSWORD" else table.add_row(var, key[:3] + '***') for
-         (var, key) in dotenv_values().items() if var.startswith(PREFIX)]
+        table = Table(title=f"[green]{ENV} settings[/green]")
+        table.add_column("Setting", justify="right", style="cyan", no_wrap=True)
+        table.add_column("Value")
+        [table.add_row(var.replace(PREFIX, ''), key) if var != PREFIX+"PASSWORD" else
+         table.add_row(var.replace(PREFIX, ''), key[:3] + '***') for
+         (var, key) in filter_envs(PREFIX).items() if not
+         (var.startswith(PREFIX_WS) or var.startswith(PREFIX_LOADED_WS))]
         print(table)
 
-    @app.command()
+    @app.command(rich_help_panel="Workspace")
     def show_workspaces() -> None:
         """
         Print all workspaces
         Returns:
         None
         """
-        table = Table(title="eScriptorium's workspaces")
-        table.add_column("eScriptorium workspace", justify="right", style="cyan", no_wrap=True)
+        table = Table(title=f"[green]{ENV} workspaces[/green]")
+        table.add_column(f"{ENV} workspace", justify="right", style="cyan", no_wrap=True)
         table.add_column("Workspace folder")
-        [table.add_row(var.replace(PREFIX_WS, ''), key) for (var, key) in dotenv_values().items()
-         if var.startswith(PREFIX_WS)]
+        [table.add_row('[green bold]Loaded workspace[/green bold]', f"[cyan]{key}[/cyan]")
+         for (var, key) in filter_envs(PREFIX_LOADED_WS).items()]
+        [table.add_row(var.replace(PREFIX_WS, ''), key) for (var, key) in filter_envs(PREFIX_WS).items()]
         print(table)
 
+    @app.command(rich_help_panel="Workspace")
+    def load_workspace(workspace: Annotated[str, typer.Argument(help="Set environmental name")]) -> None:
+        """
+        Set default workspace
+        Returns:
+        None
+        """
+        dotfile = find_dotenv()
+        workspace = str_to_env(workspace)
+        if get_key(dotfile, PREFIX_WS+workspace):
+            set_key(dotfile, PREFIX_LOADED_WS, workspace)
+        else:
+            print("[red]Warning: {workspace} workspace not found![/red]")
 
-    @app.command()
+    @app.command(rich_help_panel="Workspace")
+    def update_workspaces() -> None:
+        """
+        Check if the workspaces still exist and updates the dotenv
+        Returns:
+        None
+        """
+        dotenv_path = find_dotenv()
+        for (var, key) in filter_envs(PREFIX_WS).items():
+            if not Path(key).exists():
+                print(f"Workspace {var.replace(PREFIX_WS, '')} does not exist anymore and will be deleted!")
+                unset_key(dotenv_path, var)
+        for (var, key) in filter_envs(PREFIX_LOADED_WS).items():
+            workspace = PREFIX_WS+get_key(dotenv_path, PREFIX_LOADED_WS)
+            if not get_key(dotenv_path, workspace):
+                print(f"Loaded workspace does not exist anymore and will set to empty!")
+                set_key(find_dotenv(), var, '')
+
+    @app.command(rich_help_panel="Workspace")
+    def delete_workspace(workspace: Annotated[str, typer.Argument(help="Set environmental name")]) -> None:
+        """
+        Deletes an existing workspace
+        Returns:
+        None
+        """
+        dotenv_path = find_dotenv()
+        workspace = PREFIX_WS + str_to_env(workspace)
+        wsfolder = Path(get_key(dotenv_path, workspace))
+        if wsfolder.exists():
+            shutil.rmtree(str(wsfolder.absolute()))
+        unset_key(dotenv_path, workspace)
+        if get_key(dotenv_path, PREFIX_LOADED_WS) == workspace.replace(PREFIX_WS, ''):
+            set_key(dotenv_path, PREFIX_LOADED_WS, '')
+        print(f"Workspace {workspace.replace(PREFIX_WS, '')} was deleted!")
+
+
+    @app.command(rich_help_panel="Document")
     def find_documents(filter_by: Annotated[List[DataFilter], typer.Option("--filter-by", "-f",
                                                                     help="Filter the document search by "
                                                                          "the name of the 'project', "
@@ -246,7 +310,7 @@ else:
         print(table)
 
 
-    @app.command()
+    @app.command(rich_help_panel="Document")
     def load_document(document_pk: Annotated[int, typer.Argument(help="Document's primary key (pk).")],
                       transcription_pk: Annotated[int,
                       typer.Argument(help="Transcription's primary key (pk).")],
@@ -258,11 +322,11 @@ else:
                                                                               "not set it get stored in a temporary "
                                                                               "folder.")] = None,
                       workspace: Annotated[Optional[str], typer.Option("--workspace", "-w",
-                                                                       help="Name of enviormental variable, which "
+                                                                       help="Name of environmental variable, which "
                                                                             "stores the path to loaded document. The "
-                                                                            "name get's appended to 'ESCRIPTORIUM_' and "
+                                                                            "name get's appended to 'ESCRIPTORIUM_WS_' and "
                                                                             "automatically cast to uppercase. E.g. "
-                                                                            "new_data -> ESCRIPTORIUM_NEW_DATA.")] =
+                                                                            "new data -> ESCRIPTORIUM_WS_NEW_DATA.")] =
                       "MAIN") -> None:
         """
         Loads pages of a document with a specific transcription to work with PagePlus.
@@ -274,6 +338,9 @@ else:
         load_dotenv()
         envs = dotenv_values()
         workspace = str_to_env(workspace)
+        if workspace == '':
+            print("Please provide a valid workspace or load workspace.")
+            return
         if not valid_login():
             return
         escr = EscriptoriumConnector(envs.get(PREFIX + 'URL', None),
@@ -290,11 +357,11 @@ else:
 
         zipped_pagexmls = zipfile.ZipFile(BytesIO(zipped_pagexmls_binary))
 
-        wsfolder = Path(tempfile.mkdtemp(prefix="PagePlus_")) if folderpath is None else Path(folderpath)
+        wsfolder = Path(tempfile.mkdtemp(prefix=Environments.PAGEPLUS.as_prefix())) if folderpath is None else Path(folderpath)
         wsfolder.mkdir(parents=True, exist_ok=True)
 
         with open(wsfolder.joinpath('metadata.pageplus.json'), 'w') as meta:
-            json.dump({SERVICE: {'document_pk': document_pk,
+            json.dump({ENV: {'document_pk': document_pk,
                                    'parts_pk': parts_pk,
                                    'transcription_pk': transcription_pk,
                                    'downloaded at': datetime.now().strftime('%H_%M_%d_%m_%Y'),
@@ -313,11 +380,11 @@ else:
         print(f"And be access via the eScriptorium workspace: [bold green]{workspace}[/bold green]")
 
 
-    @app.command()
+    @app.command(rich_help_panel="Document")
     def update_document(
             workspace: Annotated[
                 str, typer.Option('--workspace', '-w',
-                                  help="A path or an environmental name pointing to an existing path")] = "MAIN",
+                                  help="A path or an environmental name pointing to an existing path")] = None,
             workstate: Annotated[Optional[WorkState], typer.Option('--workstate', '-s',
                                                                    help="Choose the documents inside this folder with "
                                                                         "'original', or the 'modified' scripts inside "
@@ -343,7 +410,10 @@ else:
         """
         load_dotenv()
         envs = dotenv_values()
-        workspace= str_to_env(workspace)
+        workspace = envs.get(PREFIX_LOADED_WS, '') if not workspace else str_to_env(workspace)
+        if workspace == '':
+            print("Please provide a valid workspace or load workspace.")
+            return
         escr = EscriptoriumConnector(envs[PREFIX + 'URL'],
                                      envs[PREFIX + 'USERNAME'],
                                      envs[PREFIX + 'PASSWORD'])
@@ -351,13 +421,13 @@ else:
 
         # Create a BytesIO object to hold the zip file in memory
         file_data = BytesIO()
-        if PREFIX_WS + workspace in get_envgroup(DotEnvPrefixes.ESCRIPTORIUM).keys():
+        if PREFIX_WS + workspace in filter_envs(PREFIX).keys():
             wsfolder = Path(envs[PREFIX_WS + workspace])
             metadata = json.loads(wsfolder.joinpath('metadata.pageplus.json').open('r').read())
-            metadata = metadata.get(SERVICE, '')
+            metadata = metadata.get(ENV, '')
             document_pk = metadata.get('document_pk', None) if document_pk is None else document_pk
             transcription_pk = metadata.get('transcription_pk', None) if transcription_pk is None else transcription_pk
-            wsfolder = wsfolder.joinpath(envs.get(DotEnvPrefixes.PAGEPLUS + workstate, ''))
+            wsfolder = wsfolder.joinpath(envs.get(Environments.PAGEPLUS.as_prefix_workstate(workstate), ''))
         else:
             return
         if transcription_name is None and transcription_pk is not None:
@@ -386,11 +456,13 @@ else:
                                            override=overwrite)
         print("Updating completed!")
 
-    @app.command()
-    def copy_workspace(workspace: Annotated[str,
-                       typer.Argument(help=f"Workspace name pointing to an existing path")],
-                       destination_path: Annotated[Path,
-                       typer.Argument(help="Path to the output directory where the text files will be saved")]) \
+    @app.command(rich_help_panel="Workspace")
+    def copy_workspace(destination_path: Annotated[Path,
+                       typer.Argument(help="Path to the output directory where the text files will be saved")],
+                        workspace: Annotated[str,
+                       typer.Argument(help=f"Workspace name pointing to an existing path")] = None,
+                       new_workspace: Annotated[str,
+                       typer.Option(help=f"If set a new workspace is created.")] = "") \
             -> None:
         """
         Copy pages of from a workspace path to another location
@@ -399,22 +471,31 @@ else:
         """
         load_dotenv()
         envs = dotenv_values()
-        workspace = str_to_env(workspace)
-        wsfolder = Path(get_key(find_dotenv(), PREFIX_WS + workspace)).joinpath(
-            envs.get(DotEnvPrefixes.PAGEPLUS, ''))
+        workspace = envs.get(PREFIX_LOADED_WS, '') if not workspace else str_to_env(workspace)
+        if workspace == '':
+            print("Please provide a valid workspace or load workspace.")
+            return
+        wsfolder = Path(get_key(find_dotenv(), PREFIX_WS + workspace))
         if wsfolder.exists():
             Path(destination_path).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(wsfolder, destination_path)
+            if new_workspace != "":
+                new_workspace = str_to_env(new_workspace)
+                set_key(find_dotenv(), PREFIX_WS+new_workspace, str(Path(destination_path).absolute()))
 
-
-    @app.command()
+    @app.command(rich_help_panel="Workspace")
     def open_workspace(workspace: Annotated[
-        str, typer.Argument(help=f"Workspace name pointing to an existing path")] = "MAIN") -> None:
+        str, typer.Argument(help=f"Workspace name pointing to an existing path")] = None) -> None:
         """
         Open a workspace folder in the file explorer, works for Windows, macOS, and Linux.
         """
-        workspace= str_to_env(workspace)
-        wsfolder = Path(get_key(find_dotenv(), PREFIX_WS + workspace))
+        load_dotenv()
+        envs = dotenv_values()
+        workspace = envs.get(PREFIX_LOADED_WS, '') if not workspace else str_to_env(workspace)
+        if workspace == '':
+            print("Please provide a valid workspace or load workspace.")
+            return
+        wsfolder = Path(envs.get(PREFIX_WS + workspace, None))
         if wsfolder == '' or wsfolder is None or not Path(wsfolder).exists():
             print(f"{wsfolder} can't be opened!")
             return
