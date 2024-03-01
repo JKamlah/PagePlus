@@ -481,7 +481,7 @@ else:
         if PREFIX_WS + workspace in filter_envs(PREFIX).keys():
             wsfolder = Path(envs[PREFIX_WS + workspace])
             metadata = json.loads(wsfolder.joinpath('metadata.pageplus.json').open('r').read())
-            metadata = metadata.get(ENV, '')
+            metadata = metadata.get(ENV, '').get('project', '').get('document', '')
             document_pk = metadata.get('document_pk', None) if document_pk is None else document_pk
             transcription_pk = metadata.get('transcription_pk', None) if transcription_pk is None else transcription_pk
             wsfolder = wsfolder.joinpath(envs.get(Environments.PAGEPLUS.as_prefix_workstate(workstate), ''))
@@ -496,7 +496,7 @@ else:
 
         parts = [wsfolder.joinpath(part.filename).with_suffix('.xml') for idx, part in
                  enumerate(escr.get_document_parts(document_pk).results) if not pages or (idx + 1 in pages)]
-
+        print(parts)
         # Create a ZipFile object with the BytesIO object as file, in write mode
         with zipfile.ZipFile(file_data, 'w', zipfile.ZIP_DEFLATED) as zip_file:
             # Recursively add files to the zip file
