@@ -1,11 +1,36 @@
 from __future__ import annotations
 
+from datetime import datetime
 import os
 from pathlib import Path
+import tempfile
 from typing import Tuple, Iterator, List
 
 import lxml.etree as ET
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv, get_key
+
+from pageplus.utils.constants import Environments
+
+def workspace_dir() -> Path:
+    """
+    Get current workspace directory (Default: Tempfolder)
+    Returns:
+
+    """
+    dotfile = find_dotenv()
+    ws_dir = get_key(dotfile, f"{Environments.PAGEPLUS.name}_WS_DIR")
+    return Path(ws_dir) if ws_dir else Path(tempfile.gettempdir())
+
+
+def workspace_prefix() -> str:
+    """
+    Get current workspace directory (Default: Tempfolder)
+    Returns:
+
+    """
+    return Environments.PAGEPLUS.value + datetime.now().strftime('_%Y-%m-%d_')
+
+
 
 def str_to_env(string: str, substring=True) -> str:
     # Remove leading non-alphabetic characters
