@@ -30,7 +30,7 @@ class Environments(str, Enum):
     #IIIF = "IIIF"
     ESCRIPTORIUM = "eScriptorium"
     TRANSKRIBUS = "Transkribus"
-    #DINGLEHOPPER = "Dinglehopper"
+    DINGLEHOPPER = "Dinglehopper"
     #OPENAI = "OpenAI"
     #H2O = "H2O"
 

@@ -12,6 +12,7 @@ from dotenv import load_dotenv, find_dotenv, get_key, dotenv_values
 
 from pageplus.utils.constants import Environments, PagePlus
 from pageplus.utils.exceptions import InputsDoNotExistException
+from pageplus.utils.envs import str_to_env
 
 
 def join_modified_path(path: Path, count: int) -> Path:
@@ -19,6 +20,10 @@ def join_modified_path(path: Path, count: int) -> Path:
     for _ in range(0, count):
         path = path.joinpath(mod_path)
     return path
+
+
+def transform_input(ctx: typer.Context, param: typer.CallbackParam, value: str):
+    return transform_inputs(ctx, param, [value])[0]
 
 def transform_inputs(ctx: typer.Context, param: typer.CallbackParam, values: List[str]):
     load_dotenv()
@@ -47,6 +52,7 @@ def transform_inputs(ctx: typer.Context, param: typer.CallbackParam, values: Lis
     if not ret_values:
         raise InputsDoNotExistException(values)
     return ret_values
+
 
 def collect_xml_files(inputpaths: Iterator[Path|str],
                       exclude: Tuple[str, ...] = ('metadata.xml', 'mets.xml', 'METS.xml')) -> List[Path]:
