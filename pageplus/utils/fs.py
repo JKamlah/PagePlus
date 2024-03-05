@@ -7,92 +7,88 @@ import tempfile
 from typing import Tuple, Iterator, List
 
 import lxml.etree as ET
-from dotenv import load_dotenv, find_dotenv, get_key
+import typer
+from dotenv import load_dotenv, find_dotenv, get_key, dotenv_values
 
-from pageplus.utils.constants import Environments
-
-def workspace_dir() -> Path:
-    """
-    Get current workspace directory (Default: Tempfolder)
-    Returns:
-
-    """
-    dotfile = find_dotenv()
-    ws_dir = get_key(dotfile, f"{Environments.PAGEPLUS.name}_WS_DIR")
-    return Path(ws_dir) if ws_dir else Path(tempfile.gettempdir())
+from pageplus.utils.constants import Environments, PagePlus
+from pageplus.utils.exceptions import InputsDoNotExistException
 
 
-def workspace_prefix() -> str:
-    """
-    Get current workspace directory (Default: Tempfolder)
-    Returns:
+def join_modified_path(path: Path, count: int) -> Path:
+    mod_path = get_key(find_dotenv(), Environments.PAGEPLUS.as_prefix()+'MODIFIED')
+    for _ in range(0, count):
+        path = path.joinpath(mod_path)
+    return path
 
-    """
-    return Environments.PAGEPLUS.value + datetime.now().strftime('_%Y-%m-%d_')
-
-
-
-def str_to_env(string: str, substring=True) -> str:
-    # Remove leading non-alphabetic characters
-    if not substring:
-        string = string.lstrip('0123456789')
-
-    # Replace invalid characters with underscores and convert to uppercase
-    valid_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_"
-    string = ''.join(c if c in valid_chars else '_' for c in string).upper()
-
-    # Ensure the string does not start with a digit (handled above) and is not empty
-    if not string or string[0].isdigit():
-        raise ValueError("The resulting environment variable name is invalid or empty.")
-
-    return string
-
-def get_env_paths(env_key) -> List[Path]:
-    """
-    Retrieves a list of Path objects from an environment variable.
-
-    This function takes an environment variable key, retrieves its value,
-    and splits the value by ':' to form paths. It returns a list of Path
-    objects corresponding to these paths, but only includes paths that exist.
-
-    Parameters:
-    env_key (str): The key of the environment variable to retrieve paths from.
-
-    Returns:
-    List[Path]: A list of Path objects that exist, derived from the environment variable's value.
-    """
+def transform_inputs(ctx: typer.Context, param: typer.CallbackParam, values: List[str]):
     load_dotenv()
-    env_val = os.getenv(env_key)
-    print(env_val)
-    print([Path(str_val) for str_val in env_val.split(':')])
-    return [Path(str_val) for str_val in env_val.split(':') if Path(str_val).exists()] \
-        if env_val is not None else []
+    envs = dotenv_values()
+    loaded_env = Environments[envs.get(Environments.PAGEPLUS.as_prefix_environment(), 'PAGEPLUS')]
 
+    ret_values = []
+    if not values or (len(values) == 1 and ''.join(values[0].split(':modified')) == ''):
+        ws_folder = Path(envs.get(envs.get(loaded_env.as_prefix_loaded_workspace())))
+        count = 0 if not values else len(values[0].split(':modified'))-1
+        ws_folder = join_modified_path(ws_folder, count)
+        if ws_folder.exists():
+            ret_values.append(ws_folder)
+    else:
+        for value in values:
+            if Path(value).exists():
+                ret_values.append(value)
+                continue
+            ws_name = str_to_env(value.split(':')[0])
+            ws_folder = envs.get(ws_name, None) if envs.get(ws_name, None) else (envs.get(loaded_env.as_prefix_workspace() + ws_name, None))
+            if ws_folder:
+                count = len(value.split(':modified'))-1
+                ws_folder = join_modified_path(Path(ws_folder), count)
+                if ws_folder.exists():
+                    ret_values.append(ws_folder)
+    if not ret_values:
+        raise InputsDoNotExistException(values)
+    return ret_values
 
-def collect_xml_files(inputpaths: Iterator[Path],
+def collect_xml_files(inputpaths: Iterator[Path|str],
                       exclude: Tuple[str, ...] = ('metadata.xml', 'mets.xml', 'METS.xml')) -> List[Path]:
     """
-    Collects XML files from given input paths or environmental names pointing to an existing path, excluding specified filenames.
+    Collects XML files from given input paths or environmental names pointing to an existing path,
+    excluding specified filenames.
 
     Args:
-    - inputpaths: An iterator of Path objects representing files, directories or environmental names pointing to an existing path to search.
+    - inputpaths: An iterator of Path objects representing files, directories or environmental names
+    pointing to an existing path to search.
     - exclude: A tuple of filenames to exclude from the search.
 
     Returns:
     - A sorted list of Path objects for the XML files found.
     """
     xml_files = []
+    load_dotenv()
+    envs = dotenv_values()
+    loaded_env = Environments[envs.get(Environments.PAGEPLUS.as_prefix_environment(), 'PAGEPLUS')]
+    empty = True
     for inputpath in inputpaths:
-        if inputpath.is_file() and inputpath.suffix == '.xml' and inputpath.name not in exclude and is_page_xml(
-                inputpath):
+        empty = False
+        print(inputpath)
+        if (inputpath.is_file() and inputpath.suffix == '.xml' and inputpath.name not in exclude and
+                is_page_xml(inputpath)):
             xml_files.append(inputpath)
         elif inputpath.is_dir():
             xml_files.extend([xml_file for xml_file in inputpath.glob('*.xml') if
                               xml_file.name not in exclude and is_page_xml(xml_file)])
-        elif str(inputpath).isupper() and not '/' in str(inputpath):
-            for fpaths in get_env_paths(str(inputpath)):
-                xml_files.extend([xml_file for xml_file in Path(fpaths).glob('*.xml') if
-                                  xml_file.name not in exclude and is_page_xml(xml_file)])
+        else:
+            ws_name = str_to_env(inputpath.name)
+            ws_folder = envs.get(ws_name, None) if envs.get(ws_name, None) else \
+                (envs.get(loaded_env.as_prefix_workspace() + ws_name, None))
+            if ws_folder:
+                xml_files.extend([xml_file for xml_file in Path(ws_folder).glob('*.xml') if
+                          xml_file.name not in exclude and is_page_xml(xml_file)])
+    if empty:
+        ws_folder = envs.get(loaded_env.as_prefix_loaded_workspace())
+        print(ws_folder)
+        if ws_folder and ws_folder in envs.keys():
+            xml_files.extend([xml_file for xml_file in Path(envs.get(ws_folder)).glob('*.xml') if
+                          xml_file.name not in exclude and is_page_xml(xml_file)])
     return sorted(xml_files)
 
 
@@ -130,7 +126,8 @@ def determine_output_path(xml_file, outputdir, filename):
     Returns:
         The Path object for the output file.
     """
+    load_dotenv()
     if outputdir is None:
-        return xml_file.parent / 'PagePlusOutput' / filename
+        return xml_file.parent / get_key(find_dotenv(), Environments.PAGEPLUS.as_prefix()+'MODIFIED') / filename
     else:
         return Path(outputdir) / filename

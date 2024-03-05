@@ -14,7 +14,7 @@ app = typer.Typer()
 
 @app.command()
 def validate_all(
-        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths to the files to be validated.")]):
+        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths or workspace to the files to be validated.")]=None):
     """
     Validates PAGE XML files.
 

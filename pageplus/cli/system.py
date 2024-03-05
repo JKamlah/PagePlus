@@ -8,10 +8,11 @@ from dotenv import load_dotenv, dotenv_values, find_dotenv, set_key, unset_key
 import typer
 from rich import print
 
-from pageplus.utils.constants import Environments
-from pageplus.utils.fs import workspace_dir
+from pageplus.utils.constants import PagePlus
+from pageplus.utils.workspace import Workspace
 
 app = typer.Typer()
+
 
 @app.command(rich_help_panel="PagePlus")
 def update_pip() -> None:
@@ -23,6 +24,7 @@ def update_pip() -> None:
     """
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", "pip"])
 
+
 @app.command(rich_help_panel="PagePlus")
 def update_pageplus() -> None:
     """
@@ -32,6 +34,7 @@ def update_pageplus() -> None:
     None
     """
     subprocess.check_call(["poetry", "update"])
+
 
 @app.command(rich_help_panel="Logs")
 def clean_logs() -> None:
@@ -52,17 +55,22 @@ def clean_logs() -> None:
         except OSError as e:
             print(f"Error: {e} - {log_file}")
 
-@app.command(rich_help_panel="Workspace")
-def set_workspace_dir(dir: Annotated[Path,
-                       typer.Argument(help="Path to the directory where all workspaces get stored. Default: Tempfolder")],) -> None:
-    dotfile = find_dotenv()
-    dir.mkdir(parents=True, exist_ok=True)
-    set_key(dotfile, f"{Environments.PAGEPLUS.name}_WS_DIR", str(dir.absolute()))
 
 @app.command(rich_help_panel="Workspace")
-def unset_workspace_dir(rich_help_panel="Workspace") -> None:
+def set_workspace_dir(wsdir: Annotated[Path,
+                       typer.Argument(help="Path to the directory where all workspaces get stored. Default: Tempfolder")],) -> None:
+    """Set the directory where all workspaces by all environments get stored"""
     dotfile = find_dotenv()
-    unset_key(dotfile, f"{Environments.PAGEPLUS.name}_WS_DIR")
+    wsdir.mkdir(parents=True, exist_ok=True)
+    set_key(dotfile, PagePlus.SYSTEM.as_prefix_workspace_dir(), str(wsdir.absolute()))
+
+
+@app.command(rich_help_panel="Workspace")
+def set_workspace_dir_to_tempfolder() -> None:
+    """Is workspace directory is unset, the data is stored in the temp folder."""
+    dotfile = find_dotenv()
+    set_key(dotfile, PagePlus.SYSTEM.as_prefix_workspace_dir(), 'tmp')
+
 
 @app.command(rich_help_panel="Workspace")
 def clean_workspace_dir() -> None:
@@ -72,7 +80,7 @@ def clean_workspace_dir() -> None:
     """
     load_dotenv()
     envs = dotenv_values()
-    tempdir = workspace_dir()
+    tempdir = Workspace().dir()
     for pp_folder in tempdir.glob('*PagePlus_*'):
         if str(pp_folder) not in list(envs.values()):
             try:
@@ -80,6 +88,7 @@ def clean_workspace_dir() -> None:
                 print(f"Deleted folder: {pp_folder}")
             except Exception as e:
                 print(f"Error deleting folder {pp_folder}: {e}")
+
 
 @app.command(rich_help_panel="Settings")
 def create_empty_dotenv() -> None:
@@ -89,8 +98,10 @@ def create_empty_dotenv() -> None:
     """
     path = Path(__file__).parents[2].joinpath('.env')
     with open(path, 'w') as f:
-        f.write("""PAGEPLUS_ORIGINAL=''
-PAGEPLUS_MODIFIED='PagePlusOutput'""")
+        f.write("""SYSTEM_WS_DIR='tmp'
+        PAGEPLUS_ORIGINAL=''
+PAGEPLUS_MODIFIED='PagePlusOutput'
+PAGEPLUS_ENVIRONMENT='PagePlus'""")
 
 
 if not Path(__file__).parents[2].joinpath('.env').exists():

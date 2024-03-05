@@ -16,8 +16,7 @@ app = typer.Typer()
 @app.command()
 def statistics(
         inputs: Annotated[List[str],
-        typer.Argument(exists=True, help="Paths to the XML files to be checked.")]
-):
+        typer.Argument(exists=True, help="Paths to the XML files to be checked.")]=None):
     """
     Statistics about PAGE XML files.
 

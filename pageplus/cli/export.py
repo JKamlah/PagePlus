@@ -24,7 +24,7 @@ class ReadingOrderMode(str, Enum):
 
 @app.command()
 def fulltext(
-        inputs: Annotated[List[str], typer.Argument(exists=True, help="Iterable of paths to the PAGE XML files.")],
+        inputs: Annotated[List[str], typer.Argument(exists=True, help="Iterable of paths to the PAGE XML files or workspaces.")]=None,
         outputdir: Annotated[Optional[str], typer.Option(
             help="Path to the output directory where the text files will be saved. If not specified, an output directory named Fulltext will be created in each input file’s parent directory.")] = None,
         dehyphenate: Annotated[bool, typer.Option(help="Dehyphenate the textlines (no impact on coordinates)")] = False,
@@ -70,7 +70,7 @@ def fulltext(
 
 @app.command()
 def dsv(
-        inputs: Annotated[List[str], typer.Argument(exists=True, help="Iterable of paths to the PAGE XML files.")],
+        inputs: Annotated[List[str], typer.Argument(exists=True, help="Iterable of paths to the PAGE XML files or workspaces.")]=None,
         outputdir: Annotated[Optional[str], typer.Option(
             help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")] = None,
         delimiter: Annotated[str, typer.Option(help="Delimiter to use for separating values")] = '\t',

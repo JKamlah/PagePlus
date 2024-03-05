@@ -6,17 +6,17 @@ from rich.progress import track
 from typing_extensions import Annotated
 
 from pageplus.io.logger import logging
-from pageplus.utils.fs import collect_xml_files, determine_output_path
+from pageplus.utils.fs import collect_xml_files, determine_output_path, transform_inputs
 from pageplus.models.page import Page
 
 app = typer.Typer()
 
 
 @app.command()
-def repair(
-        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths to the files to be repaired.")],
+def repair(inputs: Annotated[List[str], typer.Argument(exists=True, help="Direct input of directories containing XML files.",
+                                                      callback=transform_inputs)] = None,
         outputdir: Annotated[Optional[str], typer.Option(
-            help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")] = None,
+            help="Filename of the output directory. Default is creating an modified directory.")] = None,
         overwrite: Annotated[bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
         dry_run: Annotated[bool, typer.Option(help="If True, the function will not write any files.")] = False,
 ):
@@ -28,6 +28,8 @@ def repair(
         dry_run: If True, the function will not write any files.
         outputdir: The directory where the repaired XML files will be saved.
     """
+    print(inputs)
+    return
     xml_files = collect_xml_files(map(Path, inputs))
 
     if not xml_files:
@@ -75,7 +77,7 @@ def repair(
 
 @app.command()
 def delete_text(
-        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths to the PAGE XML files to be processed.")],
+        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths or workspace to the PAGE XML files to be processed.")] = None,
         outputdir: Annotated[Optional[str], typer.Option(
             help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")] = None,
         overwrite: Annotated[bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
@@ -109,7 +111,7 @@ def delete_text(
 
 @app.command()
 def delete_textlines(
-        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths to the PAGE XML files to be processed.")],
+        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths or workspace to the PAGE XML files to be processed.")] = None,
         overwrite: Annotated[bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
         outputdir: Annotated[Optional[str], typer.Option(
             help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")] = None
@@ -145,7 +147,7 @@ def delete_textlines(
 
 @app.command()
 def extend_lines(
-        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths to the PAGE XML files to be processed.")],
+        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths or workspace to the PAGE XML files to be processed.")] = None,
         outputdir: Annotated[Optional[str], typer.Option(
             help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")] = None,
         distance: Annotated[int, typer.Option(help="Distance (in pixel) of extension.")] = 16,
@@ -201,7 +203,7 @@ def extend_lines(
 
 @app.command()
 def pseudolinepolygon(
-        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths to the PAGE XML files to be processed.")],
+        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths or workspace to the PAGE XML files to be processed.")] = None,
         outputdir: Annotated[Optional[str], typer.Option(
             help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")] = None,
         overwrite: Annotated[bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False):
@@ -240,7 +242,7 @@ def pseudolinepolygon(
 
 @app.command()
 def sort_and_merge(
-        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths to the PAGE XML files to be processed.")],
+        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths or workspace to the PAGE XML files to be processed.")] = None,
         outputdir: Annotated[Optional[str], typer.Option(
             help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")] = None,
         overwrite: Annotated[bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
