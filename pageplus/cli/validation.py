@@ -8,13 +8,16 @@ from typing_extensions import Annotated
 from pageplus.io.logger import logging
 from pageplus.utils.fs import collect_xml_files
 from pageplus.models.page import Page
+from pageplus.utils.fs import transform_inputs
 
 app = typer.Typer()
 
 
 @app.command()
 def validate_all(
-        inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths or workspace to the files to be validated.")]=None):
+        inputs: Annotated[List[str], typer.Argument(exists=True,
+                                                    help="Paths or workspace to the files to be validated.",
+                                                    callback=transform_inputs)] = None):
     """
     Validates PAGE XML files.
 

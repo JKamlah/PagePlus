@@ -9,6 +9,7 @@ from pageplus.analytics.counter import PageCounter
 from pageplus.io.logger import logging
 from pageplus.utils.fs import collect_xml_files
 from pageplus.models.page import Page
+from pageplus.utils.fs import transform_inputs
 
 app = typer.Typer()
 
@@ -16,7 +17,7 @@ app = typer.Typer()
 @app.command()
 def statistics(
         inputs: Annotated[List[str],
-        typer.Argument(exists=True, help="Paths to the XML files to be checked.")]=None):
+        typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None):
     """
     Statistics about PAGE XML files.
 

@@ -25,6 +25,29 @@ def filter_envs(pattern: str) -> dict:
 
 
 def str_to_env(string: str, substring=True) -> str:
+    """
+    Converts a given string into a format suitable for environment variable names.
+
+    This function processes the input string to make it compliant with common
+    conventions for environment variable names. It removes leading non-alphabetic characters
+    if the `substring` flag is False, replaces any invalid characters (i.e., characters
+    not in the set of uppercase and lowercase English letters, digits, and the underscore)
+    with underscores, and converts the string to uppercase.
+
+    The function ensures that the resulting string is not empty and does not start with
+    a digit, raising a ValueError if these conditions are not met.
+
+    Args:
+        string (str): The input string to convert.
+        substring (bool, optional): If True, leading non-alphabetic characters are allowed.
+            If False, such characters are removed from the beginning of the string. Defaults to True.
+
+    Returns:
+        str: The transformed string suitable for use as an environment variable name.
+
+    Raises:
+        ValueError: If the resulting string is empty or starts with a digit.
+    """
     # Remove leading non-alphabetic characters
     if not substring:
         string = string.lstrip('0123456789')

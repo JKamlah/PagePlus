@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime
 import os
 from pathlib import Path
-import tempfile
 from typing import Tuple, Iterator, List
+import sys
+import subprocess
 
 import lxml.etree as ET
 import typer
@@ -15,17 +15,108 @@ from pageplus.utils.exceptions import InputsDoNotExistException
 from pageplus.utils.envs import str_to_env
 
 
+def open_folder_default() -> bool:
+    """Set the directory where all workspaces by all environments get stored"""
+    dotfile = find_dotenv()
+    return get_key(dotfile, PagePlus.SYSTEM.as_prefix()+'OPEN_FOLDER') == 'True'
+
+def open_folder(fpath: Path|str):
+    """
+    Opens an existing folder on every os
+    Args:
+        fpath:
+
+    Returns:
+
+    """
+    fpath = fpath if isinstance(fpath, str) else str(fpath.absolute())
+    if fpath == '' or fpath is None or not os.path.isdir(fpath):
+        print(f"{fpath} can't be opened!")
+        return
+    if sys.platform == "win32":
+        # Windows
+        os.startfile(fpath)
+    elif sys.platform == "darwin":
+        # macOS
+        subprocess.run(["open", fpath])
+    else:
+        # Linux and other Unix-like OS
+        subprocess.run(["xdg-open", fpath])
+    fpath = Path(fpath)
+    print(f"Opened [bold green]{fpath.name}[/bold green]: {fpath.absolute()}")
+
+
 def join_modified_path(path: Path, count: int) -> Path:
+    """
+    Appends a modified path segment to a given path a specified number of times.
+
+    This function retrieves a modified path segment from environment variables,
+    specified by the 'MODIFIED' key prefixed by the current environment's prefix.
+    It then appends this segment to the provided path for the specified count.
+
+    Args:
+        path (Path): The initial path to which the modified segment will be appended.
+        count (int): The number of times the modified segment should be appended.
+
+    Returns:
+        Path: The updated path with the modified segment appended 'count' times.
+    """
     mod_path = get_key(find_dotenv(), Environments.PAGEPLUS.as_prefix()+'MODIFIED')
     for _ in range(0, count):
         path = path.joinpath(mod_path)
     return path
 
+def transform_output(ctx: typer.Context, param: typer.CallbackParam, value: str):
+    """
+    Transforms the output value using the specified transformation inputs.
+
+    This function applies a transformation to the given value if it is not None,
+    using the `transform_inputs` function. The transformation context and parameters
+    are specified by `ctx` and `param`.
+
+    Args:
+        ctx (typer.Context): The context in which the command is executed.
+        param (typer.CallbackParam): The callback parameter associated with the command.
+        value (str): The value to transform.
+
+    Returns:
+        The transformed value or None if the original value is None.
+    """
+    return transform_inputs(ctx, param, [value])[0] if value else None
 
 def transform_input(ctx: typer.Context, param: typer.CallbackParam, value: str):
+    """
+    Transforms a single input value based on the given context and parameters.
+
+    This is a convenience wrapper around `transform_inputs` for transforming a single value.
+
+    Args:
+        ctx (typer.Context): The context in which the command is executed.
+        param (typer.CallbackParam): The callback parameter associated with the command.
+        value (str): The value to transform.
+
+    Returns:
+        The transformed value.
+    """
     return transform_inputs(ctx, param, [value])[0]
 
+
 def transform_inputs(ctx: typer.Context, param: typer.CallbackParam, values: List[str]):
+    """
+    Transforms a list of input values based on the specified context and parameters.
+
+    This function loads environment variables and determines the current environment.
+    Based on the loaded environment, it applies a transformation to each input value
+    in the list provided.
+
+    Args:
+        ctx (typer.Context): The context in which the command is executed.
+        param (typer.CallbackParam): The callback parameter associated with the command.
+        values (List[str]): The list of values to transform.
+
+    Returns:
+        A list of transformed values.
+    """
     load_dotenv()
     envs = dotenv_values()
     loaded_env = Environments[envs.get(Environments.PAGEPLUS.as_prefix_environment(), 'PAGEPLUS')]
@@ -118,6 +209,15 @@ def is_page_xml(file_path: Path) -> bool:
     except ET.ParseError:
         # Not an XML file, or XML is malformed
         return False
+
+def is_page_version(file_path: Path) -> bool:
+    """
+    Return page xml version
+    """
+    if is_page_xml(file_path):
+        tree = ET.parse(file_path)
+        root = tree.getroot()
+        return root.tag.rsplit('/', 1)[1]
 
 
 def determine_output_path(xml_file, outputdir, filename):

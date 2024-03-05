@@ -60,7 +60,7 @@ if (spec := util.find_spec('pageplus.utils.dinglehopper.edit_distance')) is None
 
 else:
     from pageplus.utils.constants import Environments
-    from pageplus.utils.fs import transform_input
+    from pageplus.utils.fs import transform_input, open_folder_default
     from pageplus.utils.workspace import Workspace
     from jinja2 import Environment, FileSystemLoader
     from markupsafe import escape
@@ -295,8 +295,8 @@ else:
                                                            "word level differences.")] = False,
             textequiv_level: Annotated[str, typer.Option(help="PAGE TextEquiv level to extract text from.",
                                                          metavar="LEVEL")] = "line",
-            open_folder: Annotated[bool, typer.Option(help="Opens the folder with the "
-                                                           "results after processing.")] = False,
+            open_folder: Annotated[bool, typer.Option(help="Opens the folder with the results after processing.")]
+            = open_folder_default(),
             show_results: Annotated[bool, typer.Option(help="Opens the html version in "
                                                             "a browser after processing.")] = True):
         """

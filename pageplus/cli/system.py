@@ -4,7 +4,7 @@ import subprocess
 import sys
 from typing import Annotated
 
-from dotenv import load_dotenv, dotenv_values, find_dotenv, set_key, unset_key
+from dotenv import load_dotenv, dotenv_values, find_dotenv, set_key
 import typer
 from rich import print
 
@@ -12,7 +12,6 @@ from pageplus.utils.constants import PagePlus
 from pageplus.utils.workspace import Workspace
 
 app = typer.Typer()
-
 
 @app.command(rich_help_panel="PagePlus")
 def update_pip() -> None:
@@ -54,6 +53,13 @@ def clean_logs() -> None:
             print(f"Deleted log file: {log_file}")
         except OSError as e:
             print(f"Error: {e} - {log_file}")
+
+@app.command(rich_help_panel="Default Settings")
+def set_open_folder_default(default_true: Annotated[bool,
+                            typer.Argument(help="Opens the folder with the results after processing.")] = True) -> None:
+    """Set the directory where all workspaces by all environments get stored"""
+    dotfile = find_dotenv()
+    set_key(dotfile, PagePlus.SYSTEM.as_prefix()+'OPEN_FOLDER', str(default_true))
 
 
 @app.command(rich_help_panel="Workspace")
@@ -99,6 +105,7 @@ def create_empty_dotenv() -> None:
     path = Path(__file__).parents[2].joinpath('.env')
     with open(path, 'w') as f:
         f.write("""SYSTEM_WS_DIR='tmp'
+        SYSTEM_OPEN_FOLDER_DEFAULT='True'
         PAGEPLUS_ORIGINAL=''
 PAGEPLUS_MODIFIED='PagePlusOutput'
 PAGEPLUS_ENVIRONMENT='PagePlus'""")
