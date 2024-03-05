@@ -6,6 +6,9 @@
 *.exe
 *.o
 *.so
+pageplus/utils/dinglehopper
+pageplus/utils/transkribus
+
 
 # Packages #
 ############
