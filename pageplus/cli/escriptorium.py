@@ -31,8 +31,6 @@ if (spec := util.find_spec('escriptorium_connector')) is None:
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-I", "escriptorium-connector"])
 
 else:
-    import logging
-
     from escriptorium_connector import EscriptoriumConnector
     from dotenv import load_dotenv, find_dotenv, get_key, set_key, dotenv_values, unset_key
 
@@ -40,9 +38,6 @@ else:
     from pageplus.utils.envs import str_to_env, filter_envs
     from pageplus.utils.workspace import Workspace
     from pageplus.utils.api import API
-
-    logging.getLogger("requests").setLevel(logging.WARNING)
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
 
     es_workspace = Workspace(Environments.ESCRIPTORIUM)
     es_api = API(Environments.ESCRIPTORIUM)
@@ -79,14 +74,14 @@ else:
 
     ### SETTINGS ###
     @app.command(rich_help_panel="Settings")
-    def set_url(url: Annotated[str, typer.Argument(help="URL to Transkribus")]) -> None:
+    def set_base_url(base_url: Annotated[str, typer.Argument(help="URL to Transkribus")]) -> None:
         """
         Write the URL of the Transkribus instance if it not refers to the official url
         https://transkribus.eu/TrpServer/rest to the .env file
         Returns:
         None
         """
-        es_api.url = url
+        es_api.base_url = base_url
 
     @app.command(rich_help_panel="Settings")
     def set_credentials(name: Annotated[str, typer.Argument(help="Username for Transkribus")],
@@ -96,7 +91,7 @@ else:
         Returns:
         None
         """
-        es_api.url = (name, password)
+        es_api.credentials = (name, password)
 
     @app.command(rich_help_panel="Settings")
     def show_settings() -> None:
@@ -199,7 +194,7 @@ else:
         load_dotenv()
         if not es_api.valid_login():
             return
-        escr = EscriptoriumConnector(es_api.url, *es_api.credentials, es_api.api_key, es_api.api_url)
+        escr = EscriptoriumConnector(es_api.base_url, *es_api.credentials, es_api.api_key, es_api.api_base)
         if len(filter_by) != len(search_term):
             print("Please provide for each filter a search term")
             return
@@ -299,7 +294,7 @@ else:
             return
         if not es_api.valid_login():
             return
-        escr = EscriptoriumConnector(es_api.url, *es_api.credentials, es_api.api_key, es_api.api_url)
+        escr = EscriptoriumConnector(es_api.base_url, *es_api.credentials, es_api.api_key, es_api.api_base_url)
 
         parts = escr.get_document_parts(document_pk).results
         parts_json = escr.http.get(f"{escr.api_url}documents/{document_pk}/parts/").json()['results']
@@ -387,7 +382,7 @@ else:
         if not es_api.valid_login():
             return
 
-        escr = EscriptoriumConnector(es_api.url, *es_api.credentials, es_api.api_key, es_api.api_url)
+        escr = EscriptoriumConnector(es_api.base_url, *es_api.credentials, es_api.api_key, es_api.api_base)
         overwrite = Bool2OnOff.get(overwrite)
 
         # Create a BytesIO object to hold the zip file in memory

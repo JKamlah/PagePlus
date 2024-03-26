@@ -86,11 +86,11 @@ class TextRegion(Region):
                 self.xml_element.remove(textline.xml_element)
                 self.xml_element.append(textline.xml_element)
 
-    def _baselines_near_same_height(self, line1: LineString, line2: LineString, tolerance='5') -> bool:
+    def _baselines_near_same_height(self, line1: LineString, line2: LineString, tolerance=5) -> bool:
         """ Helper function to check if two lines are near the same height """
         # Calculate the distance between two centroids
         distance_cd = line1.centroid.x - line2.centroid.x
-        line2 = affinity.translate(line2, x=distance_cd)
+        line2 = affinity.translate(line2, xoff=distance_cd)
         return line1.buffer(distance=tolerance).intersects(line2.buffer(distance=tolerance))
 
     def _should_swap_baselines(self, line1: LineString, line2: LineString) -> bool:
@@ -128,7 +128,7 @@ class TextRegion(Region):
         """ Helper function to check if two lines are near the same height """
         # Align the centroids and check if one centroid is in the other polygon
         distance_cd = line1.centroid.x - line2.centroid.x
-        line2 = affinity.translate(line2, x=distance_cd)
+        line2 = affinity.translate(line2, xoff=distance_cd)
         if not line1.intersects(line2):
             return False
         return line2.contains(line1.centroid) or line1.contains(line2.centroid)
@@ -137,7 +137,7 @@ class TextRegion(Region):
         """ Helper function to determine if two lines should be swapped based on their horizontal positions """
         return line2.bounds[0] < line1.bounds[2]
 
-    def merge_splitted_lines(self, max_x_diff: int = 64, max_y_diff: int = 12):
+    def merge_split_up_lines(self, max_x_diff: int = 64, max_y_diff: int = 12):
         """
         Merges text lines that are close to each other based on x and y difference thresholds.
         """
@@ -154,7 +154,7 @@ class TextRegion(Region):
                     new_polygon, new_baseline = self._merge_line_polygons_and_baselines(i, previous_baseline,
                                                                                         current_baseline)
                     self.textlines[i].update_coordinates(new_polygon.exterior, inputtype="polygon")
-                    self.textlines[i].update_baseline_coords(new_baseline)
+                    self.textlines[i].update_baseline_coordinates(new_baseline)
                     self.textlines[i].update_text(f"{self.textlines[i - 1].get_text()} {self.textlines[i].get_text()}")
                     self.delete_textlines([i - 1])
                     baseline_tuples[i] = new_baseline
@@ -216,7 +216,7 @@ class TextRegion(Region):
         return unary_union([previous_polygon, bridge_polygon, current_polygon])
 
     def split_region_by_textlinecoords(self, col: int = 2, center_mode: tuple = (3, (0, 2)), padding_region: int = 12,
-                                       min_mean_grp_distance: int = 500, substract_small_from_big: bool = True) -> list:
+                                       min_mean_grp_distance: int = 500, subtract_small_from_big: bool = True) -> list:
         """ Split a region by finding a mean value dividing the textlines """
         regions = [defaultdict(list) for _ in range(col)]
         textline_polygons = [line.get_coordinates("polygon") for line in self.textlines]
@@ -242,7 +242,7 @@ class TextRegion(Region):
             region['region_linearring'].append(LinearRing(shapely.geometry.polygon.orient(region_polygon,
                                                                                           sign=1.0).exterior.coords))
             region['region_coordstr'].append(self.convert_coordinates_polygon_to_str(region['region_linearring'][0]))
-        if substract_small_from_big and len(regions) == 2:
+        if subtract_small_from_big and len(regions) == 2:
             regions = self._subtract_overlapping_areas(regions)
         return regions
 
@@ -301,7 +301,7 @@ class Textline(CoordElement):
                 else:
                     return LineString(coord_tuples)
 
-    def update_baseline_coords(self, coords: list) -> None:
+    def update_baseline_coordinates(self, coords: list) -> None:
         """
         Updates the baseline coordinates of the element with the provided coordinates.
         """
@@ -388,7 +388,7 @@ class Textline(CoordElement):
                 f"{self.get_id()}: Baseline or parentregion {self.get_parent_element().attrib['id']} is invalid.")
             return False
         if update:
-            self.update_baseline_coords(baseline_tuples)
+            self.update_baseline_coordinates(baseline_tuples)
         return True
 
     def _compute_baseline(self) -> list:
@@ -466,16 +466,16 @@ class Textline(CoordElement):
         """
         baseline_coords = self.get_baseline_coordinates(returntype='tuple')
         translate_coords = [(x + xoff, y + yoff) for x, y in baseline_coords]
-        self.update_baseline_coords(translate_coords)
+        self.update_baseline_coordinates(translate_coords)
 
     def compute_pseudotextlinepolygon(self, buffersize=1) -> None:
         """
         Recomputes the textline polygon based on the baseline, using a buffer around the baseline.
         """
-        baseline_linestring = self.baseline_coords(returntype='linestring')
+        baseline_linestring = self.get_baseline_coordinates(returntype='linestring')
         if baseline_linestring:
             textline_linearring = baseline_linestring.buffer(buffersize).minimum_rotated_rectangle
-            self.update_coords(textline_linearring)
+            self.update_coordinates(textline_linearring)
 
     def extend_baseline(self, create_missing: bool = True) -> None:
         """
@@ -513,6 +513,6 @@ class Textline(CoordElement):
                                                                                         baseline_coords[-1][1])))
             coords = [(int(x[0]), int(x[1])) for x in extended_baseline if len(x) > 1]
             if coords:
-                self.update_baseline_coords(coords)
+                self.update_baseline_coordinates(coords)
         except GEOSException:
             logging.warning(f"The baseline of textline {self.get_id()} could not be extended.")

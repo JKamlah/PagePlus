@@ -1,3 +1,5 @@
+import shapely.errors as ShapelyErrors
+
 class PageXMLError(Exception):
     pass
 

@@ -36,7 +36,7 @@ if (spec := util.find_spec('transkribus_utils')) is None:
         Callback function to validate the workspace option against the dynamic list,
         ensuring case-insensitive comparison.
         """
-        return Workspace._validate_workspace(value)
+        return Workspace().validate(value)
 
 else:
     import logging
@@ -115,7 +115,7 @@ else:
         Returns:
         None
         """
-        ts_api.url = url
+        ts_api.base_url = url
 
     @app.command(rich_help_panel="Settings")
     def set_credentials(name: Annotated[str, typer.Argument(help="Username for Transkribus")],
@@ -125,7 +125,7 @@ else:
         Returns:
         None
         """
-        ts_api.url = (name, password)
+        ts_api.base_url = (name, password)
 
     @app.command(rich_help_panel="Settings")
     def show_settings() -> None:
@@ -241,11 +241,11 @@ else:
                        search_term: Annotated[
                            List[str], typer.Option("--search-term", "-s",
                                                    help=f"RegEx search term for the filter option (Use . to find "
-                                                        f"all documents). For 'PageStatus' filter the seach-term "
+                                                        f"all documents). For 'PageStatus' filter the search-term "
                                                         f"is limited to: New, InProgress, Done, Final or GT."
-                                                        f"For 'user' filter the seach-term "
+                                                        f"For 'user' filter the search-term "
                                                         f"is limited to: Owner, Editor, Transcriber or Reader."
-                                                        f"For 'pages' filter the seach-term "
+                                                        f"For 'pages' filter the search-term "
                                                         f"is limited to: Number of minimum pages.")],
 
                        case_sensitive: Annotated[Optional[bool], typer.Option(
@@ -310,7 +310,7 @@ else:
                         }
                         documents.append(doc_stats)
             except Exception as e:
-                print(f"[red]Error occured: {e}[/red]")
+                print(f"[red]Error occurred: {e}[/red]")
                 return
         print(f"Total documents found: {total_documents}")
         print(f"Total documents matching criteria: {len(documents)}")
@@ -374,7 +374,7 @@ else:
                                                                               "not set it get stored in the workspace "
                                                                               "directory.")] = None,
                       workspace: Annotated[Optional[str], typer.Option("--workspace", "-w",
-                                                                       help="Name of enviormental variable, which "
+                                                                       help="Name of environmental variable, which "
                                                                             "stores the path to loaded document. The "
                                                                             "name get's appended to 'TRANSKRIBUS_WS_' and "
                                                                             "automatically cast to uppercase. E.g. "

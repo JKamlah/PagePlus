@@ -1,17 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime
 import os
 from pathlib import Path
-import tempfile
 from typing import Tuple, Iterator, List
 
-import lxml.etree as ET
-import typer
 from dotenv import load_dotenv, find_dotenv, get_key, dotenv_values
 
-from pageplus.utils.constants import Environments, PagePlus
-from pageplus.utils.exceptions import InputsDoNotExistException
 
 def filter_envs(pattern: str) -> dict:
     """

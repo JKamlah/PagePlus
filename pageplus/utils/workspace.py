@@ -165,7 +165,7 @@ class Workspace:
 
 
     def open(self, workspace: Annotated[
-        str, typer.Argument(help=f"Workspace name pointing to an existing path",
+        str, typer.Argument(str, help=f"Workspace name pointing to an existing path",
                             callback=validate)] = None) -> None:
         """
         Open a workspace folder in the file explorer, works for Windows, macOS, and Linux.

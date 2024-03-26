@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Tuple, Optional, List
+from collections import Counter, defaultdict
 
 import lxml.etree as ET
 from shapely.geometry import LinearRing, Polygon, MultiPoint
@@ -52,7 +53,7 @@ class Page:
                     # Check if the group is an 'OrderedGroup'
                     if ET.QName(group.tag).localname == 'OrderedGroup':
                         # Find all 'RegionRefIndexed' elements and sort them by index
-                        ro_ids = [ref.attrib['regionRef'] for ref in
+                        ro_ids += [ref.attrib['regionRef'] for ref in
                                   sorted(group.findall(f"./{{{self.ns}}}RegionRefIndexed"),
                                          key=lambda r: int(r.attrib['index']))]
         if mode == 'document' or (not ro_ids and mode == 'auto'):
@@ -64,6 +65,59 @@ class Page:
                         ro_ids.append(region_id)
         # Return the collected text from regions
         return ro_ids
+
+    def valid_region_id(self, id):
+        region = self.root.find(f".//{{{self.ns}}}*[@id='r{id}']")
+        return not region or ET.QName(region.tag).localname in ['TableRegion', 'TextRegion']
+
+    def __reassign_id(self, element, ele, tag, id):
+        for child in ele.iter(f"{{{self.ns}}}{tag}"):
+            new_id = id+f"{element['id'].get(tag)}{element['counter'].get(element['id'].get(tag))}"
+            child.set('id', new_id)
+            element['counter'][element['id'].get(tag)] += 1
+            if tag in element['order'].keys():
+                self.__reassign_id(element, child, element['order'].get(tag), new_id)
+        element['counter'][element['id'].get(tag)] = 1
+
+    def reassign_ids(self, reading_order_mode):
+        """
+        Reassigning new IDs to TableRegion and TextRegion elements
+        Args:
+            reading_order_mode:
+
+        Returns:
+
+        """
+        element = {'order': {'TableRegion': 'TableCell', 'TableCell': 'TextLine',
+                         'TextRegion': 'TextLine', 'TextLine': 'Word', 'Word': 'Glyph'},
+                   'id': {'TableRegion': 'r', 'TableCell': 'c',
+                      'TextRegion': 'r', 'TextLine': 'l', 'Word': 'w', 'Glyph': 'g'},
+                   'id_mapping': {}}
+        element['counter'] = Counter(set(element.get('id').values()))
+
+        region_ids = defaultdict(list)
+        ro_ids = self.get_region_reading_order_ids(reading_order_mode)
+
+        [region_ids.__setitem__(ro_id, []) for ro_id in ro_ids]
+        [region_ids.__getitem__(region.attrib.get('id', len(region_ids.keys()))).append(region)
+            for region in self.root.findall(f".//{{{self.ns}}}*")
+            if ET.QName(region.tag).localname in ['TableRegion', 'TextRegion']]
+        for id, regions in region_ids.items():
+            while not self.valid_region_id(str(element['counter']['r'])):
+                element['counter']['r'] += 1
+            element['id_mapping'][id] = str(element['counter']['r'])
+            for region in regions:
+                region.set('id', f"r{element['counter']['r']}")
+                self.__reassign_id(element, region, element['order'].get(ET.QName(region.tag).localname),
+                           f"r{element['counter']['r']}")
+            element['counter']['r'] += 1
+        reading_order = self.tree.find(f".//{{{self.ns}}}ReadingOrder")
+        if reading_order is not None:
+            # Process each group in the reading order
+            for group in reading_order.iterfind(f".//{{{self.ns}}}*"):
+                for region_ref in group.iterfind(f".//{{{self.ns}}}RegionRefIndexed"):
+                    region_idx = region_ref.attrib.get('regionRef')
+                    region_ref.set('regionRef', element['id_mapping'].get(region_idx, region_idx))
 
     def counter(self, level: str = 'textlines') -> int:
         """

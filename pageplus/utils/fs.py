@@ -166,7 +166,6 @@ def collect_xml_files(inputpaths: Iterator[Path|str],
     empty = True
     for inputpath in inputpaths:
         empty = False
-        print(inputpath)
         if (inputpath.is_file() and inputpath.suffix == '.xml' and inputpath.name not in exclude and
                 is_page_xml(inputpath)):
             xml_files.append(inputpath)
@@ -182,7 +181,6 @@ def collect_xml_files(inputpaths: Iterator[Path|str],
                           xml_file.name not in exclude and is_page_xml(xml_file)])
     if empty:
         ws_folder = envs.get(loaded_env.as_prefix_loaded_workspace())
-        print(ws_folder)
         if ws_folder and ws_folder in envs.keys():
             xml_files.extend([xml_file for xml_file in Path(envs.get(ws_folder)).glob('*.xml') if
                           xml_file.name not in exclude and is_page_xml(xml_file)])

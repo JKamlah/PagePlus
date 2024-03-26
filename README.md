@@ -17,7 +17,7 @@ PagePlus includes several commands to perform operations such as
 
 **Extend regions, lines and baselines**: Buffers regions, lines and baselines.
 
-**Translating regions, lines and baselines**: Translates regions, lines and baslines by an offset.
+**Translating regions, lines and baselines**: Translates regions, lines and baselines by an offset.
 
 **Textline sorting and merging/splitting**: Sorts and merges text rows in PAGE XML files based on specified horizontal and vertical gap thresholds.
 
