@@ -279,6 +279,13 @@ class Textline(CoordElement):
     orientation: Optional[str] = None
     parent: Optional[Region] = None
 
+    def get_confidence(self,  index: int = 0) -> None|float:
+        text_equivs = self.xml_element.findall(f"{{{self.ns}}}TextEquiv")
+        for text_equiv in text_equivs:
+            if str(text_equiv.attrib.get("index", 0)) == str(index):
+                conf = text_equiv.attrib.get("conf", None)
+                return float(conf) if conf is not None else conf
+
     # IO methods
     def get_baseline_coordinates(self, returntype: str = "string"):
         """
@@ -391,7 +398,7 @@ class Textline(CoordElement):
             self.update_baseline_coordinates(baseline_tuples)
         return True
 
-    def _compute_baseline(self) -> list:
+    def _compute_baseline(self, position: str = 'mid') -> list:
         """
         Computes the baseline coordinates based on the textline polygon.
         """
@@ -404,12 +411,12 @@ class Textline(CoordElement):
             return list(bbox.coords)
 
         coords = list(bbox.exterior.coords)
-
+        factor = 2 if 'mid' else 1.25
         # Calculate the baseline as the midline between the two longest sides of the bounding box
-        lines = sorted(sorted([LineString([c1, c2]) for c1, c2 in zip(coords[:-1], coords[1:])],
+        lines = sorted(sorted([LineString([c1, c2]) if c1[1] < c2[1] else LineString([c2, c1]) for c1, c2 in zip(coords[:-1], coords[1:])],
                               key=lambda x: x.length, reverse=False)[:2],
                        key=lambda x: round((x.xy[0][1] + x.xy[1][1]) / 2), reverse=False)
-        baseline_tuples = [list(line.interpolate((line.length) / 2).coords)[0] for line in lines]
+        baseline_tuples = [list(line.interpolate((line.length) / 1.25).coords)[0] for line in lines]
         return baseline_tuples
 
     @staticmethod
