@@ -1,10 +1,14 @@
+from collections import Counter
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import List, Optional
 from importlib import util
 import subprocess
 import sys
 
+from rich import print
 from rich.progress import track
+from rich.table import Table
 import typer
 from typing_extensions import Annotated
 
@@ -36,17 +40,22 @@ else:
         language: Annotated[strings_to_enum('Languages', SpellCheckerPP().languages()),
         typer.Option(help=f"Language of the dictionary: {SpellCheckerPP().languages()}")] = None,
         distance: Annotated[int, typer.Option(help="Levensthein-distance.")] = 1,
-        character_filter: Annotated[str, typer.Option(help="Unicode to remove before comparing the words")]
-                                                                                   = "!\"%&'()*+,-./:;<=>?@[\]^_`{|}~⸗",
-        user_words: Annotated[list[str], typer.Option(help="Unicode to remove before comparing the words")] = None,
+        ignore_leading_trailing: Annotated[str, typer.Option(help="Ignore these leading and trailing unicode characters.")]
+                                                                                   = "„!\"%&'()*+,-./:;<=>?@[\]^_`{|}~⸗",
+        ignore_last_character: Annotated[bool,
+                    typer.Option(help="If True, changes in the last characters gets ignored.")] = False,
+        user_words: Annotated[list[str], typer.Option(help="List of words added to the dictionary")] = None,
         workspace_dictionary: Annotated[bool,
                             typer.Option(help="Create a dictionary of all the text in the existing workspace")] = False,
         workspace_word_length: Annotated[int,
                                typer.Option(help="Minimum character of words to use in the workspace dictionary.")] = 8,
         workspace_word_frequency: Annotated[int,
                                    typer.Option(help="Minimum word frequency to use in the workspace dictionary.")] = 50,
+        report: Annotated[bool,
+                          typer.Option(help="If True, print report for all replacements.")] = False,
         overwrite: Annotated[bool,
-                          typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,) -> None:
+                          typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
+        dry_run: Annotated[bool, typer.Option(help="If True, the function will not write any files.")] = False) -> None:
         """
         Spellcheck via dictionary by Peter Norvig & Tyler Barrus!
         """
@@ -60,20 +69,51 @@ else:
         language = language.value if language else None
         spell = SpellCheckerPP(language=language, distance=distance, tokenizer=_parse_words)
         spell._case_sensitive = True
-        spell.character_filter = character_filter
+        spell.ignore_last_character = ignore_last_character
+        spell.leading_trailing_filter = ignore_leading_trailing
         user_text = ' '.join([Page(xml_file).extract_fulltext() for xml_file in xml_files]) \
             if workspace_dictionary else ''
-        spell.extend_dictionary(user_words, user_text, workspace_word_length,workspace_word_frequency)
+        spell.extend_dictionary(user_words, user_text, workspace_word_length, workspace_word_frequency)
+        replacements = Counter()
         # loop through all xml files
         for xml_file in xml_files:
             # get filename
             filename = xml_file.name
             page = Page(xml_file)
             logging.info('Spellchecking file: ' + filename)
-            spell.check_page(page)
-            fout = xml_file if overwrite else determine_output_path(xml_file, outputdir, filename)
-            logging.info(f'Wrote modified xml file to output directory: {fout}')
-            page.save_xml(fout)
+            replacements.update(spell.check_page(page))
+            if not dry_run:
+                fout = xml_file if overwrite else determine_output_path(xml_file, outputdir, filename)
+                logging.info(f'Wrote modified xml file to output directory: {fout}')
+                page.save_xml(fout)
+        if report:
+            table = Table(title=f"[green]Replacements Overview[/green]")
+            table.add_column("Count", justify="right")
+            table.add_column(f"Inline Comparison")
+            table.add_column(f"[green]Original[/green]", justify="right", style="green", no_wrap=True)
+            table.add_column(f"[cyan]Replacement[/cyan]", justify="right", style="cyan", no_wrap=True)
+            def inline_diff(orig, repl):
+                seqdiff = SequenceMatcher(None, orig, repl)
+                diff = []
+                for opcode, a0, a1, b0, b1 in seqdiff.get_opcodes():
+                    if opcode == 'equal':
+                        diff.append(seqdiff.a[a0:a1])
+                    elif opcode == 'insert':
+                        diff.append("[green]" + seqdiff.b[b0:b1] + "[/green]")
+                    elif opcode == 'delete':
+                        diff.append("[red]" + seqdiff.a[a0:a1] + "[/red]")
+                    elif opcode == 'replace':
+                        diff.append("[green]" + seqdiff.b[b0:b1] + "[/green]")
+                        diff.append("[red]" + seqdiff.a[a0:a1] + "[/red]")
+                    else:
+                        raise RuntimeError("unexpected opcode")
+                return ''.join(diff)
+
+            [table.add_row(f"{key}", inline_diff(var.split(' -> ')[0], var.split(' -> ')[1]),
+                            f"[green]{var.split(' -> ')[0]}[/green]",
+                            f"[cyan]{var.split(' -> ')[1]}[/cyan]")
+             for (var, key) in dict(replacements.most_common()).items()]
+            print(table)
 
 @app.command()
 def reassign_ids(inputs: Annotated[List[str], typer.Argument(exists=True,
@@ -138,7 +178,9 @@ def repair(inputs: Annotated[List[str], typer.Argument(exists=True, help="Direct
                 line.remove_repeated_points(tolerance=1)
                 if not line.validate_region():
                     line.convex_hull()
-                line.validate_baseline()
+                if not line.validate_baseline(update=True):
+                    line.update_baseline_coordinates(line._compute_baseline(position='bottom'))
+
             except Exception as e:
                 logging.error(f"{line.get_id()}: Error during repair - {e}")
 
@@ -211,10 +253,9 @@ def delete_textlines(
         inputs: Annotated[List[str], typer.Argument(exists=True,
                                                     help="Paths or workspace to the PAGE XML files to be processed.",
                                                     callback=transform_inputs)] = None,
-        overwrite: Annotated[bool, typer.Option(help="If True, ignores outputdir and overwrites input data.",
-                                                callback=transform_output)] = False,
         outputdir: Annotated[Optional[str], typer.Option(
-            help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")] = None
+            help="Filename of the output directory. Default is creating an output directory, called PagePlusOutput, in the input directory.")] = None,
+        overwrite: Annotated[bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
 ):
     """
     Deletes text lines from PAGE XML files and saves the modified files.
@@ -236,8 +277,18 @@ def delete_textlines(
 
         # Delete textline elements
         for textregion in page.regions.textregions:
+            count = 1
             for line in textregion.textlines:
-                page.delete_element(line.xml_element)
+                if (len(line.get_text()) < 4 and
+                        not (len(line.get_text()) == 1 and line.get_text().isalpha()) and
+                        not line.get_text().isdigit()):
+                    if len(textregion.textlines) == count:
+                        page.delete_element(textregion.xml_element)
+                        logging.info(f'Delete region: {textregion.get_id()} containing only textline {line.get_id()} with text {line.get_text()}')
+                    else:
+                        page.delete_element(line.xml_element)
+                        logging.info(f'Delete textline: {line.get_id()} in region {textregion.get_id()} with text {line.get_text()}')
+                        count += 1
 
         # Determine output file path and write the modified XML file
         fout = xml_file if overwrite else determine_output_path(xml_file, outputdir, filename)
