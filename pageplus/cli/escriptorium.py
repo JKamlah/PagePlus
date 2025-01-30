@@ -194,7 +194,7 @@ else:
         load_dotenv()
         if not es_api.valid_login():
             return
-        escr = EscriptoriumConnector(es_api.base_url, *es_api.credentials, es_api.api_key, es_api.api_base)
+        escr = EscriptoriumConnector(es_api.base_url, *es_api.credentials, es_api.api_key, es_api.api_base_url)
         if len(filter_by) != len(search_term):
             print("Please provide for each filter a search term")
             return
@@ -303,7 +303,8 @@ else:
         with Status("Downloading transcription") as status:
             zipped_pagexmls_binary = escr.download_part_pagexml_transcription(document_pk, parts_pk, transcription_pk)
 
-        zipped_pagexmls = zipfile.ZipFile(BytesIO(zipped_pagexmls_binary))
+
+        zipped_pagexmls = zipfile.ZipFile(BytesIO(zipped_pagexmls_binary)) if zipped_pagexmls_binary else None
 
         wsfolder = Path(tempfile.mkdtemp(prefix=es_workspace.prefix_dir(), dir=es_workspace.dir())) \
                    if folderpath is None else Path(folderpath)
@@ -332,7 +333,8 @@ else:
         with open(wsfolder.joinpath('metadata.pageplus.json'), 'w') as meta:
             json.dump(metadata, meta, indent=4)
 
-        zipped_pagexmls.extractall(wsfolder)
+        if zipped_pagexmls_binary:
+            zipped_pagexmls.extractall(wsfolder)
 
         ws_absolute = es_workspace.prefix_ws + workspace
         current_folder = envs.get(ws_absolute, '')
