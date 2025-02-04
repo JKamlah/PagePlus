@@ -144,6 +144,22 @@ def transform_inputs(ctx: typer.Context, param: typer.CallbackParam, values: Lis
         raise InputsDoNotExistException(values)
     return ret_values
 
+def find_image(imageFilename: str, imageFolder: Path):
+    """
+    Finds the image file in the specified folder.
+
+    Args:
+    - imageFilename: The filename of the image file to find.
+    - imageFolder: The directory where the image file resides.
+
+    Returns:
+    - The full path to the image file if found, or None if not found.
+    """
+    image_path = imageFolder.joinpath(imageFilename)
+    if image_path.is_file():
+        return str(image_path.absolute())
+    return None
+
 
 def collect_xml_files(inputpaths: Iterator[Path|str],
                       exclude: Tuple[str, ...] = ('metadata.xml', 'mets.xml', 'METS.xml')) -> List[Path]:

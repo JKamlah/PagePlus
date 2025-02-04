@@ -1,13 +1,29 @@
 import typer
+import logging
+import warnings
+
+
+# Silence!
+logging.getLogger("requests").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("LiteLLM").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("openai._base_client").setLevel(logging.WARNING)
+logging.getLogger("websockets").setLevel(logging.WARNING)
+logging.getLogger("asyncio").setLevel(logging.WARNING)
+warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
+
 
 from pageplus.cli import (system, analytics, validation, modification, export, workspace, projects,
-                          dinglehopper, escriptorium, transkribus)
+                          dinglehopper, llm, escriptorium, transkribus)
 
 app = typer.Typer()
 app.add_typer(system.app, name="system", rich_help_panel="System")
 app.add_typer(escriptorium.app, name="escriptorium", rich_help_panel="Transcription-Platform")
 app.add_typer(transkribus.app, name="transkribus", rich_help_panel="Transcription-Platform")
 app.add_typer(dinglehopper.app, name="dinglehopper", rich_help_panel="PagePlus - external tools")
+app.add_typer(llm.app, name="llm", rich_help_panel="PagePlus - external tools")
 app.add_typer(analytics.app, name="analytics", rich_help_panel="PagePlus")
 app.add_typer(validation.app, name="validation", rich_help_panel="PagePlus")
 app.add_typer(modification.app, name="modification", rich_help_panel="PagePlus")

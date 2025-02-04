@@ -17,8 +17,8 @@ def current_workspace() -> Workspace:
     env = get_key(find_dotenv(), Environments.PAGEPLUS.as_prefix_environment())
     return Workspace(Environments[env]) if env else Workspace(Environments.PAGEPLUS)
 
-
-pp_workspace = current_workspace()
+def pp_workspace():
+    return current_workspace()
 
 
 ### Environment ###
@@ -55,7 +55,7 @@ def validate_workspace(ctx: typer.Context, param: typer.CallbackParam, value: st
     Callback function to validate the workspace option against the dynamic list,
     ensuring case-insensitive comparison.
     """
-    return pp_workspace.validate(value)
+    return pp_workspace().validate(value)
 
 
 @app.command(rich_help_panel="Workspace")
@@ -65,7 +65,7 @@ def show_workspaces() -> None:
     Returns:
     None
     """
-    pp_workspace.show()
+    pp_workspace().show()
 
 
 @app.command(rich_help_panel="Workspace")
@@ -76,7 +76,7 @@ def load_workspace(workspace: Annotated[str, typer.Argument(help="Set environmen
     Returns:
     None
     """
-    pp_workspace.load(workspace)
+    pp_workspace().load(workspace)
 
 
 @app.command(rich_help_panel="Workspace")
@@ -86,7 +86,7 @@ def update_workspaces() -> None:
     Returns:
     None
     """
-    pp_workspace.update()
+    pp_workspace().update()
 
 
 @app.command(rich_help_panel="Workspace")
@@ -97,7 +97,7 @@ def delete_workspace(workspace: Annotated[str, typer.Argument(help="Set environm
     Returns:
     None
     """
-    pp_workspace.delete(workspace)
+    pp_workspace().delete(workspace)
 
 
 @app.command(rich_help_panel="Workspace")
@@ -114,7 +114,7 @@ def copy_workspace(destination_path: Annotated[Path,
     Returns:
     None
     """
-    pp_workspace.copy(destination_path, workspace, new_workspace)
+    pp_workspace().copy(destination_path, workspace, new_workspace)
 
 
 @app.command(rich_help_panel="Workspace")
@@ -124,7 +124,7 @@ def open_workspace(workspace: Annotated[
     """
     Open a workspace folder in the file explorer, works for Windows, macOS, and Linux.
     """
-    pp_workspace.open(workspace)
+    pp_workspace().open(workspace)
 
 
 @app.command(rich_help_panel="Document")
@@ -141,14 +141,14 @@ def load_local_document(
     """
     #TODO: Validationcheck missing
     load_dotenv()
-    if workspace in pp_workspace.names() and not overwrite_workspace:
+    if workspace in pp_workspace().names() and not overwrite_workspace:
         print(f"[red bold]Warning:[/red bold] The environment variable {workspace} already exists."
               " Please set [green]overwrite-workspace[/green] "
               "to True, if you want to overwrite the workspace.")
     if inputdir.is_dir():
-        set_key(find_dotenv(), pp_workspace.prefix_ws + workspace, str(inputdir.absolute()))
+        set_key(find_dotenv(), pp_workspace().prefix_ws + workspace, str(inputdir.absolute()))
         if loading:
-            load_workspace(pp_workspace.prefix_ws + workspace)
+            load_workspace(pp_workspace().prefix_ws + workspace)
     else:
         print(f"[red]Warning:[/red] The inputdir does not point to an existing folder.")
 

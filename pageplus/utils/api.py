@@ -43,15 +43,18 @@ class API:
         providername = get_key(find_dotenv(), self.environment.name.upper() + "_PROVIDER")
         return providername if providername else ''
 
+    from typing import Tuple
     @provider.setter
-    def provider(self, providername: Annotated[Provider, typer.Argument(help="Provider")]) -> None:
+    def provider(self, providername: Annotated[Provider, typer.Argument(help="Provider and service name")],
+                 service: Annotated[str, typer.Argument(help="Service")] = None) -> None:
         """
         Set provider
         Returns:
         None
         """
         try:
-            set_key(find_dotenv(), self.environment.name.upper() + "_PROVIDER", providername.name.upper())
+            provider = providername.name.upper() if service is None else providername.name.upper()+'__'+service.upper()
+            set_key(find_dotenv(), self.environment.name.upper() + "_PROVIDER", provider)
             print("[green]The provider updated successfully.[green]")
         except Exception as e:
             print(f"[red]Failed to update the provider: {e}[red]")
@@ -179,5 +182,5 @@ class API:
          var != self.prefix + self.prefix_provider() + "PASSWORD" else
          table.add_row(var.replace(self.prefix + self.prefix_provider(), ''), key[:3] + '***') for
          (var, key) in filter_envs(self.prefix + self.prefix_provider()).items() if not
-         (var.startswith(self.prefix_ws) or var.startswith(self.prefix_loaded_ws))]
+         (var.startswith(self.prefix_ws) or var.startswith(self.prefix_loaded_ws) or var.replace(self.prefix + self.prefix_provider(), '').startswith('_'))]
         print(table)

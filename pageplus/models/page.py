@@ -236,6 +236,13 @@ class Page:
         page_info = self.root.find(f"{{{self.ns}}}Page")
         return int(page_info.attrib['imageWidth']), int(page_info.attrib['imageHeight'])
 
+    def imageFilename(self) -> str:
+        """
+        Returns the width and height of the page.
+        """
+        page_info = self.root.find(f"{{{self.ns}}}Page")
+        return page_info.attrib['imageFilename']
+
     def page_filename(self) -> str:
         """
         Returns the filename of the page image.

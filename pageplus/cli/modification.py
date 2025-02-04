@@ -41,7 +41,7 @@ else:
         typer.Option(help=f"Language of the dictionary: {SpellCheckerPP().languages()}")] = None,
         distance: Annotated[int, typer.Option(help="Levensthein-distance.")] = 1,
         ignore_leading_trailing: Annotated[str, typer.Option(help="Ignore these leading and trailing unicode characters.")]
-                                                                                   = "„!\"%&'()*+,-./:;<=>?@[\]^_`{|}~⸗",
+                                                                                   = None,
         ignore_last_character: Annotated[bool,
                     typer.Option(help="If True, changes in the last characters gets ignored.")] = False,
         user_words: Annotated[list[str], typer.Option(help="List of words added to the dictionary")] = None,
@@ -65,7 +65,7 @@ else:
 
         def _parse_words(text: str) -> list[str]:
             return [text]
-
+        ignore_leading_trailing = "„!\"%&'()*+,-./:;<=>?@[\\]^_`{|}~⸗" if None else ignore_leading_trailing
         language = language.value if language else None
         spell = SpellCheckerPP(language=language, distance=distance, tokenizer=_parse_words)
         spell._case_sensitive = True

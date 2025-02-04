@@ -22,18 +22,15 @@ class PagePlus(str, Enum):
     def as_prefix_workspace_dir(self):
         return f"{self.name.upper()}_WS_DIR"
 
-
 class Provider(str, Enum):
     pass
 
-
 class LLMProvider(Provider):
-    GRADIO              = "Gradio"
-    H2O                 = "H2O"
-    CUSTOM              = "Custom"
     OPENAI              = "OpenAI"
-    CUSTOM_OPENAI       = "Custom OpenAI"
+    OLLAMA              = "Ollama"
+    GROQ                = "Groq"
     AZURE               = "Azure"
+    DEEPSEEK            = "Deepseek"
     MISTRAL_AZURE       = "Mistral Azure"
     VERTEX_AI           = "Vertex AI"
     PALM                = "PaLM"
@@ -44,26 +41,6 @@ class LLMProvider(Provider):
     AWS_BEDROCK         = "Bedrock"
     ANYSCALE            = "Anyscale"
     HUGGINGFACE         = "Huggingface"
-    OLLAMA              = "Ollama"
-    PERPLEXITY          = "Perplexity"
-    GROQ                = "Groq"
-    VLLM                = "VLLM"
-    XINFERENCE          = "Xinference"
-    CLOUDFLARE          = "Cloudflare"
-    DEEPINFRA           = "DeepInfra"
-    AI21                = "AI21"
-    NLP_CLOUD           = "NLP Cloud"
-    REPLICATE           = "Replicate"
-    COHERE              = "Cohere"
-    TOGETHER_AI         = "Together AI"
-    VOYAGE              = "Voyage"
-    ALEPHALPHA          = "AlephAlpha"
-    BASETEN             = "Baseten"
-    OPENROUTER          = "OpenRouter"
-    PETALS              = "Petals"
-
-    def litellm_name(self):
-        return f"{self.value.lower()}"
 
 
 class Environments(str, Enum):

@@ -104,11 +104,22 @@ def create_empty_dotenv() -> None:
     """
     path = Path(__file__).parents[2].joinpath('.env')
     with open(path, 'w') as f:
-        f.write("""SYSTEM_WS_DIR='tmp'
-        SYSTEM_OPEN_FOLDER_DEFAULT='True'
-        PAGEPLUS_ORIGINAL=''
+        f.write("""PAGEPLUS_ORIGINAL=''
 PAGEPLUS_MODIFIED='PagePlusOutput'
-PAGEPLUS_ENVIRONMENT='PagePlus'""")
+PAGEPLUS_ENVIRONMENT='PagePlus'
+PAGEPLUS_LOADED_WS=''
+SYSTEM_WS_DIR='tmp'
+SYSTEM_OPEN_FOLDER_DEFAULT='True'
+ESCRIPTORIUM_URL=''
+ESCRIPTORIUM_BASE_URL=''
+ESCRIPTORIUM_USERNAME=''
+ESCRIPTORIUM_PASSWORD=''
+TRANSKRIBUS_USERNAME=''
+TRANSKRIBUS_PASSWORD=''
+LLM_PROVIDER='OPENAI'
+LLM_OPENAI_API_KEY=''
+LLM_OPENAI_MODEL=''
+LLM_OPENAI_API_BASE=''""")
 
 
 if not Path(__file__).parents[2].joinpath('.env').exists():
