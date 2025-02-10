@@ -11,6 +11,7 @@ from shapely.geometry import LineString, LinearRing, Polygon, Point, MultiPoint,
 from shapely.ops import nearest_points, unary_union, split
 
 from pageplus.io.logger import logging
+from pageplus.utils.converter import custom_to_dict, dict_to_custom
 
 
 @dataclass
@@ -28,6 +29,23 @@ class CoordElement:
     def get_parent_element(self) -> ET._Element:
         """ Returns the parent XML element. """
         return self.xml_element.getparent()
+
+    def get_tag(self) -> str:
+        """ Returns the structure tag of the element. """
+        custom = self.xml_element.attrib["custom"]
+        customdict = custom_to_dict(custom)
+        return customdict.get('structure', {}).get('type', '')
+
+    def set_tag(self, tag:str) -> None:
+        """ Set the structure tag of the element. """
+        custom = self.xml_element.attrib["custom"]
+        if custom is None:
+            customdict = {'structure': {'type': tag}}
+        else:
+            customdict = custom_to_dict(custom)
+            customdict['structure']['type'] = tag
+        self.xml_element.attrib["custom"] = dict_to_custom(customdict)
+        return
 
     def get_coordinates(self, returntype: str = "string"):
         """

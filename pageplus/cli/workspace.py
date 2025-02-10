@@ -90,6 +90,36 @@ def update_workspaces() -> None:
 
 
 @app.command(rich_help_panel="Workspace")
+def backup_xmlfiles(backup_folder: Annotated[Path,
+                   typer.Argument(help="Foldername to the backup xml files")] = Path('Backup'),
+               workspace: Annotated[str,
+               typer.Argument(help=f"Workspace name pointing to an existing path",
+                              callback=validate_workspace)] = None,
+               ) -> None:
+    """
+    Create a backup of the xml files
+    Returns:
+    None
+    """
+    pp_workspace().backup(backup_folder,workspace)
+
+@app.command(rich_help_panel="Workspace")
+def restore_xmlfiles(backup_folder: Annotated[Path,
+                   typer.Argument(help="Foldername to the backup xml files")] = Path('Backup'),
+               workspace: Annotated[str,
+               typer.Argument(help=f"Workspace name pointing to an existing path",
+                              callback=validate_workspace)] = None,
+               ) -> None:
+    """
+    Create a backup of the xml files
+    Returns:
+    None
+    """
+    pp_workspace().restore(backup_folder,workspace)
+
+
+
+@app.command(rich_help_panel="Workspace")
 def delete_workspace(workspace: Annotated[str, typer.Argument(help="Set environmental name",
                                                               callback=validate_workspace)]) -> None:
     """

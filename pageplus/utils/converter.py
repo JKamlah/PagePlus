@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from enum import Enum
 import json
+import re
 from typing_extensions import Type, Iterable
 
-from pageplus.models.page import Page
+#from pageplus.models.page import Page
 
 def strings_to_enum(name: str, strings: list[str] | Iterable[str]) -> Type[Enum]:
     # Create a dictionary with member names and their values both set to the strings from the list
@@ -16,3 +17,31 @@ def strings_to_enum(name: str, strings: list[str] | Iterable[str]) -> Type[Enum]
 def convert_page_to_json(page: Page, ) -> dict:
     # TODO: Implement this function..
     return json
+
+def convert_value(val):
+    if val.isdigit():
+        return int(val)
+    return val
+
+def custom_to_dict(s):
+    pattern = r'(\w+)\s*\{([^}]*)\}'
+    matches = re.findall(pattern, s)
+
+    result = {}
+    for key, values in matches:
+        inner_dict = {}
+        for pair in values.split(';'):
+            pair = pair.strip()
+            if pair:
+                k, v = pair.split(':', 1)
+                inner_dict[k.strip()] = convert_value(v.strip())
+        result[key] = inner_dict
+
+    return result
+
+def dict_to_custom(d):
+    result = []
+    for key, values in d.items():
+        inner_values = "; ".join(f"{k}:{v}" for k, v in values.items()) + ";"
+        result.append(f"{key} {{{inner_values}}}")
+    return " ".join(result)

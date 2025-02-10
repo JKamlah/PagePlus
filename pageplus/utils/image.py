@@ -3,7 +3,9 @@ import base64
 from pathlib import Path
 from io import BytesIO
 from PIL import Image, ImageDraw
+from PIL.Image import Image as ImageType
 from shapely.geometry import Polygon
+from typing import Tuple, Any
 
 
 def get_image(image_path):
@@ -29,10 +31,12 @@ def get_image(image_path):
 
 def crop_image_by_polygon(image: Image, polygon: Polygon,
                           min_image_size: tuple = (480, 480),
+                          min_scale_size: tuple = (1.5, 2),
                           buffer: int = 5,
+                          transparent_background: bool = True,
                           save_snippet: bool = False,
                           snippet_dir: Path = Path('.'),
-                          snippet_name: str = '') -> Image:
+                          snippet_name: str = '') -> tuple[ImageType | Any, tuple[int, ...]]:
     """
     Crop a PIL image based on a polygon. The polygon is first buffered by the given amount.
     If the buffered polygon's bounding box fits entirely within the image, it is used;
@@ -61,48 +65,50 @@ def crop_image_by_polygon(image: Image, polygon: Polygon,
     bbox = polygon.bounds
     # Convert to integer values if your image coordinates are integer-based
     bbox = tuple(map(int, bbox))
-
     # Crop the image to the polygon's bounding box
     cropped_image = image.crop(bbox)
 
-    # Calculate the offset (minx, miny) for adjusting the polygon coordinates
-    minx, miny, _, _ = bbox
-    adjusted_coords = [(x - minx, y - miny) for x, y in polygon.exterior.coords]
+    if transparent_background:
+        # Calculate the offset (minx, miny) for adjusting the polygon coordinates
+        minx, miny, _, _ = bbox
+        adjusted_coords = [(x - minx, y - miny) for x, y in polygon.exterior.coords]
 
-    # Create a mask image with the same size as the cropped image
-    mask = Image.new("L", cropped_image.size, 0)
-    draw = ImageDraw.Draw(mask)
-    draw.polygon(adjusted_coords, outline=255, fill=255)
+        # Create a mask image with the same size as the cropped image
+        mask = Image.new("L", cropped_image.size, 0)
+        draw = ImageDraw.Draw(mask)
+        draw.polygon(adjusted_coords, outline=255, fill=255)
 
-    # Ensure the cropped image has an alpha channel
-    cropped_image = cropped_image.convert("RGBA")
+        # Ensure the cropped image has an alpha channel
+        cropped_image = cropped_image.convert("RGBA")
 
-    # Create an output image (snippet) with a transparent background
-    snippet = Image.new("RGBA", cropped_image.size, (0, 0, 0, 0))
+        # Create an output image (snippet) with a transparent background
+        snippet = Image.new("RGBA", cropped_image.size, (0, 0, 0, 0))
 
-    # Composite the cropped image using the mask so that only the polygon area is visible
-    snippet = Image.composite(cropped_image, snippet, mask)
+        # Composite the cropped image using the mask so that only the polygon area is visible
+        snippet = Image.composite(cropped_image, snippet, mask)
 
-    # Determine the final canvas size:
-    snippet_width, snippet_height = snippet.size
-    min_width, min_height = min_image_size
-    final_width = max(int(snippet_width*1.5), min_width)
-    final_height = max(int(snippet_height*2), min_height)
+        # Determine the final canvas size:
+        snippet_width, snippet_height = snippet.size
+        min_width, min_height = min_image_size
+        final_width = max(int(snippet_width*min_scale_size[0]), min_width)
+        final_height = max(int(snippet_height*min_scale_size[1]), min_height)
 
-    if (snippet_width, snippet_height) != (final_width, final_height):
-        # Create a new transparent image with the final required size
-        new_snippet = Image.new("RGBA", (final_width, final_height), (0, 0, 0, 0))
+        if (snippet_width, snippet_height) != (final_width, final_height):
+            # Create a new transparent image with the final required size
+            new_snippet = Image.new("RGBA", (final_width, final_height), (0, 0, 0, 0))
 
-        # Calculate the position to paste the original snippet (center it)
-        left = (final_width - snippet_width) // 2
-        top = (final_height - snippet_height) // 2
+            # Calculate the position to paste the original snippet (center it)
+            left = (final_width - snippet_width) // 2
+            top = (final_height - snippet_height) // 2
 
-        new_snippet.paste(snippet, (left, top))
-        snippet = new_snippet
+            new_snippet.paste(snippet, (left, top))
+            snippet = new_snippet
+    else:
+        snippet = cropped_image
     if save_snippet:
         snippet_dir.mkdir(parents=True, exist_ok=True)
-        snippet.save(snippet_dir.joinpath(f"snippet_{snippet_name}.png")) # Optional: save the mask to
-    return snippet
+        snippet.save(snippet_dir.joinpath(f"{snippet_name}.png")) # Optional: save the mask to
+    return (snippet, bbox)
 
 
 def image_to_base64(image):

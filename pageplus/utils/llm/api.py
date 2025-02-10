@@ -22,7 +22,7 @@ if (spec := util.find_spec('litellm')) is not None:
         keep_alive_time = 60.0
 
         def llmprovider(self):
-            return LLMProvider[self.provider]
+            return LLMProvider[self.provider.split('__')[0]]
 
         def check_valid_key(self):
             """
@@ -33,8 +33,7 @@ if (spec := util.find_spec('litellm')) is not None:
 
         @property
         def model_with_prefix(self):
-            return '' if self.model == '' else (
-                    self.llmprovider().lower()+'/'+self.model)
+            return '' if self.model == '' else (self.llmprovider().lower()+'/'+self.model)
 
         @property
         def model(self, prefix=False) -> str:
@@ -92,11 +91,12 @@ if (spec := util.find_spec('litellm')) is not None:
             response.raise_for_status()
             response =  response.json()
             modellist = response['data']
-            print(modellist)
+            #print(modellist)
             if modellist:
-                print(f"[green]Available models for provider {self.llmprovider().value}[/green]")
+                print(f"[green]Available models for provider {self.provider.replace('__',' - ')}[/green]")
                 table = Table(title=f"[green]Models overview[/green]")
                 table.add_column(f"Provider", justify="right", style="cyan", no_wrap=True)
                 table.add_column("Model")
-                table.add_row(LLMProvider[self.provider].value, '\n'.join([model['id'] for model in modellist]))
+                table.add_row(self.provider.replace('__',' - '),
+                              '\n'.join([model['id'] for model in modellist]))
                 print(table)

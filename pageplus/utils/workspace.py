@@ -25,6 +25,7 @@ from dotenv import load_dotenv, find_dotenv, get_key, dotenv_values, set_key, un
 
 from pageplus.utils.constants import PagePlus, Environments
 from pageplus.utils.envs import str_to_env, filter_envs
+from pageplus.utils.fs import collect_xml_files
 
 @dataclass
 class Workspace:
@@ -162,6 +163,49 @@ class Workspace:
             if new_workspace != "":
                 new_workspace = str_to_env(new_workspace)
                 set_key(find_dotenv(), self.prefix_ws+new_workspace, str(Path(destination_path).absolute()))
+
+    def backup(self, backup_folder: Path = Path('Backup') , workspace: str = None)-> None:
+        """
+        Create a backup of the xml files
+        Returns:
+        None
+        """
+        load_dotenv()
+        envs = dotenv_values()
+        workspace = envs.get(self.prefix_loaded_ws, '').replace(self.prefix_ws, '') \
+            if not workspace else str_to_env(workspace)
+        if workspace == '':
+            print("Please provide a valid workspace or load workspace.")
+            return
+        wsfolder = Path(get_key(find_dotenv(), self.prefix_ws + workspace))
+        if wsfolder.exists():
+            backup_path = wsfolder.joinpath(backup_folder)
+            Path(backup_path).mkdir(parents=True, exist_ok=True)
+            xml_files = collect_xml_files(map(Path, [workspace]))
+            for file in xml_files:
+                shutil.copy(file, backup_path.joinpath(file.name))
+            print(f"Backup created: [bold green]{len(xml_files)} XML-files[bold green]")
+
+    def restore(self, backup_folder: Path = Path('Backup') , workspace: str = None)-> None:
+        """
+        Restore a backup of the xml files
+        Returns:
+        None
+        """
+        load_dotenv()
+        envs = dotenv_values()
+        workspace = envs.get(self.prefix_loaded_ws, '').replace(self.prefix_ws, '') \
+            if not workspace else str_to_env(workspace)
+        if workspace == '':
+            print("Please provide a valid workspace or load workspace.")
+            return
+        wsfolder = Path(get_key(find_dotenv(), self.prefix_ws + workspace))
+        backup_path = wsfolder.joinpath(backup_folder)
+        if wsfolder.exists() and backup_path.exists():
+            xml_files = collect_xml_files(map(Path, [backup_path]))
+            for file in xml_files:
+                shutil.copy(file, wsfolder)
+            print(f"Restored: [bold green]{len(xml_files)} XML-files[bold green]")
 
 
     def open(self, workspace: Annotated[

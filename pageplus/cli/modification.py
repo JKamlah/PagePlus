@@ -385,7 +385,7 @@ def extend_lines(
             for idx, line in enumerate(textregion.textlines):
                 try:
                     line.buffer(distance=distance, direction=dim, rectangle=rectify)
-                    line.fit_into_parent()
+                    line.fit_into_parent(parent_coords=page.page_coords(returntype='linearring'))
                     if cut_overlaps and idx > 0:
                         process_overlapping_lines(textregion, idx, line)
                 except Exception as e:

@@ -4,6 +4,7 @@ import sys
 from importlib import util
 from pathlib import Path
 from typing import List, Annotated
+import re
 
 import typer
 from dotenv import set_key, find_dotenv
@@ -131,50 +132,27 @@ else:
         Check the spelling in existing llm's
         """
         import re
-        def fix_missing_commas(json_str):
-            """
-            A heuristic approach to fix missing commas in JSON.
-
-            This function looks for a pattern where a closing quote or bracket is immediately
-            followed by whitespace and then an opening quote (which likely indicates a missing comma).
-            It inserts a comma between them.
-
-            Note: This is not a complete JSON fixer but may help in cases where the only error is a missing delimiter.
-            """
-            # This pattern finds a closing quote (") or closing curly brace (}) or closing square bracket (])
-            # that is directly followed by whitespace and then an opening quote (") or opening curly brace ({)
-            # and inserts a comma between them.
-            pattern = r'([}\]"])\\s*(?=["{])'
-
-            # The replacement string: add a comma after the matched character.
-            fixed_str = re.sub(pattern, r'\1,', json_str)
-
-            # An additional heuristic: sometimes a missing comma between key/value pairs in an object can be fixed by:
-            # Looking for a pattern like:
-            #     "key": "value"  "next_key":
-            # and inserting a comma between the string and the next key.
-            pattern2 = r'(")\s*(")'
-            fixed_str = re.sub(pattern2, r'\1, \2', fixed_str)
-
-            return fixed_str
+        force_linebreak = True
 
         def call_llm(input_data, fulltext):
             # Create the prompt text that instructs the model what to do
-            prompt = f"""
-                                    You are a spellchecker. Given the following JSON object containing lines with 'lineid' and 'original', 
-                                    please correct any spelling mistakes in each 'original' and return a JSON object with a new item added 'corrected'
-                                    The resulting JSON have to contain always! both 'original' and 'corrected'.
+            system = """You are an expert in spellchecking.
+            Analyse the input and find all possible OCR errors and misspelling.
+            Preserve hyphenation as it appears. Do not merge words split by hyphens at the end of lines.
+            Please write out our findings numbered in the following manner: 
 
-                                    This is the fulltext of page, as additional information:
-                                    {fulltext if add_fulltext else ''}
-                                    
-                                    Input JSON:
-                                    {json.dumps(input_data, indent=2)}
+            The original input is a json object:
+            {'lines': [{'id': id, 'original': text},..]}
 
-                                    Output JSON:
-                                    """
+            You create add to this input a new entry "corrected" and output also an JSON Object:
+            {'lines': [{'id': id, 'corrected': corrected_text},..]}
+
+            Only output the JSON!"""
             # print(prompt)
+
             try:
+                import html
+                print(input_data)
                 response = completion(
                     model=llm_api.model_with_prefix,
                     api_base=llm_api.api_base_url,
@@ -186,15 +164,44 @@ else:
                     n=1,  # Generate 1 response
                     messages=[
                         {
+                            "role": "system",
+                            "content": [
+                                {"type": "text", "text": system},
+                            ]
+                        },
+                        {
                             "role": "user",
                             "content": [
-                                {"type": "text", "text": prompt},
+                                {"type": "text", "text": html.escape(f"{input_data}")},
                             ]
                         }
                     ],
                     response_format={
-                        'type': 'json_object'
-                    },
+                                      "type": "json_schema",
+                                      "json_schema": {
+                                        "name": "correction_response",
+                                        "strict": True,
+                                        "schema": {
+                                          "type": "object",
+                                          "properties": {
+                                            "lines": {
+                                              "type": "array",
+                                              "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                  "id": { "type": "string" },
+                                                  "corrected": { "type": "string" }
+                                                },
+                                                "required": ["id", "corrected"],
+                                                "additionalProperties": False
+                                              }
+                                            }
+                                          },
+                                          "required": ["lines"],
+                                          "additionalProperties": False
+                                        }
+                                      }
+                                    },
                     max_tokens=8192,
                 )
             except Exception as e:
@@ -204,21 +211,24 @@ else:
             # Extract the JSON string from the response. Adjust indices if necessary.
             json_str = response.choices[0].message.content
             print(json_str)
-            # First, try to load the malformed JSON to see the error
-            try:
-                data_dict = json.loads(json_str)
-            except json.JSONDecodeError as e:
-                print("Initial JSON decode error:", e)
-                # Attempt to fix the JSON by inserting missing commas
-                fixed_json = fix_missing_commas(json_str)
-                print("Fixed JSON attempt:\n", fixed_json)
-                try:
-                    data_dict = json.loads(fixed_json)
-                    print("Successfully loaded JSON after fixing.")
-                except json.JSONDecodeError as e2:
-                    print("Still failed to decode JSON:", e2)
-                    data_dict = {}
-            return data_dict
+
+            # Convert lists to dicts for easier merging
+            input_data = {item["id"]: item for item in input_data["lines"]}
+            corrected_data = {item["id"]: item for item in json.loads(html.unescape(json_str))["lines"]}
+
+            # Merge the dictionaries
+            merged_dict = {
+                "lines": [
+                    {**corrected_data[key], **input_data[key]} for key in input_data.keys() & corrected_data.keys()
+                ]
+            }
+            # Replace double oblique hyphens
+            if force_linebreak:
+                for idx, line in enumerate(merged_dict['lines']):
+                    merged_dict['lines'][idx]['corrected'] = re.sub('⸗!$', '-', merged_dict['lines'][idx]['corrected'])
+                    merged_dict['lines'][idx]['original'] = re.sub('⸗!$', '-', merged_dict['lines'][idx]['original'])
+
+            return merged_dict
 
         xml_files = collect_xml_files(map(Path, inputs))
         # Raise error if no xml files are found
@@ -228,17 +238,18 @@ else:
             print(xml_file)
             page = Page(xml_file)
             fulltext = page.extract_fulltext()
-            corrected_lines = {'lines': {}}
+            corrected_lines = {'lines': []}
             for textregion in page.regions.textregions:
-                text_dict = {"lines": {}}
+                text_dict = {"lines": []}
                 for line in textregion.textlines:
                     text = line.get_text()
-                    text_dict['lines'][line.get_id()] = {"original": text if text else ''}
+                    text = re.sub('-$', '⸗!', text) if force_linebreak else text
+                    text_dict['lines'].append({'id': line.get_id(), "original": text if text else ''})
                     if len(text_dict['lines']) > 10:
-                        corrected_lines['lines'].update(call_llm(text_dict['lines'], fulltext))
-                        text_dict = {"lines": {}}
+                        corrected_lines['lines'].append(call_llm(text_dict, fulltext))
+                        text_dict = {"lines": []}
                 if len(text_dict['lines']) > 0:
-                    corrected_lines['lines'].update(call_llm(text_dict['lines'], fulltext))
+                    corrected_lines['lines'].append(call_llm(text_dict, fulltext))
             # Save corrected lines to XML
             with xml_file.with_suffix('.spellchecked.json').open('w', encoding='utf-8') as fout:
                 json.dump(corrected_lines, fout, indent=2, ensure_ascii=False)
@@ -257,21 +268,37 @@ else:
         for xml_file in xml_files:
             print(xml_file)
             page = Page(xml_file)
+            page.delete_textlevel('region')
             fulltext = page.extract_fulltext()
-            prompt = f"""
-            You are an expert in spellchecking. Given the following fulltext. Analyse the fulltext and find all possible
-            OCR errors and missspelling. Please write out our findings numbered in the following manner: 
-            
-            1.
-            Original Text: ...
-            Corrected Text: ...
-            ..
-            
-            
-            Here is the fulltext to analyze:
-            {fulltext}
-            
-            """
+            input = {'text': []}
+            [input['text'].append({'original': line}) for line in fulltext.split('\n')]
+            system = """You are an expert in spellchecking.
+Analyse the input and find all possible OCR errors and misspelling.
+Please write out our findings numbered in the following manner: 
+
+The original input is a json object:
+{'text': ['lineid': id, 'original': text]}
+
+You create add to this input a new entry "corrected" and output also an JSON Object:
+{'text': [{'corrected': corrected_text}]}
+
+Only output the JSON!"""
+
+
+            prompt = f"""Here is the fulltext to analyze:\n{fulltext}"""
+            import litellm
+            from pydantic import BaseModel
+
+            #litellm.enable_json_schema_validation = True
+            #litellm.set_verbose = True  # see the raw request made by litellm
+
+            class Corrections(BaseModel):
+                corrections: str
+                original: str
+
+            class CorrectionsList(BaseModel):
+                lines: list[Corrections]
+
             try:
                 response = completion(
                     model=llm_api.model_with_prefix,
@@ -284,16 +311,23 @@ else:
                     n=1,  # Generate 1 response
                     messages=[
                         {
+                            "role": "system",
+                            "content": [
+                                {"type": "text", "text": system},
+                            ]
+                        },
+                        {
                             "role": "user",
                             "content": [
-                                {"type": "text", "text": prompt},
+                                {"type": "text", "text": f"{input}"},
                             ]
                         }
                     ],
-                    max_tokens=8192,
+                    response_format={ "type": "json_object" },
+                    max_tokens=8000,
                 )
                 answer = response.choices[0].message.content
-                print(answer)
+                print(json.loads(answer))
 
                 # Save corrected lines to XML
                 with xml_file.with_suffix('.spellchecked.text').open('w', encoding='utf-8') as fout:
@@ -313,25 +347,35 @@ else:
             image_extension: Annotated[str, typer.Option(
                 help="Filename extension of the images (only active with 'same_names' option)")] = '.jpg',
             save_snippets: Annotated[bool, typer.Option(help="Save snippets (debug option)")] = False,
+            text_filter: Annotated[str, typer.Option(
+                help="A regular expression, if specific textlines should be filtered")] = None,
+            region_tagfilter: Annotated[str, typer.Option(
+                help="A regular expression, if specific textlines should be filtered")] = None,
+            textline_tagfilter: Annotated[str, typer.Option(
+                help="A regular expression, if specific textlines should be filtered")] = None,
+            overwrite: Annotated[
+                bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
             dry_run: Annotated[bool, typer.Option(help="If True, the function will not write any files.")] = False):
         """
         OCR with the exisiting layout information. Existing text will be overwritten.
         """
         # API details
-        prompt = ("You are an expert in recognizing text in an image, without modify the results."
+        system = ("You are an expert in recognizing text in an image, without modify the results."
                   "It is not allowed to additional characters. Keep line breaks and hyphens."
                   "Recognize the text in the images: word by word! No explanation, no newlines, with punctuations."
-                  "Output format (a single line with the information):"
-                  "This text was on the image.")
+                  "Output format (a single line with the information):")
+        prompt = ("Please read the content of this image:")
         # Read XML
         xml_files = collect_xml_files(map(Path, inputs))
         # Raise error if no xml files are found
         if not xml_files:
             raise FileNotFoundError('No xml files found in input directory')
+        reg_filter = re.compile(rf"{text_filter}") if text_filter is not None else '.'
         for xml_file in xml_files:
             print(xml_file)
             # Read XML content
             page = Page(xml_file)
+            page.delete_textlevel('region')
             # Find image (same name or image filename from page-xml file)
             imageFilename = page.imageFilename() if not same_names else xml_file.with_suffix(image_extension).name
             imageDir = xml_file
@@ -347,18 +391,24 @@ else:
             # Find Textlines
             for textregion in page.regions.textregions:
                 tr_id = textregion.get_id()
+                if region_tagfilter is not None and region_tagfilter != textregion.get_tag():
+                    continue
                 text_dict[tr_id] = {}
                 for line in textregion.textlines:
+                    if textline_tagfilter is not None and textline_tagfilter != line.get_tag():
+                        continue
                     text = line.get_text()
+                    if text_filter is not None and not re.match(reg_filter, text):
+                        continue
                     line_id = line.get_id()
                     text_dict[tr_id][line_id] = text if text else ''
 
                     # Cut image
-                    image_snippet = crop_image_by_polygon(image,
+                    image_snippet, _ = crop_image_by_polygon(image,
                                                           line.get_coordinates(returntype='mrr'),
                                                           save_snippet=save_snippets,
                                                           snippet_dir=imageDir.joinpath(imageFilename.rsplit('.', 1)[0]),
-                                                          snippet_name=line_id)
+                                                          snippet_name='snippet_'+line_id)
                     # Convert image to Base64
                     image_snippet_b64 = image_to_base64(image_snippet)
 
@@ -374,6 +424,12 @@ else:
                             top_p=0,
                             n=1,  # Generate 1 response
                             messages=[
+                                {
+                                    "role": "system",
+                                    "content": [
+                                        {"type": "text", "text": system},
+                                    ]
+                                },
                                 {
                                     "role": "user",
                                     "content": [
@@ -397,10 +453,12 @@ else:
                         continue
 
             if not dry_run:
-                fout = xml_file.parent.joinpath(llm_api.model.replace('.','_').replace(':','-')).joinpath(xml_file.name)
+                fout = xml_file if overwrite else xml_file.parent.joinpath(llm_api.model.replace('.','_').replace(':','-')).joinpath(xml_file.name)
                 fout.parent.mkdir(parents=True, exist_ok=True)
                 logging.info(f'Wrote modified xml file to output directory: {fout}')
                 page.save_xml(fout)
+
+
 
 if __name__ == "__main__":
     app()
