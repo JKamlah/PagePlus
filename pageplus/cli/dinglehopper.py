@@ -4,6 +4,7 @@ import subprocess
 import sys
 from collections import Counter
 from importlib import util
+import json
 from pathlib import Path
 from typing import List, Annotated
 import webbrowser
@@ -12,6 +13,9 @@ from datetime import datetime
 import requests
 import typer
 from rich import print
+
+from pageplus.utils.profile import profile, ProfileFnRet
+
 
 app = typer.Typer()
 
@@ -32,6 +36,13 @@ def _install() -> None:
             with open(output_filename, 'wb') as file:
                 file.write(response.content)
             print(f"[green]File downloaded successfully: {output_filename}[/green]")
+            if fname == 'word_error_rate.py':
+                shutil.copy(output_filename, output_filename.with_suffix('.old'))
+                with open(output_filename, 'w') as f:
+                    for line in output_filename.with_suffix('.old').open('r').readlines():
+                        line = line.replace('            return old_word_break(c, index)',
+                                            '            return old_word_break(c)')
+                        f.write(line)
             if fname == 'extracted_text.py':
                 shutil.copy(output_filename, output_filename.with_suffix('.old'))
                 with open(output_filename, 'w') as f:
@@ -41,7 +52,6 @@ def _install() -> None:
                         if 'getLogger' in line:
                             continue
                         f.write(line)
-
         else:
             print(f"[red]Failed to download file. Status code: {response.status_code}[/red]")
 
@@ -76,9 +86,7 @@ else:
     ### PACKAGE ###
     @app.command(rich_help_panel="Package")
     def update_package() -> None:
-        """
-        Updates dinglehopper by Mike Gerber and the qurator team!
-        """
+        """ Updates dinglehopper by Mike Gerber and the qurator team! """
         _install()
 
 
@@ -278,7 +286,10 @@ else:
             # else:
             #  print("Skipping {0} and {1}".format(gt_file_path, ocr_file_path))
 
+
+
     @app.command()
+    @profile('dinglehopper')
     def compare(
             gt: Annotated[str, typer.Argument(help="Ground Truth file or directory path or workspace, e.g. main.",
                                               exists=True, callback=transform_input)] = ...,
@@ -288,7 +299,7 @@ else:
             reports_folder: Annotated[str, typer.Argument(help="Directory to store the report files. "
                                                                "Default: save into a Dinglehopper/Date/ "
                                                                "folder in the ocr folder.")] = ".",
-            reports_folder_prefix: Annotated[str, typer.Option(help="Prefix for the report folder.")] = "",
+            reports_folder_prefix: Annotated[str, typer.Option(help="Prefix for the report folder.")] = "report",
             metrics: Annotated[bool, typer.Option("--metrics/--no-metrics",
                                                   help="Enable/disable metrics and green/red.")] = True,
             differences: Annotated[bool, typer.Option(help="Enable reporting character and "
@@ -298,7 +309,8 @@ else:
             open_folder: Annotated[bool, typer.Option(help="Opens the folder with the results after processing.")]
             = open_folder_default(),
             show_results: Annotated[bool, typer.Option(help="Opens the html version in "
-                                                            "a browser after processing.")] = True):
+                                                            "a browser after processing.")] = True,
+            profile: Annotated[str, typer.Option(help="Profile function with tag (default: no profiling active.")] = ''):
         """
         Compare the PAGE/ALTO/text document GT against the document OCR.
 
@@ -318,19 +330,19 @@ else:
         By default, the text of PAGE files is extracted on 'region' level. You may
         use "--textequiv-level line" to extract from the level of TextLine tags.
         """
+        compare.profile = ProfileFnRet()
         print(f"Starting Dinglehopper comparison with gt={gt}, ocr={ocr}, "
               f"report_prefix={report_prefix}, reports_folder={reports_folder}, reports_folder={reports_folder_prefix},"
               f"metrics={metrics}, differences={differences}, textequiv_level={textequiv_level}")
-
         # Your existing logic here
         if os.path.isdir(gt):
+            gtdir = Path(gt)
             if not os.path.isdir(ocr):
                 typer.echo("OCR must be a directory if GT is a directory", err=True)
                 raise typer.Exit(code=1)
             else:
-
                 reports_folder = reports_folder if reports_folder != '.' else str(Path(ocr).joinpath('Dinglehopper')
-                    .joinpath('_'.join([reports_folder_prefix, datetime.now().strftime('%Y-%m-%d_%H-%M')])).absolute())
+                    .joinpath(reports_folder_prefix).absolute())
                 Path(reports_folder).mkdir(parents=True, exist_ok=True)
                 process_dir(gt,
                             ocr,
@@ -342,8 +354,9 @@ else:
                             )
                 pass
         else:
+            gtdir = Path(gt).parent
             reports_folder = reports_folder if reports_folder != '.' else str(Path(ocr).parent.joinpath('Dinglehopper')
-                    .joinpath('_'.join([reports_folder_prefix, datetime.now().strftime('%Y-%m-%d_%H-%M')])).absolute())
+                    .joinpath(reports_folder_prefix).absolute())
             Path(reports_folder).mkdir(parents=True, exist_ok=True)
             process(gt,
                     ocr,
@@ -358,7 +371,10 @@ else:
         if show_results:
             for html in Path(reports_folder).glob('*.html'):
                 webbrowser.open(str(html.absolute()))
-
+        for jfile in Path(reports_folder).glob('*.json'):
+            compare.profile.results.append({jfile.name.split('.json')[0]: json.load(jfile.open('r'))})
+        compare.profile.dir = gtdir.absolute()
+        compare.profile.name = profile
         if open_folder:
             if sys.platform == "win32":
                 # Windows

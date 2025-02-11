@@ -15,6 +15,8 @@ from pageplus.utils.fs import collect_xml_files, find_image
 from pageplus.utils.fs import transform_inputs
 from pageplus.utils.image import image_to_base64, get_image, crop_image_by_polygon
 from pageplus.io.logger import logging
+from pageplus.utils.profile import profile, ProfileFnRet
+from pageplus.utils.constants import ProfileLevel
 
 app = typer.Typer()
 
@@ -45,6 +47,7 @@ else:
     from pageplus.utils.llm.api import LLMAPI
 
     from litellm import completion
+    from pydantic import BaseModel
 
     llm_workspace = Workspace(Environments.LLM)
     llm_api = LLMAPI(Environments.LLM)
@@ -261,6 +264,8 @@ else:
         """
         Check the spelling in existing llm's
         """
+
+
         xml_files = collect_xml_files(map(Path, inputs))
         # Raise error if no xml files are found
         if not xml_files:
@@ -270,8 +275,9 @@ else:
             page = Page(xml_file)
             page.delete_textlevel('region')
             fulltext = page.extract_fulltext()
-            input = {'text': []}
-            [input['text'].append({'original': line}) for line in fulltext.split('\n')]
+            # prompt = f"""Here is the fulltext to analyze:\n{fulltext}"""
+            prompt = {'text': []}
+            [prompt['text'].append({'original': line}) for line in fulltext.split('\n')]
             system = """You are an expert in spellchecking.
 Analyse the input and find all possible OCR errors and misspelling.
 Please write out our findings numbered in the following manner: 
@@ -283,14 +289,6 @@ You create add to this input a new entry "corrected" and output also an JSON Obj
 {'text': [{'corrected': corrected_text}]}
 
 Only output the JSON!"""
-
-
-            prompt = f"""Here is the fulltext to analyze:\n{fulltext}"""
-            import litellm
-            from pydantic import BaseModel
-
-            #litellm.enable_json_schema_validation = True
-            #litellm.set_verbose = True  # see the raw request made by litellm
 
             class Corrections(BaseModel):
                 corrections: str
@@ -319,7 +317,7 @@ Only output the JSON!"""
                         {
                             "role": "user",
                             "content": [
-                                {"type": "text", "text": f"{input}"},
+                                {"type": "text", "text": f"{prompt}"},
                             ]
                         }
                     ],
@@ -337,7 +335,9 @@ Only output the JSON!"""
                 print("An error occurred during completion:", e)
 
 
+
     @app.command()
+    @profile('llm-ocr')
     def ocr(inputs: Annotated[List[str],
     typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None,
             image_folder: Annotated[str, typer.Argument(exists=True,
@@ -353,6 +353,11 @@ Only output the JSON!"""
                 help="A regular expression, if specific textlines should be filtered")] = None,
             textline_tagfilter: Annotated[str, typer.Option(
                 help="A regular expression, if specific textlines should be filtered")] = None,
+            profile: Annotated[str, typer.Option(help="Profile function with tag (default:'' no profiling active.")] = '',
+            profilelevel: Annotated[ProfileLevel,
+                typer.Option(
+                    help="Level of profiling. Options: 'stats', 'params', 'results'. Default: 'results'")
+            ] = "results",
             overwrite: Annotated[
                 bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
             dry_run: Annotated[bool, typer.Option(help="If True, the function will not write any files.")] = False):
@@ -360,11 +365,21 @@ Only output the JSON!"""
         OCR with the exisiting layout information. Existing text will be overwritten.
         """
         # API details
-        system = ("You are an expert in recognizing text in an image, without modify the results."
-                  "It is not allowed to additional characters. Keep line breaks and hyphens."
-                  "Recognize the text in the images: word by word! No explanation, no newlines, with punctuations."
-                  "Output format (a single line with the information):")
+        # Turn profiling on
+        ocr.profile = ProfileFnRet()
+        ocr.profile.name = profile
+        ocr.profile.dir = Path(inputs[0]).absolute() if len(inputs) > 0 else ''
+        system = ("You are an expert in recognizing text in an image, without modifying the results."
+                  "It is not allowed to add additional characters. Keep line breaks and hyphens."
+                  "Recognize the text in the images: word by word! No explanation, no newlines, with punctuations.\n"
+                  "The input:\n"
+                  "Image\n"
+                  "Output format JSON (a single line with the information):\n"
+                  "{'text': [{'line': The text from the image}]}")
+
         prompt = ("Please read the content of this image:")
+        if profilelevel != 'stats':
+         ocr.profile.params = {'prompts': {'system': system, 'user': prompt}}
         # Read XML
         xml_files = collect_xml_files(map(Path, inputs))
         # Raise error if no xml files are found
@@ -398,10 +413,10 @@ Only output the JSON!"""
                     if textline_tagfilter is not None and textline_tagfilter != line.get_tag():
                         continue
                     text = line.get_text()
-                    if text_filter is not None and not re.match(reg_filter, text):
+                    if text_filter is not None and not re.search(reg_filter, text):
                         continue
                     line_id = line.get_id()
-                    text_dict[tr_id][line_id] = text if text else ''
+                    text_dict[tr_id][line_id] = {'original': text} if text else {'original': ''}
 
                     # Cut image
                     image_snippet, _ = crop_image_by_polygon(image,
@@ -444,21 +459,26 @@ Only output the JSON!"""
                                     ]
                                 }
                             ],
+                            response_format={"type": "json_object"},
                             max_tokens=150,
                         )
-                        print(f'{line_id} -> [green]{response.choices[0].message.content}[green]')
-                        line.update_text(response.choices[0].message.content)
+                        try:
+                            output = json.loads(response.choices[0].message.content)
+                            print(f'{line_id} -> [green]{output["text"][0]["line"]}[green]')
+                            line.update_text(output["text"][0]["line"])
+                            text_dict[tr_id][line_id]['ocr'] = output["text"][0]["line"]
+                        except:
+                            print(f"{line_id} -> [red] Error: No valid output[red]")
                     except Exception as e:
                         print("An error occurred during completion:", e)
                         continue
-
+            if profilelevel == 'results':
+                ocr.profile.results.append(text_dict)
             if not dry_run:
                 fout = xml_file if overwrite else xml_file.parent.joinpath(llm_api.model.replace('.','_').replace(':','-')).joinpath(xml_file.name)
                 fout.parent.mkdir(parents=True, exist_ok=True)
                 logging.info(f'Wrote modified xml file to output directory: {fout}')
                 page.save_xml(fout)
-
-
 
 if __name__ == "__main__":
     app()

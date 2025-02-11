@@ -9,6 +9,14 @@ class WorkState(str, Enum):
     ORIGINAL = "original"
     MODIFIED = "modified"
 
+class ProfileLevel(str, Enum):
+    """
+    Level of function profiling
+    """
+    stats = "stats"
+    params = "params"
+    results = "results"
+
 
 class PagePlus(str, Enum):
     """

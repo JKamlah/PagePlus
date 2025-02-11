@@ -128,6 +128,11 @@ def transform_inputs(ctx: typer.Context, param: typer.CallbackParam, values: Lis
         ws_folder = join_modified_path(ws_folder, count)
         if ws_folder.exists():
             ret_values.append(ws_folder)
+    elif not values or (len(values) == 1 and ':' in values[0]):
+        ws_folder = Path(envs.get(envs.get(loaded_env.as_prefix_loaded_workspace())))
+        ws_folder = ws_folder.joinpath(values[0].split(':')[1])
+        if ws_folder.exists():
+            ret_values.append(ws_folder)
     else:
         for value in values:
             if Path(value).exists():
