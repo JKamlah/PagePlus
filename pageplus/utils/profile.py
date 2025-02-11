@@ -16,6 +16,8 @@ class ProfileFnRet:
         self.dir:  str|Path|None = None
         self.params: dict = {}
         self.results: list = []
+        self.analytics: list = []
+        self.analytics_summary: dict = {}
 
 
 def profile(funcname: str):
@@ -32,29 +34,36 @@ def profile(funcname: str):
                 # Capture profiling statisticsKe
                 s = io.StringIO()
                 ps = pstats.Stats(profiler, stream=s).sort_stats("cumulative")
-                ret = getattr(wrapper, "profile", Profile())
+                ret = getattr(wrapper, "profile", ProfileFnRet())
                 profilelog = {
                     "stats": {
-                        "stime": datetime.now().ctime(),
+                        "start-time": datetime.now().ctime(),
                         "user": getpass.getuser(),
-                        "duration": round(ps.total_tt, 2),
+                        "time-dimension": 'seconds',
+                        "total-time": round(ps.total_tt, 2),
                     },
                 }
                 if ret.params:
                     profilelog["params"] = ret.params
                 if  len(ret.results) > 0:
                     profilelog["results"] = ret.results
+                    if funcname == 'llm-ocr':
+                        profilelog["stats"]["time-per-page"] = round(ps.total_tt/len(ret.results), 2)
+                        lines = sum([len(line.keys()) for page in ret.results for region in page.values() for line in region.values()])
+                        profilelog["stats"]["time-per-line"] = round(ps.total_tt / lines, 2)
+                if len(ret.analytics) > 0:
+                    profilelog["analytics"] = ret.analytics
+                    profilelog["analytics-summary"] = ret.analytics_summary
                 ret.dir.mkdir(parents=True, exist_ok=True)
-
                 # Load existing data
-                fpath = ret.dir / "PagePlusProfile.json"
+                fpath = ret.dir.joinpath("PagePlusProfile.json")
                 if fpath.exists():
                     data = json.loads(fpath.read_text())
                 else:
                     data = defaultdict(dict)
                 data.setdefault(funcname, {})[ret.name] = profilelog
                 fpath.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-                print(f"Wrote profile logs to: {Path(fpath)}")
+                print(f"Wrote profile logs to: {fpath}")
             else:
                 result = func(*args, **kwargs)
             return result

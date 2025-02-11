@@ -91,6 +91,40 @@ else:
 
 
     ### DOCUMENTS ###
+    def count_diff(gt_in, ocr_in, *, differences=True, score_hint=None):
+
+        if isinstance(gt_in, ExtractedText):
+            if not isinstance(ocr_in, ExtractedText):
+                raise TypeError()
+            gt_things = gt_in.grapheme_clusters
+            ocr_things = ocr_in.grapheme_clusters
+        else:
+            gt_things = gt_in
+            ocr_things = ocr_in
+
+        g_pos = 0
+        o_pos = 0
+        found_differences = []
+
+        for k, (g, o) in enumerate(seq_align(gt_things, ocr_things, score_hint)):
+            if g != o:
+                if isinstance(gt_in, ExtractedText):
+                    gt_id = gt_in.segment_id_for_pos(g_pos) if g is not None else None
+                    ocr_id = ocr_in.segment_id_for_pos(o_pos) if o is not None else None
+                    # Deletions and inserts only produce one id + None, UI must
+                    # support this, i.e. display for the one id produced
+                if differences:
+                    found_differences.append(f"{g} :: {o}")
+
+            if g is not None:
+                g_pos += len(g)
+            if o is not None:
+                o_pos += len(o)
+
+        counted_differences = Counter(elem for elem in found_differences)
+
+        return counted_differences
+
     def gen_diff_report(
         gt_in, ocr_in, css_prefix, joiner, none, *, differences=False, score_hint=None
     ):

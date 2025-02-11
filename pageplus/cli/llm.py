@@ -3,8 +3,9 @@ import subprocess
 import sys
 from importlib import util
 from pathlib import Path
-from typing import List, Annotated
+from typing import List, Annotated, Set
 import re
+from collections import Counter
 
 import typer
 from dotenv import set_key, find_dotenv
@@ -354,10 +355,10 @@ Only output the JSON!"""
             textline_tagfilter: Annotated[str, typer.Option(
                 help="A regular expression, if specific textlines should be filtered")] = None,
             profile: Annotated[str, typer.Option(help="Profile function with tag (default:'' no profiling active.")] = '',
-            profilelevel: Annotated[ProfileLevel,
+            profilelevel: Annotated[List[ProfileLevel],
                 typer.Option(
-                    help="Level of profiling. Options: 'stats', 'params', 'results'. Default: 'results'")
-            ] = "results",
+                    help="Level of profiling. Options: 'stats' (always true), 'params', 'results', 'analytics'")
+            ] = ("stats", "params", "results", "analytics"),
             overwrite: Annotated[
                 bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
             dry_run: Annotated[bool, typer.Option(help="If True, the function will not write any files.")] = False):
@@ -378,14 +379,18 @@ Only output the JSON!"""
                   "{'text': [{'line': The text from the image}]}")
 
         prompt = ("Please read the content of this image:")
-        if profilelevel != 'stats':
-         ocr.profile.params = {'prompts': {'system': system, 'user': prompt}}
+        if 'params' in profilelevel:
+            ocr.profile.params = {'prompts': {'system': system, 'user': prompt},
+                                  'text-filter': text_filter,
+                                  'region-tagfilter': region_tagfilter,
+                                  'textline-tagfilter': textline_tagfilter}
         # Read XML
         xml_files = collect_xml_files(map(Path, inputs))
         # Raise error if no xml files are found
         if not xml_files:
             raise FileNotFoundError('No xml files found in input directory')
         reg_filter = re.compile(rf"{text_filter}") if text_filter is not None else '.'
+        all_diff = Counter()
         for xml_file in xml_files:
             print(xml_file)
             # Read XML content
@@ -403,6 +408,7 @@ Only output the JSON!"""
                 continue
             image, image_format = get_image(imagePath)
             text_dict = {}
+            page_diff = Counter()
             # Find Textlines
             for textregion in page.regions.textregions:
                 tr_id = textregion.get_id()
@@ -467,18 +473,28 @@ Only output the JSON!"""
                             print(f'{line_id} -> [green]{output["text"][0]["line"]}[green]')
                             line.update_text(output["text"][0]["line"])
                             text_dict[tr_id][line_id]['ocr'] = output["text"][0]["line"]
+                            if util.find_spec('pageplus.utils.dinglehopper.edit_distance') is not None and \
+                                'analytics' in profilelevel:
+                                from pageplus.cli.dinglehopper import count_diff
+                                line_diff = count_diff(text, output["text"][0]["line"])
+                                page_diff.update(line_diff)
                         except:
                             print(f"{line_id} -> [red] Error: No valid output[red]")
                     except Exception as e:
                         print("An error occurred during completion:", e)
                         continue
-            if profilelevel == 'results':
-                ocr.profile.results.append(text_dict)
+            if 'results' in profilelevel:
+                ocr.profile.results.append({xml_file.name :text_dict})
+            if 'analytics' in profilelevel:
+                ocr.profile.analytics.append({xml_file.name : dict(page_diff)})
+                all_diff.update(page_diff)
             if not dry_run:
                 fout = xml_file if overwrite else xml_file.parent.joinpath(llm_api.model.replace('.','_').replace(':','-')).joinpath(xml_file.name)
                 fout.parent.mkdir(parents=True, exist_ok=True)
                 logging.info(f'Wrote modified xml file to output directory: {fout}')
                 page.save_xml(fout)
+        if 'analytics' in profilelevel:
+            ocr.profile.analytics_summary = dict(all_diff)
 
 if __name__ == "__main__":
     app()
