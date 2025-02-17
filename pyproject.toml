@@ -17,6 +17,7 @@ python-dotenv = "^1.0.1"
 requests = "^2.31.0"
 urllib3 = "^2"
 openpyxl = "^3"
+json_repair = "^0.36.1"
 
 
 [build-system]

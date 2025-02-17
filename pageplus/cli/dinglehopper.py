@@ -8,6 +8,8 @@ import json
 from pathlib import Path
 from typing import List, Annotated
 import webbrowser
+import re
+import string
 from datetime import datetime
 
 import requests
@@ -200,6 +202,80 @@ else:
             ),
             counted_differences,
         )
+
+
+    def categories():
+        return  {
+            "insertion": 0,
+            "deletion": 0,
+            "whitespace": 0,
+            "punctuation": 0,
+            "digits": 0,
+            "ascii_uppercase": 0,
+            "ascii_lowercase": 0,
+        }
+
+
+    def count_categories(text:str, categories: dict) -> dict:
+        for char in text:
+            if char in string.whitespace:
+                categories["whitespace"] += 1
+            elif char in string.punctuation:
+                categories["punctuation"] += 1
+            elif char in string.digits:
+                categories["digits"] += 1
+            elif char in string.ascii_uppercase:
+                categories["ascii_uppercase"] += 1
+            elif char in string.ascii_lowercase:
+                categories["ascii_lowercase"] += 1
+        return categories
+
+
+    def get_metrics(gt:str, ocr:str, diffs:dict = None) -> dict:
+        """Get the accuracy metrics for gt and ocr input."""
+        counts = {}
+        wer, counts['word'] = word_error_rate_n(gt.split(' '), ocr.split(' ')) if gt != '' or ocr != '' else (0, 0)
+        cer, counts['character'] = character_error_rate_n(gt, ocr)
+        counts.update(count_categories(gt, categories()))
+        metrics = {'count': counts,
+                'error_rate': {'global': {'word': wer, 'character': cer}, 'local': {}},
+                'error_count': {'word': int(wer * counts['word']), 'character': int(cer * counts['character'])}}
+        gt_string = ''.join([k.split(' :: ')[0].replace('None', '')*v for k, v in diffs.items()]) if diffs else ''
+        error_counts = count_categories(gt_string, categories())
+        counts['insertion'] = sum([v for k, v in diffs.items() if re.search('None', k.split(' :: ')[0])]) if diffs else 0
+        counts['deletion'] = sum([v for k, v in diffs.items() if re.search('None', k.split(' :: ')[1])]) if diffs else 0
+        for error_key, error_count in error_counts.items():
+            if error_key in ['insertion', 'deletion','character', 'word']:
+                error_count = metrics['count'][error_key]
+            else:
+                metrics['error_rate']['local'][error_key] = error_count / metrics['count'][error_key] if error_count != 0 and metrics['count'][error_key] != 0 else 0
+            if error_key in ['word']:
+                metrics['error_rate']['global'][error_key] = error_count / metrics['count'][
+                    'word'] if error_count != 0 or \
+                                    metrics['count']['word'] != 0 else 0
+            else:
+                metrics['error_rate']['global'][error_key] = error_count / metrics['count']['character'] if error_count != 0 or \
+                                metrics['count']['character'] != 0 else 0
+            metrics['error_count'][error_key] = error_count
+        return metrics
+
+
+    def summarize_metrics(data: list) -> dict:
+        """Summarize the accuracy metrics for each run."""
+        sum_metrics = get_metrics('','')
+        for cat in sum_metrics['count']:
+            sum_metrics['count'][cat] = sum([metrics['count'][cat] for metrics in data])
+            sum_metrics['error_count'][cat] = sum([metrics['error_count'][cat] for metrics in data])
+            if cat in ['word']:
+                sum_metrics['error_rate']['global'][cat] = sum_metrics['error_count'][cat] / sum_metrics['count'][
+                    'word'] if (sum_metrics['error_count'][cat] != 0 and sum_metrics['count']['word'] != 0) else 0
+            else:
+                sum_metrics['error_rate']['global'][cat] = sum_metrics['error_count'][cat] / sum_metrics['count']['character'] if (
+                        sum_metrics['error_count'][cat] != 0 and sum_metrics['count']['character'] != 0) else 0
+            if cat not in ['insertion', 'deletion', 'word', 'character']:
+                sum_metrics['error_rate']['local'][cat] = sum_metrics['error_count'][cat] / sum_metrics['count'][cat] if (
+                            sum_metrics['error_count'][cat] != 0 and sum_metrics['count'][cat] != 0) else 0
+        return sum_metrics
 
 
     def json_float(value):

@@ -30,10 +30,10 @@ def get_image(image_path):
 
 
 def crop_image_by_polygon(image: Image, polygon: Polygon,
-                          min_image_size: tuple = (480, 480),
-                          min_scale_size: tuple = (1.5, 2),
+                          patch_size: int = 14,
                           buffer: int = 5,
                           transparent_background: bool = True,
+                          square_canvas: bool = True,
                           save_snippet: bool = False,
                           snippet_dir: Path = Path('.'),
                           snippet_name: str = '') -> tuple[ImageType | Any, tuple[int, ...]]:
@@ -89,9 +89,15 @@ def crop_image_by_polygon(image: Image, polygon: Polygon,
 
         # Determine the final canvas size:
         snippet_width, snippet_height = snippet.size
-        min_width, min_height = min_image_size
-        final_width = max(int(snippet_width*min_scale_size[0]), min_width)
-        final_height = max(int(snippet_height*min_scale_size[1]), min_height)
+        if square_canvas:
+            final_size = max(int(snippet_width+(patch_size*2)), int(snippet_height+patch_size*2))
+            final_size += final_size % patch_size
+            final_width, final_height = final_size, final_size
+        else:
+            final_width = int(snippet_width+patch_size)
+            final_width += final_width % patch_size
+            final_height = int(snippet_height+patch_size)
+            final_height += final_height % patch_size
 
         if (snippet_width, snippet_height) != (final_width, final_height):
             # Create a new transparent image with the final required size

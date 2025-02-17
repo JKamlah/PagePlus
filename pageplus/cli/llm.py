@@ -1,23 +1,23 @@
 import json
+import re
 import subprocess
 import sys
+from collections import Counter
 from importlib import util
 from pathlib import Path
-from typing import List, Annotated, Set
-import re
-from collections import Counter
+from typing import List, Annotated
 
 import typer
 from dotenv import set_key, find_dotenv
 from rich import print
 
+from pageplus.io.logger import logging
 from pageplus.models.page import Page
+from pageplus.utils.constants import ProfileLevel
 from pageplus.utils.fs import collect_xml_files, find_image
 from pageplus.utils.fs import transform_inputs
 from pageplus.utils.image import image_to_base64, get_image, crop_image_by_polygon
-from pageplus.io.logger import logging
 from pageplus.utils.profile import profile, ProfileFnRet
-from pageplus.utils.constants import ProfileLevel
 
 app = typer.Typer()
 
@@ -265,8 +265,6 @@ else:
         """
         Check the spelling in existing llm's
         """
-
-
         xml_files = collect_xml_files(map(Path, inputs))
         # Raise error if no xml files are found
         if not xml_files:
@@ -357,30 +355,41 @@ Only output the JSON!"""
             profile: Annotated[str, typer.Option(help="Profile function with tag (default:'' no profiling active.")] = '',
             profilelevel: Annotated[List[ProfileLevel],
                 typer.Option(
-                    help="Level of profiling. Options: 'stats' (always true), 'params', 'results', 'analytics'")
-            ] = ("stats", "params", "results", "analytics"),
+                    help="Level of profiling. Options: 'stats' (always true), 'params', 'results', 'analytics', 'summary'")
+            ] = ("stats", "params", "analytics", "summary"),
             overwrite: Annotated[
                 bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
             dry_run: Annotated[bool, typer.Option(help="If True, the function will not write any files.")] = False):
         """
-        OCR with the exisiting layout information. Existing text will be overwritten.
+        OCR with the existing layout information. Existing text will be overwritten.
         """
         # API details
         # Turn profiling on
         ocr.profile = ProfileFnRet()
         ocr.profile.name = profile
         ocr.profile.dir = Path(inputs[0]).absolute() if len(inputs) > 0 else ''
-        system = ("You are an expert in recognizing text in an image, without modifying the results."
-                  "It is not allowed to add additional characters. Keep line breaks and hyphens."
-                  "Recognize the text in the images: word by word! No explanation, no newlines, with punctuations.\n"
+        ocr.profile.stats = {'pages': 0, 'lines': 0}
+        if util.find_spec('pageplus.utils.dinglehopper.edit_distance') is None:
+            profilelevel.remove(ProfileLevel.analytics)
+            print("[red]Warning:[/red] 'analytics' profiling level requires 'dinglehopper' package to be installed. "
+                  "It will be disabled.")
+        elif 'analytics' in profilelevel:
+            from pageplus.cli.dinglehopper import count_diff, get_metrics, summarize_metrics
+
+        system = ("You are an expert in recognizing text in an image, without modifying the results.\n"
+                  "It is not allowed to add additional characters.\n"
+                  "Recognize the text in the images: word by word!  No explanation, no newlines, with punctuations.\n"
                   "The input:\n"
                   "Image\n"
-                  "Output format JSON (a single line with the information):\n"
-                  "{'text': [{'line': The text from the image}]}")
+                  "Do not provide alternative variation!\n"
+                  "Output format JSON (a single line with the information)(only output one version via line, dont repeat!):\n"
+                  "{'text': [First-line, Next-line,...]}")
 
         prompt = ("Please read the content of this image:")
         if 'params' in profilelevel:
-            ocr.profile.params = {'prompts': {'system': system, 'user': prompt},
+            ocr.profile.params = {'model': llm_api.model_with_prefix,
+                                  'api_base': llm_api.api_base_url,
+                                  'prompts': {'system': system, 'user': prompt},
                                   'text-filter': text_filter,
                                   'region-tagfilter': region_tagfilter,
                                   'textline-tagfilter': textline_tagfilter}
@@ -391,6 +400,7 @@ Only output the JSON!"""
             raise FileNotFoundError('No xml files found in input directory')
         reg_filter = re.compile(rf"{text_filter}") if text_filter is not None else '.'
         all_diff = Counter()
+        all_metrics = []
         for xml_file in xml_files:
             print(xml_file)
             # Read XML content
@@ -409,6 +419,7 @@ Only output the JSON!"""
             image, image_format = get_image(imagePath)
             text_dict = {}
             page_diff = Counter()
+            page_metrics = []
             # Find Textlines
             for textregion in page.regions.textregions:
                 tr_id = textregion.get_id()
@@ -428,6 +439,7 @@ Only output the JSON!"""
                     image_snippet, _ = crop_image_by_polygon(image,
                                                           line.get_coordinates(returntype='mrr'),
                                                           save_snippet=save_snippets,
+                                                          square_canvas=True,
                                                           snippet_dir=imageDir.joinpath(imageFilename.rsplit('.', 1)[0]),
                                                           snippet_name='snippet_'+line_id)
                     # Convert image to Base64
@@ -465,19 +477,38 @@ Only output the JSON!"""
                                     ]
                                 }
                             ],
-                            response_format={"type": "json_object"},
-                            max_tokens=150,
-                        )
+                            response_format= {"type": "json_schema",
+                                              "json_schema": {
+                                                "name": "ocrresponse",
+                                                "strict": True,
+                                                "schema": {
+                                                  "type": "object",
+                                                  "properties": {
+                                                    "text": {
+                                                      "type": "array",
+                                                        "items": {
+                                                          "type": "string"
+                                                        },
+                                                    }
+                                                  },
+                                                  "strict": True,
+                                                  "required": ["text"],
+                                                }
+                                              }
+                                            },
+                            max_tokens=300,
+                       )
                         try:
-                            output = json.loads(response.choices[0].message.content)
-                            print(f'{line_id} -> [green]{output["text"][0]["line"]}[green]')
-                            line.update_text(output["text"][0]["line"])
-                            text_dict[tr_id][line_id]['ocr'] = output["text"][0]["line"]
-                            if util.find_spec('pageplus.utils.dinglehopper.edit_distance') is not None and \
-                                'analytics' in profilelevel:
-                                from pageplus.cli.dinglehopper import count_diff
-                                line_diff = count_diff(text, output["text"][0]["line"])
+                            import json_repair
+                            output = json_repair.repair_json(response.choices[0].message.content, return_objects=True)
+                            ocr_text = ' '.join(output["text"]) if isinstance(output["text"], list) else output["text"]
+                            print(f'{line_id} -> [green]{ocr_text}[green]')
+                            line.update_text(ocr_text)
+                            text_dict[tr_id][line_id]['ocr'] = ocr_text
+                            if 'analytics' in profilelevel:
+                                line_diff = count_diff(text, ocr_text)
                                 page_diff.update(line_diff)
+                                page_metrics.append(get_metrics(text, ocr_text, line_diff))
                         except:
                             print(f"{line_id} -> [red] Error: No valid output[red]")
                     except Exception as e:
@@ -485,16 +516,25 @@ Only output the JSON!"""
                         continue
             if 'results' in profilelevel:
                 ocr.profile.results.append({xml_file.name :text_dict})
+            ocr.profile.stats['pages'] += any([1 for region in text_dict.values() if len(region.values()) > 0])
+            ocr.profile.stats['lines'] += sum([len(region.values()) for region in text_dict.values()])
             if 'analytics' in profilelevel:
-                ocr.profile.analytics.append({xml_file.name : dict(page_diff)})
+                metrics = summarize_metrics(page_metrics) if len(page_metrics) > 0 else {}
+                all_metrics.extend(page_metrics)
+                ocr.profile.analytics.append({xml_file.name : {'metrics': metrics,
+                                                               'confusions': dict(page_diff)}})
                 all_diff.update(page_diff)
             if not dry_run:
                 fout = xml_file if overwrite else xml_file.parent.joinpath(llm_api.model.replace('.','_').replace(':','-')).joinpath(xml_file.name)
                 fout.parent.mkdir(parents=True, exist_ok=True)
                 logging.info(f'Wrote modified xml file to output directory: {fout}')
                 page.save_xml(fout)
-        if 'analytics' in profilelevel:
-            ocr.profile.analytics_summary = dict(all_diff)
+        if 'summary' in profilelevel:
+            if 'analytics' in profilelevel:
+                metrics = summarize_metrics(all_metrics)
+                ocr.profile.summary['analytics'] = {'metrics': metrics,
+                                             'confusions': dict(all_diff)}
+
 
 if __name__ == "__main__":
     app()

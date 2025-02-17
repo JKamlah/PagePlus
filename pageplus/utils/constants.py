@@ -17,6 +17,7 @@ class ProfileLevel(str, Enum):
     params = "params"
     results = "results"
     analytics = "analytics"
+    summary = "summary"
 
 
 class PagePlus(str, Enum):
