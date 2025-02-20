@@ -38,6 +38,7 @@ if (spec := util.find_spec('litellm')) is None:
         Before llm can be used, please use this install command
         to install litellm!
         """
+        from pageplus.utils.constants import Environments
         _install()
         set_key(find_dotenv(), Environments.LLM.name.upper() + "_PROVIDER", "OPENAI")
 
@@ -333,6 +334,28 @@ Only output the JSON!"""
             except Exception as e:
                 print("An error occurred during completion:", e)
 
+    def ocr_settings(ctx: typer.Context, param: typer.CallbackParam, value):
+        model, api_key, api_url, provider = llm_api.model, llm_api.api_key, llm_api.api_base_url, llm_api.provider
+        def copy_provider():
+            set_provider(llm_api.llmprovider(), 'OCR')
+            llm_api.api_base_url = api_url
+            llm_api.api_key = api_key
+            llm_api.model = model
+
+        match param.name:
+            case "provider" if (value and value != llm_api.provider):
+                copy_provider()
+            case "api_base_url" if (value and value != llm_api.api_base_url):
+                if not llm_api.provider.endswith('OCR'):
+                    copy_provider()
+                llm_api.api_base_url = model
+            case "model_name" if (value and value != llm_api.model):
+                if not llm_api.provider.endswith('OCR'):
+                    copy_provider()
+                llm_api.model = value
+            case _:
+                pass
+        return None
 
 
     @app.command()
@@ -341,6 +364,12 @@ Only output the JSON!"""
     typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None,
             image_folder: Annotated[str, typer.Argument(exists=True,
                                                         help="Folder to the images relative to page-xml (default same as input)")] = '.',
+            provider: Annotated[
+                str, typer.Option(help="Set the model on the fly, otherwise set via 'llm set-model'",
+                                  callback=ocr_settings)] = None,
+            api_base_url: Annotated[str, typer.Option(help="Set API Base URL'", callback=ocr_settings)] = None,
+            model_name: Annotated[str, typer.Option(help="Set the model on the fly, otherwise set via 'llm set-model'",
+                                                    callback=ocr_settings)] = None,
             same_names: Annotated[bool, typer.Option(
                 help="Use the page-xml filename to search for the image (default use imageFilename from pagexml file)")] = False,
             image_extension: Annotated[str, typer.Option(
@@ -352,6 +381,8 @@ Only output the JSON!"""
                 help="A regular expression, if specific textlines should be filtered")] = None,
             textline_tagfilter: Annotated[str, typer.Option(
                 help="A regular expression, if specific textlines should be filtered")] = None,
+            only_user_prompt: Annotated[bool, typer.Option(help="Deactivate system prompts (for older API)")] = False,
+            json_object: Annotated[bool, typer.Option(help="Use json_object instead of json_schema.")] = False,
             profile: Annotated[str, typer.Option(help="Profile function with tag (default:'' no profiling active.")] = '',
             profilelevel: Annotated[List[ProfileLevel],
                 typer.Option(
@@ -458,7 +489,7 @@ Only output the JSON!"""
                             n=1,  # Generate 1 response
                             messages=[
                                 {
-                                    "role": "system",
+                                    "role": "user" if only_user_prompt else "system",
                                     "content": [
                                         {"type": "text", "text": system},
                                     ]
@@ -477,7 +508,7 @@ Only output the JSON!"""
                                     ]
                                 }
                             ],
-                            response_format= {"type": "json_schema",
+                            response_format= {"type": "json_object" if json_object else "json_schema",
                                               "json_schema": {
                                                 "name": "ocrresponse",
                                                 "strict": True,
@@ -534,7 +565,6 @@ Only output the JSON!"""
                 metrics = summarize_metrics(all_metrics)
                 ocr.profile.summary['analytics'] = {'metrics': metrics,
                                              'confusions': dict(all_diff)}
-
 
 if __name__ == "__main__":
     app()
