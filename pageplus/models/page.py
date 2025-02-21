@@ -12,6 +12,7 @@ from pageplus.io.parser import parse_xml
 from pageplus.io.writer import write_xml
 from pageplus.models.table_elements import TableRegion
 from pageplus.models.text_elements import TextRegion
+from pageplus.models.basic_elements import CoordElement
 
 
 @dataclass
@@ -43,7 +44,7 @@ class Page:
         self.regions.tableregions = [TableRegion(ele, self.ns, parent=self) \
                                      for ele in self.root.iter(table_region_xpath)]
 
-    def get_region_reading_order_ids(self, mode: str = 'auto'):
+    def get_region_reading_order_ids(self, mode: str = 'auto', region_types = ('TableRegion,TextRegion')):
         ro_ids = []
         if mode in ['auto', 'reading_order']:
             reading_order = self.tree.find(f".//{{{self.ns}}}ReadingOrder")
@@ -59,7 +60,7 @@ class Page:
         if mode == 'document' or (not ro_ids and mode == 'auto'):
             for region in self.root.findall(f".//{{{self.ns}}}*"):
                 region_type = ET.QName(region.tag).localname
-                if region_type in ['TableRegion', 'TextRegion']:
+                if region_type in region_types:
                     region_id = region.attrib.get('id', None)  # Get the ID attribute
                     if region_id:
                         ro_ids.append(region_id)
@@ -203,10 +204,18 @@ class Page:
             fulltext = [unicode_ele.text for textline in self.root.iterfind(f'.//{{{self.ns}}}TextLine')
                         for unicode_ele in textline.iterfind(f'.//{{{self.ns}}}Unicode') if unicode_ele.text]
 
+
         if dehyphenate and fulltext:
             fulltext = self.dehyphe(fulltext)
 
         return delimiter.join(fulltext)
+
+    def get_id(self):
+        if "pcGtsId" in self.root.attrib:
+            return self.root.attrib["pcGtsId"]
+
+    def get_coordinates(self, returntype: str = "string"):
+        return self.page_coords(returntype)
 
     def page_coords(self, returntype: str = "string"):
         """
@@ -235,6 +244,22 @@ class Page:
         """
         page_info = self.root.find(f"{{{self.ns}}}Page")
         return int(page_info.attrib['imageWidth']), int(page_info.attrib['imageHeight'])
+
+    def print_space(self):
+        """
+        Returns the print space coords as string.
+        """
+        print_space = self.root.find(f".//{{{self.ns}}}PrintSpace")
+        if print_space is not None:
+            return CoordElement(print_space, self.ns, None)
+
+    def border(self):
+        """
+        Returns the print space coords as string.
+        """
+        border = self.root.find(f".//{{{self.ns}}}Border")
+        if border is not None:
+            return CoordElement(border, self.ns, None)
 
     def imageFilename(self) -> str:
         """

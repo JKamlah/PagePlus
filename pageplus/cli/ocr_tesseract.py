@@ -49,8 +49,7 @@ else:
     typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None,
             image_folder: Annotated[str, typer.Argument(exists=True,
                                                         help="Folder to the images relative to page-xml (default same as input)")] = '.',
-            model: Annotated[str, typer.Option(help="Modelname (should exist in Tessdata-Path)")] = None,
-            tessdata_path: Annotated[str, typer.Option(help="Tessdata-Path")] = None,
+            model_name: Annotated[str, typer.Option(help="Name of the model (should exist in Tessdata-Directory)")] = None,
             same_names: Annotated[bool, typer.Option(
                 help="Use the page-xml filename to search for the image (default use imageFilename from pagexml file)")] = False,
             image_extension: Annotated[str, typer.Option(
@@ -74,7 +73,6 @@ else:
         """
         OCR with the existing layout information. Existing text will be overwritten.
         """
-        # API details
         # Turn profiling on
         ocr.profile = ProfileFnRet()
         ocr.profile.name = profile
@@ -88,7 +86,7 @@ else:
             from pageplus.cli.dinglehopper import count_diff, get_metrics, summarize_metrics
 
         if 'params' in profilelevel:
-            ocr.profile.params = {'model': model,
+            ocr.profile.params = {'model': model_name,
                                   'text-filter': text_filter,
                                   'region-tagfilter': region_tagfilter,
                                   'textline-tagfilter': textline_tagfilter}
@@ -138,14 +136,14 @@ else:
                     image_snippet, bbox = crop_image_by_polygon(image,
                                                                 line.get_coordinates(returntype='mrr'),
                                                                 patch_size=1,
-                                                                buffer=16,
+                                                                buffer=8,
                                                                 save_snippet=save_snippets,
                                                                 transparent_background=False,
                                                                 square_canvas=False,
                                                                 snippet_dir=imageDir.joinpath(
                                                                     imageFilename.rsplit('.', 1)[0]),
                                                                 snippet_name='snippet_' + line_id)
-                    ocr_text = pytesseract.image_to_string(image_snippet, lang=model, config='--psm 13').strip()
+                    ocr_text = pytesseract.image_to_string(image_snippet, lang=model_name, config='--psm 13').strip()
                     print(f'{line_id} -> [green]{ocr_text}[green]')
                     line.update_text(ocr_text)
                     text_dict[tr_id][line_id]['ocr'] = ocr_text
@@ -165,7 +163,7 @@ else:
                 all_diff.update(page_diff)
             if not dry_run:
                 fout = xml_file if overwrite else xml_file.parent.joinpath(
-                    Path(model).name.replace('.', '_').replace(':', '-')).joinpath(xml_file.name)
+                    model_name.replace('.', '_').replace(':', '-')).joinpath(xml_file.name)
                 fout.parent.mkdir(parents=True, exist_ok=True)
                 logging.info(f'Wrote modified xml file to output directory: {fout}')
                 page.save_xml(fout)

@@ -45,7 +45,7 @@ if (spec := util.find_spec('litellm')) is not None:
             modelname = get_key(find_dotenv(), self.environment.as_prefix()+self.prefix_provider()+'MODEL')
             modelname = modelname if modelname else ''
             if prefix and modelname != '':
-                modelname = self.llmprovider().lower().replace('_01','').replace('_02','').replace('_03','')
+                modelname = self.llmprovider().lower()
             return modelname if modelname else ''
 
 
@@ -57,14 +57,14 @@ if (spec := util.find_spec('litellm')) is not None:
             None
             """
             try:
-                self.check_model(modelname)
+                assert self.check_model(modelname)
                 set_key(find_dotenv(), self.environment.as_prefix()+self.prefix_provider()+'MODEL', modelname)
-                print("[green]Model updated successfully.[green]")
+                print(f"[green]Model updated successfully to:[/green] {self.model}")
             except Exception as e:
-                print(f"[red]Failed to update the model: {e}[red]")
+                print(f"[red]Failed to update the current model:[/red] {self.model}")
 
 
-        def check_model(self, modelname: str) -> None:
+        def check_model(self, modelname: str) -> bool:
             """
             Check if model is compatible with the current provider selection list
             Returns:
@@ -76,10 +76,13 @@ if (spec := util.find_spec('litellm')) is not None:
             modellist = [model['id'] for model in response['data']]
             if modellist is None:
                 print(f"[ModelCheck] [orange]No model selection available for provider {self.llmprovider().value}.[/orange]")
+                return True
             elif modelname in modellist:
                 print(f"[ModelCheck] [green]Model exists in provider {self.llmprovider().value} model selection.[/green]")
+                return True
             else:
                 print(f"[ModelCheck] [red]Model is not in selection options for {self.llmprovider().value}.[/red]")
+                return False
 
         def show_models(self):
             """
@@ -91,7 +94,6 @@ if (spec := util.find_spec('litellm')) is not None:
             response.raise_for_status()
             response =  response.json()
             modellist = response['data']
-            #print(modellist)
             if modellist:
                 print(f"[green]Available models for provider {self.provider.replace('__',' - ')}[/green]")
                 table = Table(title=f"[green]Models overview[/green]")

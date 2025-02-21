@@ -32,18 +32,25 @@ class CoordElement:
 
     def get_tag(self) -> str:
         """ Returns the structure tag of the element. """
-        custom = self.xml_element.attrib["custom"]
-        customdict = custom_to_dict(custom)
-        return customdict.get('structure', {}).get('type', '')
+        if "type" in self.xml_element.attrib:
+            return self.xml_element.attrib["type"]
+        if "custom" in self.xml_element.attrib:
+            custom = self.xml_element.attrib["custom"]
+            customdict = custom_to_dict(custom)
+            return customdict.get('structure', {}).get('type', '')
+        return ''
 
     def set_tag(self, tag:str) -> None:
         """ Set the structure tag of the element. """
-        custom = self.xml_element.attrib["custom"]
-        if custom is None:
-            customdict = {'structure': {'type': tag}}
-        else:
+        if "type" in self.xml_element.attrib:
+            self.xml_element.attrib["type"] = tag
+            return
+        if "custom" in self.xml_element:
+            custom = self.xml_element.attrib["custom"]
             customdict = custom_to_dict(custom)
             customdict['structure']['type'] = tag
+        else:
+            customdict = {'structure': {'type': tag}}
         self.xml_element.attrib["custom"] = dict_to_custom(customdict)
         return
 
@@ -86,6 +93,12 @@ class CoordElement:
     def _ensure_closed_ring(self, coord_tuples):
         """ Ensures that the list of coordinate tuples forms a closed ring. """
         return coord_tuples + [coord_tuples[0]] if coord_tuples[0] != coord_tuples[-1] else coord_tuples
+
+    def get_language(self) -> str:
+        """ Returns the language. """
+        for language in ['primaryLanguage', 'secondaryLanguage', 'language']:
+            if language in self.xml_element.attrib:
+                return self.xml_element.attrib[language]
 
     def update_coordinates(self, data, inputtype: str = "polygon"):
         """

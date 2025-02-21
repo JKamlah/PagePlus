@@ -38,9 +38,8 @@ if (spec := util.find_spec('litellm')) is None:
         Before llm can be used, please use this install command
         to install litellm!
         """
-        from pageplus.utils.constants import Environments
         _install()
-        set_key(find_dotenv(), Environments.LLM.name.upper() + "_PROVIDER", "OPENAI")
+
 
 else:
 
@@ -67,7 +66,7 @@ else:
     ### SETTINGS ###
     @app.command(rich_help_panel="Settings")
     def set_provider(provider: Annotated[LLMProvider, typer.Argument(help="LiteLLM Provider")] = "OpenAI",
-                     service: Annotated[str, typer.Argument(help="Service")] = None) -> None:
+                     service: Annotated[str, typer.Argument(help="Service")] = "DEFAULT") -> None:
         """
         Set provider for LiteLLM (Default: OpenAI)
         Returns:

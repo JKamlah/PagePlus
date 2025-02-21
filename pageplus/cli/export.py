@@ -15,6 +15,9 @@ from pageplus.models.page import Page
 from pageplus.utils import fs
 from pageplus.utils.fs import collect_xml_files, transform_inputs, open_folder_default, find_image
 from pageplus.utils.image import get_image, crop_image_by_polygon
+from pageplus.models.basic_elements import Region
+from pageplus.models.text_elements import TextRegion, Textline
+from pageplus.models.table_elements import TableRegion
 
 app = typer.Typer()
 
@@ -79,8 +82,7 @@ typer.Argument(exists=True, help="Paths to the XML files to be checked.", callba
                 snippet_name = imageFilename.rsplit('.', 1)[0]+'_'+line_id
                 image_snippet, bbox = crop_image_by_polygon(image,
                                                       line.get_coordinates(returntype='mrr'),
-                                                      min_image_size= (120, 60),
-                                                      min_scale_size=(1, 1),
+                                                      square_canvas=False,
                                                       buffer = 5,
                                                       transparent_background = transparent_background,
                                                       save_snippet=not dry_run,
@@ -262,6 +264,184 @@ def dsv(
             dsvfile.close()
         fs.open_folder(filepath.parent) if open_folder else None
 
+
+@app.command()
+def page_to_alto(
+        inputs: Annotated[List[str], typer.Argument(exists=True,
+                                                    help="Iterable of paths to the PAGE XML files or workspaces.",
+                                                    callback=transform_inputs)] = None,
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Path to the output directory where the text files will be saved. "
+                 "If not specified, an output directory named Fulltext will be created "
+                 "in each input file’s parent directory.")] = None) -> None:
+
+    """
+    Converts PAGE XML files to ALTO XML files.
+
+    Processes each PAGE XML file, extracts text and coordinates, and writes
+    them to an ALTO XML file.
+    This function and subfunction are heavily influenced by https://github.com/OCR-D/page-to-alto/ (thanks)
+    """
+    from lxml import etree as ET
+    from pageplus.utils.io import (setxml, set_alto_id_from_page_id ,
+                                   REGION_PAGE_TO_ALTO,
+                                   HYPHEN_CHARS,
+                                   set_alto_xywh_from_coords,
+                                   set_alto_shape_from_coords,
+                                   set_alto_lang_from_page_lang)
+
+    # ToDO: Support older versions?
+    alto_version = "4.2"
+    xml_files = collect_xml_files(map(Path, inputs))
+    # raise error if no xml files are found
+    if not xml_files:
+        raise FileNotFoundError('No xml files found in input directory')
+
+    # loop through all xml files
+    for xml_file in track(xml_files, description="Exporting data to a ALTO XML file.."):
+        # get filename
+        filename = xml_file.name
+        page = Page(xml_file)
+
+        # ALTO namespace and schema settings.
+        alto_ns = f"http://www.loc.gov/standards/alto/ns-v{alto_version.split('.')[0]}#"
+        xsd_url = f"http://www.loc.gov/standards/alto/v{alto_version.split('.')[0]}/alto-{alto_version}.xsd"
+
+        # Create ALTO root element.
+        alto = ET.Element("alto", nsmap={None: alto_ns})
+        alto.set("{http://www.w3.org/2001/XMLSchema-instance}schemaLocation", f"{alto_ns} {xsd_url}")
+
+        # Create Description element.
+        description = ET.SubElement(alto, "Description")
+        measurement_unit = ET.SubElement(description, "MeasurementUnit")
+        measurement_unit.text = "pixel"
+        source_info = ET.SubElement(description, "sourceImageInformation")
+        file_name = ET.SubElement(source_info, "fileName")
+        style_info = ET.SubElement(alto, "Styles")
+        tag_info = ET.SubElement(alto, "Tags")
+        # Use the PAGE <Page> element's imageFilename attribute if available.
+        file_name.text = page.imageFilename()
+
+        # Create Layout.
+        layout = ET.SubElement(alto, "Layout")
+        alto_page = ET.SubElement(layout, "Page")
+        setxml(alto_page, "ID", page.get_id())
+        setxml(alto_page, "PHYSICAL_IMG_NR", 0)
+        setxml(alto_page, "WIDTH", page.page_size()[0])
+        setxml(alto_page, "HEIGHT", page.page_size()[1])
+
+        # Create PrintSpace.
+        alto_printspace = ET.SubElement(alto_page, "PrintSpace")
+        print_space = page.border()
+        if print_space is None:
+            print_space = page.print_space()
+        if print_space is not None:
+            bbox = print_space.get_coordinates('mrr').bounds
+            page_attr = {'HPOS': bbox[0],'VPOS':bbox[1], 'WIDTH':bbox[2]-bbox[0], 'HEIGHT':bbox[3]-bbox[1]}
+            for attr in ["HEIGHT", "WIDTH", "HPOS", "VPOS"]:
+                setxml(alto_printspace, attr, int(page_attr.get(attr)))
+            set_alto_shape_from_coords(alto_printspace, print_space)
+
+        else:
+            # Assume full page if no PrintSpace.
+            for attr in ["HEIGHT", "WIDTH", "HPOS", "VPOS"]:
+                val = alto_page.get(attr)
+                if val:
+                    setxml(alto_printspace, attr, val)
+                else:
+                    setxml(alto_printspace, attr, 0)
+            set_alto_shape_from_coords(alto_printspace, page)
+
+        # Reading Order
+        ro = page.get_region_reading_order_ids('auto', set(REGION_PAGE_TO_ALTO.keys()))
+
+        layouttags = {}
+        # Process each PAGE TextRegion.
+        for region in page.root.findall(f".//{{{page.ns}}}*"):
+            region_tag = ET.QName(region.tag).localname
+            if region_tag not in REGION_PAGE_TO_ALTO.keys():
+                continue
+            region = {'Region': Region,
+                      'TextRegion': TextRegion,
+                      'TableRegion': TableRegion}.get(region_tag, Region)(region, page.ns, region.getparent())
+            alto_block_type = REGION_PAGE_TO_ALTO.get(region_tag)
+            block = ET.SubElement(alto_printspace, alto_block_type)
+            set_alto_id_from_page_id(block, region)
+            set_alto_xywh_from_coords(block, region)
+            set_alto_shape_from_coords(block, region)
+            set_alto_lang_from_page_lang(block, region)
+            layouttag = region.get_tag()
+            layouttag = 'paragraph' if 'TextRegion' == region_tag and not layouttag else layouttag
+            if layouttag:
+                layouttags[layouttag] = layouttag
+                setxml(block, 'TAGREFS', layouttag)
+            if region.get_id() in ro and ro.index(region.get_id()) < len(ro)-1:
+                ro.index(region.get_id())
+                setxml(block, 'IDNEXT', ro[ro.index(region.get_id())+1])
+
+
+            # Process TextLines within the region.
+            if region_tag in ['TextRegion', 'TableRegion']:
+                for line in region.textlines:
+                    tl = ET.SubElement(block, "TextLine")
+                    set_alto_id_from_page_id(tl, line)
+                    set_alto_xywh_from_coords(tl, line)
+                    set_alto_shape_from_coords(tl, line)
+                    set_alto_lang_from_page_lang(tl, line)
+                    layouttag = line.get_tag()
+                    if layouttag:
+                        layouttags[layouttag] = layouttag
+                        setxml(tl, 'TAGREFS', layouttag)
+                    words =  list(line.xml_element.iter(f"{{{page.ns}}}Word"))
+                    if words:
+                        aggregated_text = []
+                        for idx, word in enumerate(words):
+                            word = Textline(word, page.ns, line)
+                            word_text = word.get_text()
+                            if idx < len(words) - 1 and word_text and word_text[-1] in HYPHEN_CHARS:
+                                # Remove trailing hyphen and add a HYP element.
+                                hyphen_char = word_text[-1]
+                                word_text = word_text[:-1]
+                                hyp = ET.SubElement(tl, "HYP")
+                                setxml(hyp, "CONTENT", hyphen_char)
+                            string_el = ET.SubElement(tl, "String")
+                            set_alto_id_from_page_id(string_el, word)
+                            set_alto_xywh_from_coords(string_el, word)
+                            set_alto_shape_from_coords(string_el, word)
+                            set_alto_lang_from_page_lang(string_el, word)
+                            layouttag = word.get_tag()
+                            if layouttag:
+                                layouttags[layouttag] = layouttag
+                                setxml(string_el, 'TAGREFS', layouttag)
+                            setxml(string_el, "CONTENT", word_text)
+                            aggregated_text.append(word_text)
+                            if idx < len(words) - 1:
+                                ET.SubElement(tl, "SP")
+                        #te = ET.SubElement(tl, "TextEquiv")
+                        #unicode_el = ET.SubElement(te, "Unicode")
+                        #unicode_el.text = " ".join(aggregated_text)
+                    else:
+                        # Use aggregated TextEquiv if no Word elements.
+                        line_text = line.get_text()
+                        if line_text.strip():
+                            string_el = ET.SubElement(tl, "String")
+                            set_alto_id_from_page_id(string_el, line, "w0")
+                            set_alto_xywh_from_coords(string_el, line)
+                            #set_alto_shape_from_coords(string_el, word)
+                            set_alto_lang_from_page_lang(string_el, line)
+                            setxml(string_el, "CONTENT", line_text.strip())
+                            set_alto_shape_from_coords(string_el, line)
+        # Update Layouttags
+        for id,label in layouttags.items():
+            tag = ET.SubElement(tag_info, 'LayoutTag')
+            tag.attrib['ID'] = id
+            tag.attrib['LABEL'] = label
+        # Write out the ALTO XML.
+        filepath = Path(f"{xml_file.parent}/ALTO/{filename}") if outputdir is None else outputdir / filename
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        tree = ET.ElementTree(alto)
+        tree.write(filepath, pretty_print=True, xml_declaration=True, encoding="UTF-8")
+        print(f"Converted PAGE XML '{filename}' to ALTO XML '{filepath}'.")
 
 if __name__ == "__main__":
     app()

@@ -46,14 +46,14 @@ class API:
     from typing import Tuple
     @provider.setter
     def provider(self, providername: Annotated[Provider, typer.Argument(help="Provider and service name")],
-                 service: Annotated[str, typer.Argument(help="Service")] = None) -> None:
+                 service: Annotated[str, typer.Argument(help="Service")] = "DEFAULT") -> None:
         """
         Set provider
         Returns:
         None
         """
         try:
-            provider = providername.name.upper() if service is None else providername.name.upper()+'__'+service.upper()
+            provider = providername.name.upper()+'__'+service.upper()
             set_key(find_dotenv(), self.environment.name.upper() + "_PROVIDER", provider)
             print("[green]The provider updated successfully.[green]")
         except Exception as e:

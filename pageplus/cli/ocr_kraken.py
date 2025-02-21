@@ -72,10 +72,10 @@ else:
     @profile('kraken-ocr')
     def ocr(inputs: Annotated[List[str],
     typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None,
-            model_path: Annotated[Path, typer.Argument(exists=True,
-                                                       help="Path to *.mlmodel")] = None,
             image_folder: Annotated[str, typer.Argument(exists=True,
                                                         help="Folder to the images relative to page-xml (default same as input)")] = '.',
+            model_name: Annotated[str, typer.Option(help="Name of the model (should exist in Model-Directory)")] = None,
+            model_dir: Annotated[Path, typer.Option(help="Directory of the model")] = None,
             same_names: Annotated[bool, typer.Option(
                 help="Use the page-xml filename to search for the image (default use imageFilename from pagexml file)")] = False,
             image_extension: Annotated[str, typer.Option(
@@ -111,11 +111,10 @@ else:
                   "It will be disabled.")
         elif 'analytics' in profilelevel:
             from pageplus.cli.dinglehopper import count_diff, get_metrics, summarize_metrics
-
-        model_path = '/home/jkamlah/Coding/ocr/kraken/models/german_print_best.mlmodel'
-
+        model_name = model_name if model_name.endswith('.mlmodel') else model_name+'.mlmodel'
+        model_path = model_dir.joinpath(model_name)
         if 'params' in profilelevel:
-            ocr.profile.params = {'model': model_path,
+            ocr.profile.params = {'model': model_path.with_suffix('').name,
                                   'text-filter': text_filter,
                                   'region-tagfilter': region_tagfilter,
                                   'textline-tagfilter': textline_tagfilter}
@@ -168,9 +167,10 @@ else:
                     # Cut image
                     image_snippet, bbox = crop_image_by_polygon(image,
                                                                 line.get_coordinates(returntype='mrr'),
-                                                                patch_size=1,
-                                                                buffer=16,
+                                                                patch_size=2,
+                                                                buffer=12,
                                                                 save_snippet=save_snippets,
+                                                                transparent_background=False,
                                                                 square_canvas=False,
                                                                 snippet_dir=imageDir.joinpath(
                                                                     imageFilename.rsplit('.', 1)[0]),
@@ -198,12 +198,13 @@ else:
                     )
                     for pred in it:
                         ocr_text = pred.prediction
-                        graphs = [{
-                            'c': letter,
-                            'poly': poly,
-                            'confidence': float(confidence)
-                        } for letter, poly, confidence in zip(
-                            pred.prediction, pred.cuts, pred.confidences)]
+                        #TODO: Is there a need to impelement poly and confidence?
+                        #graphs = [{
+                        #    'c': letter,
+                        #    'poly': poly,
+                        #    'confidence': float(confidence)
+                        #} for letter, poly, confidence in zip(
+                        #    pred.prediction, pred.cuts, pred.confidences)]
 
                         print(f'{line_id} -> [green]{ocr_text}[green]')
                         line.update_text(ocr_text)
@@ -224,7 +225,7 @@ else:
                 all_diff.update(page_diff)
             if not dry_run:
                 fout = xml_file if overwrite else xml_file.parent.joinpath(
-                    Path(model_path).name.replace('.', '_').replace(':', '-')).joinpath(xml_file.name)
+                    model_path.with_suffix('').name.replace('.', '_').replace(':', '-')).joinpath(xml_file.name)
                 fout.parent.mkdir(parents=True, exist_ok=True)
                 logging.info(f'Wrote modified xml file to output directory: {fout}')
                 page.save_xml(fout)

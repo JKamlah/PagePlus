@@ -18,6 +18,8 @@ requests = "^2.31.0"
 urllib3 = "^2"
 openpyxl = "^3"
 json_repair = "^0.36.1"
+pillow = "^11.1.0"
+langcodes = "^3.5.0"
 
 
 [build-system]
