@@ -276,7 +276,7 @@ def page_to_alto(
                  "in each input file’s parent directory.")] = None) -> None:
 
     """
-    Converts PAGE XML files to ALTO XML files.
+    Converts PAGE XML files to ALTO XML files. (experimental)
 
     Processes each PAGE XML file, extracts text and coordinates, and writes
     them to an ALTO XML file.

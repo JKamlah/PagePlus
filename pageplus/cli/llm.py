@@ -474,7 +474,6 @@ Only output the JSON!"""
                                                           snippet_name='snippet_'+line_id)
                     # Convert image to Base64
                     image_snippet_b64 = image_to_base64(image_snippet)
-
                     # Process multiple requests
                     try:
                         response = completion(
@@ -483,8 +482,8 @@ Only output the JSON!"""
                             api_key=llm_api.api_key,
                             timeout=llm_api.keep_alive_time,
                             stream=False,
-                            temperature=0,
-                            top_p=0,
+                            temperature= 0.000001, # Can create problems if set to 0
+                            top_p= 0.000001, # Can create problems if set to 0
                             n=1,  # Generate 1 response
                             messages=[
                                 {
