@@ -1,27 +1,26 @@
 import csv
 import re
+import sys
 from datetime import datetime
 from enum import Enum
+from importlib import util
 from pathlib import Path
 from typing import List, Optional
-from importlib import util
-import sys
 
 import typer
+from PIL import Image
 from lxml import etree as ET
 from rich.progress import track
 from shapely import LineString
 from typing_extensions import Annotated
 
 from pageplus.io.logger import logging
-from pageplus.models.basic_elements import Region
 from pageplus.models.page import Page
-from pageplus.models.table_elements import TableRegion
-from pageplus.models.text_elements import TextRegion, Textline
+from pageplus.models.text_elements import Textline
 from pageplus.utils import fs
+from pageplus.utils.constants import DrawingsPDF
 from pageplus.utils.fs import (collect_xml_files,
                                transform_inputs,
-                               transform_input,
                                open_folder_default,
                                find_image)
 from pageplus.utils.image import get_image, crop_image_by_polygon
@@ -31,7 +30,6 @@ from pageplus.utils.io import (setxml, set_alto_id_from_page_id,
                                set_alto_xywh_from_coords,
                                set_alto_shape_from_coords,
                                set_alto_lang_from_page_lang)
-from pageplus.utils.constants import DrawingsPDF
 
 app = typer.Typer()
 
@@ -503,7 +501,9 @@ else:
             if not imagePath:
                 print(f"Warning: Image {imageFilename} not found in {imageDir}")
                 continue
-            canvas = page_to_pdf(page, imagePath, draw=draw, dpi=dpi, substitutions=substitutions)
+            image = Image.open(imagePath)
+            image = image.convert('RGB')
+            canvas = page_to_pdf(page, image, draw=draw, dpi=dpi, substitutions=substitutions)
             pdf_files.append(canvas.to_pdf())
 
 

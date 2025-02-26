@@ -40,7 +40,7 @@ if (spec := util.find_spec('pikepdf')) is not None:
 
 
     def page_to_pdf(page: Page,
-                    image_filename: Path | None = None,
+                    image: Image = None,
                     fontname: Name = Name("/f-0-0"),
                     font: Font = GlyphlessFont(),
                     invisible_text: bool = True,
@@ -144,15 +144,15 @@ if (spec := util.find_spec('pikepdf')) is not None:
 
         # draw = ['region','line','baseline']
         # Put the image in the background
-        if image_filename is not None and (draw is not None and not draw):
-            canvas.do.draw_image(image_filename, 0, 0, width=width * SCALING, height=height * SCALING)
+        if image is not None and (draw is not None and draw):
+            canvas.do.draw_image(image, 0, 0, width=width * SCALING, height=height * SCALING)
         with canvas.do.save_state(cm=page_matrix):
             for region in page.get_ordered_regions():
                 region_tag = region.get_localname()
                 if region_tag in ['TextRegion', 'TableRegion']:
                     _add_textregion(canvas, region)
         # Put the image in the foreground
-        if image_filename is not None and (draw is None or draw):
-            canvas.do.draw_image(image_filename, 0, 0, width=width * SCALING, height=height * SCALING)
+        if image is not None and (draw is None or not draw):
+            canvas.do.draw_image(image, 0, 0, width=width * SCALING, height=height * SCALING)
 
         return canvas

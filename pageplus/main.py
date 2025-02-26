@@ -16,6 +16,8 @@ logging.getLogger("websockets").setLevel(logging.WARNING)
 logging.getLogger("asyncio").setLevel(logging.WARNING)
 logging.getLogger("kraken").setLevel(logging.WARNING)
 logging.getLogger("pytesseract").setLevel(logging.WARNING)
+logging.getLogger("PIL").setLevel(logging.WARNING)
+logging.getLogger("pikepdf").setLevel(logging.WARNING)
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 
 
