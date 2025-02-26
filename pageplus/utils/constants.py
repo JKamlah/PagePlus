@@ -9,6 +9,7 @@ class WorkState(str, Enum):
     ORIGINAL = "original"
     MODIFIED = "modified"
 
+
 class ProfileLevel(str, Enum):
     """
     Level of function profiling
@@ -18,6 +19,16 @@ class ProfileLevel(str, Enum):
     results = "results"
     analytics = "analytics"
     summary = "summary"
+
+
+class DrawingsPDF(str, Enum):
+    """
+    Level of function profiling
+    """
+    region = "region"
+    line = "line"
+    baseline = "baseline"
+    word = "word"
 
 
 class PagePlus(str, Enum):
@@ -32,8 +43,10 @@ class PagePlus(str, Enum):
     def as_prefix_workspace_dir(self):
         return f"{self.name.upper()}_WS_DIR"
 
+
 class Provider(str, Enum):
     pass
+
 
 class LLMProvider(Provider):
     OPENAI              = "OpenAI"

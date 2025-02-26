@@ -1,23 +1,37 @@
 import csv
+import re
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional, Pattern
-import re
+from typing import List, Optional
+from importlib import util
+import sys
 
 import typer
+from lxml import etree as ET
 from rich.progress import track
 from shapely import LineString
 from typing_extensions import Annotated
 
 from pageplus.io.logger import logging
-from pageplus.models.page import Page
-from pageplus.utils import fs
-from pageplus.utils.fs import collect_xml_files, transform_inputs, open_folder_default, find_image
-from pageplus.utils.image import get_image, crop_image_by_polygon
 from pageplus.models.basic_elements import Region
-from pageplus.models.text_elements import TextRegion, Textline
+from pageplus.models.page import Page
 from pageplus.models.table_elements import TableRegion
+from pageplus.models.text_elements import TextRegion, Textline
+from pageplus.utils import fs
+from pageplus.utils.fs import (collect_xml_files,
+                               transform_inputs,
+                               transform_input,
+                               open_folder_default,
+                               find_image)
+from pageplus.utils.image import get_image, crop_image_by_polygon
+from pageplus.utils.io import (setxml, set_alto_id_from_page_id,
+                               REGION_PAGE_TO_ALTO,
+                               HYPHEN_CHARS,
+                               set_alto_xywh_from_coords,
+                               set_alto_shape_from_coords,
+                               set_alto_lang_from_page_lang)
+from pageplus.utils.constants import DrawingsPDF
 
 app = typer.Typer()
 
@@ -32,7 +46,7 @@ class ReadingOrderMode(str, Enum):
 @app.command()
 def line_images(inputs: Annotated[List[str],
 typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None,
-        image_folder: Annotated[str, typer.Argument(exists=True,
+        image_folder: Annotated[str, typer.Option(exists=True,
                                                     help="Folder to the images relative to page-xml (default same as input)")] = '.',
         same_names: Annotated[bool, typer.Option(
             help="Use the page-xml filename to search for the image (default use imageFilename from pagexml file)")] = False,
@@ -217,8 +231,8 @@ def dsv(
         line_infos = {'id': [], 'text': [], 'region': [],
                       'start': [], 'mean': [], 'end': [],
                       'area': [], 'width': [], 'length': []}
-        for rid, textregion in enumerate(page.regions.textregions):
-            for line in textregion.textlines:
+        for rid, region in enumerate(page.get_ordered_regions()):
+            for line in region.textlines:
                 if line.get_text is None: continue
                 line_infos['id'].append(line.get_id())
                 line_infos['text'].append(line.get_text())
@@ -266,7 +280,7 @@ def dsv(
 
 
 @app.command()
-def page_to_alto(
+def alto(
         inputs: Annotated[List[str], typer.Argument(exists=True,
                                                     help="Iterable of paths to the PAGE XML files or workspaces.",
                                                     callback=transform_inputs)] = None,
@@ -282,14 +296,6 @@ def page_to_alto(
     them to an ALTO XML file.
     This function and subfunction are heavily influenced by https://github.com/OCR-D/page-to-alto/ (thanks)
     """
-    from lxml import etree as ET
-    from pageplus.utils.io import (setxml, set_alto_id_from_page_id ,
-                                   REGION_PAGE_TO_ALTO,
-                                   HYPHEN_CHARS,
-                                   set_alto_xywh_from_coords,
-                                   set_alto_shape_from_coords,
-                                   set_alto_lang_from_page_lang)
-
     # ToDO: Support older versions?
     alto_version = "4.2"
     xml_files = collect_xml_files(map(Path, inputs))
@@ -357,13 +363,8 @@ def page_to_alto(
 
         layouttags = {}
         # Process each PAGE TextRegion.
-        for region in page.root.findall(f".//{{{page.ns}}}*"):
-            region_tag = ET.QName(region.tag).localname
-            if region_tag not in REGION_PAGE_TO_ALTO.keys():
-                continue
-            region = {'Region': Region,
-                      'TextRegion': TextRegion,
-                      'TableRegion': TableRegion}.get(region_tag, Region)(region, page.ns, region.getparent())
+        for region in page.get_ordered_regions(region_types=REGION_PAGE_TO_ALTO.keys()):
+            region_tag = region.get_localname()
             alto_block_type = REGION_PAGE_TO_ALTO.get(region_tag)
             block = ET.SubElement(alto_printspace, alto_block_type)
             set_alto_id_from_page_id(block, region)
@@ -371,7 +372,7 @@ def page_to_alto(
             set_alto_shape_from_coords(block, region)
             set_alto_lang_from_page_lang(block, region)
             layouttag = region.get_tag()
-            layouttag = 'paragraph' if 'TextRegion' == region_tag and not layouttag else layouttag
+            layouttag = {'TextRegion': 'TextRegion', 'TableRegion': 'ComposedBlock'}.get(layouttag, layouttag)
             if layouttag:
                 layouttags[layouttag] = layouttag
                 setxml(block, 'TAGREFS', layouttag)
@@ -432,9 +433,9 @@ def page_to_alto(
                             setxml(string_el, "CONTENT", line_text.strip())
                             set_alto_shape_from_coords(string_el, line)
         # Update Layouttags
-        for id,label in layouttags.items():
+        for idx,label in layouttags.items():
             tag = ET.SubElement(tag_info, 'LayoutTag')
-            tag.attrib['ID'] = id
+            tag.attrib['ID'] = idx
             tag.attrib['LABEL'] = label
         # Write out the ALTO XML.
         filepath = Path(f"{xml_file.parent}/ALTO/{filename}") if outputdir is None else outputdir / filename
@@ -442,6 +443,83 @@ def page_to_alto(
         tree = ET.ElementTree(alto)
         tree.write(filepath, pretty_print=True, xml_declaration=True, encoding="UTF-8")
         print(f"Converted PAGE XML '{filename}' to ALTO XML '{filepath}'.")
+
+if (spec := util.find_spec('pikepdf')) is None:
+    @app.command()
+    def pdf_install() -> None:
+        """
+        Before pdf export can be used, please use this install command
+        to install pikepdf by J. Barlow!
+        """
+        import subprocess
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-I", "pikepdf"])
+
+else:
+
+    def transform_substitutions(ctx: typer.Context, param: typer.CallbackParam, values):
+        """Transform substitutions into valid (pattern, replacement) tuples."""
+        if values is None or not values:
+            return []
+        return [tuple(value.split("==>", 1)) for value in values if "==>" in value]
+
+    @app.command()
+    def pdf(inputs: Annotated[List[str],
+    typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None,
+            image_folder: Annotated[str, typer.Option(exists=True,
+                                                        help="Folder to the images relative to page-xml (default same as input)")] = '.',
+            same_names: Annotated[bool, typer.Option(
+                help="Use the page-xml filename to search for the image (default use imageFilename from pagexml file)")] = False,
+            image_extension: Annotated[str, typer.Option(
+                help="Filename extension of the images (only active with 'same_names' option)")] = '.jpg',
+            dpi: Annotated[int, typer.Option(
+                help="Resolution of the image")] = 400,
+            draw: Annotated[Optional[list[DrawingsPDF]], typer.Option(
+                help="Activate drawing for region, line, baseline and words. (Debug Option)")] = None,
+            substitutions: Annotated[List[str], typer.Option(
+                help="Regex substitutions with pattern==>replacement,...]", callback=transform_substitutions)] = None,
+            output_filename: Annotated[str, typer.Option(help="Name of the output file.")] = 'PagePlus') -> None:
+        """
+        Creates a PDF file without word level
+        """
+        from pageplus.utils.pdf.renderer import page_to_pdf
+        from pikepdf import Pdf
+
+        # Read XML
+        xml_files = collect_xml_files(map(Path, inputs))
+        # Raise error if no xml files are found
+        if not xml_files:
+            raise FileNotFoundError('No xml files found in input directory')
+        pdf_files = []
+
+        for xml_file in track(xml_files, description="Rendering data to a PDF file.."):
+            # Read XML content
+            page = Page(xml_file)
+            imageFilename = page.imageFilename() if not same_names else xml_file.with_suffix(image_extension).name
+            imageDir = xml_file
+            for _ in range(0, len(image_folder.split('../'))):
+                imageDir = imageDir.parent
+            imageDir = imageDir.joinpath('./' + image_folder.rsplit('./')[0])
+            imagePath = find_image(imageFilename, imageDir)
+            if not imagePath:
+                print(f"Warning: Image {imageFilename} not found in {imageDir}")
+                continue
+            canvas = page_to_pdf(page, imagePath, draw=draw, dpi=dpi, substitutions=substitutions)
+            pdf_files.append(canvas.to_pdf())
+
+
+        if pdf_files is not None:
+            # Create a new empty PDF
+            merged_pdf = Pdf.new()
+
+            # Loop through each PDF and append its pages
+            for pdf_file in pdf_files:
+                merged_pdf.pages.extend(pdf_file.pages)
+
+            # Save the merged PDF
+            print(f"Converted all PAGE XML files to pdf: '{xml_files[0].parent.joinpath(output_filename+'.pdf')}'.")
+            merged_pdf.save(f'{xml_files[0].parent.joinpath(output_filename+'.pdf')}',
+                            recompress_flate=True)
+
 
 if __name__ == "__main__":
     app()

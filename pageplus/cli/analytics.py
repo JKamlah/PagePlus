@@ -66,7 +66,8 @@ def statistics(
 @app.command()
 def confidences(
         inputs: Annotated[List[str],
-        typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None):
+        typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None,
+        output_filename: Annotated[str, typer.Option(help="Name of the output file.")] = 'output'):
     """
     Calculate the mean confidence of each page and return a list of pages which are beneath a specific threshold and/or
     just print a report of all pages
@@ -76,14 +77,17 @@ def confidences(
     Raises:
         FileNotFoundError: If no XML files are found in the given input paths.
     """
+    from collections import defaultdict
+    from numpy import array, nanmean, nanmedian, isnan
+    from openpyxl import Workbook
+    from openpyxl.styles import PatternFill
+
     xml_files = collect_xml_files(map(Path, inputs))
     # Raise error if no xml files are found
     if not xml_files:
         raise FileNotFoundError('No xml files found in input directory')
 
     # Create statistics for all pages
-    from collections import defaultdict
-    from numpy import mean, array, nanmean, nanmedian, isnan
     all_confs = defaultdict(defaultdict)
 
     # Loop through all XML files
@@ -144,17 +148,10 @@ def confidences(
      for filenames, confs in all_confs.items()]
     print(table)
     # Create a new Excel workbook and select the active worksheet
-    from openpyxl import Workbook
-    from rich.style import Color
-    from openpyxl.styles import Font, PatternFill
     wb = Workbook()
     ws = wb.active
 
     # Populate the worksheet with data
-    #[ws.append([f"{Path(filenames).name}",
-    #            f"{confs['median']:.5f}",
-    #            f"{confs['state']}"])
-    # for filenames, confs in all_confs.items()]
     ws.append([f"Seite", f"Band", f"Filename",
                 f"Confidence"])
     for idx, (filenames, confs) in enumerate(all_confs.items()):
@@ -170,13 +167,8 @@ def confidences(
                 ws.cell(row=idx+2, column=4).fill = PatternFill(start_color=color_argbhex,
                                                                 fill_type="solid")
 
-
     # Save the workbook to a file
-    wb.save("output.xlsx")
-
-    #print('\n'.join([f"{Path(filenames).name} --> {confs['state']}" for filenames, confs in all_confs.items()]))
-    #print(len([filename for filename, confs in all_confs.items() if isinstance(confs['median'], float) and confs['median'] < Q1]))
-    #print([mean(array(list(confs.values()))) for confs in all_confs.values()])
+    wb.save(f"{output_filename}.xlsx")
 
 
 if __name__ == "__main__":

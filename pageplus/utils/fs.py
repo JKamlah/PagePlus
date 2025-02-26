@@ -120,7 +120,6 @@ def transform_inputs(ctx: typer.Context, param: typer.CallbackParam, values: Lis
     load_dotenv()
     envs = dotenv_values()
     loaded_env = Environments[envs.get(Environments.PAGEPLUS.as_prefix_environment(), 'PAGEPLUS')]
-
     ret_values = []
     if not values or (len(values) == 1 and ''.join(values[0].split(':modified')) == ''):
         ws_folder = Path(envs.get(envs.get(loaded_env.as_prefix_loaded_workspace())))
@@ -166,6 +165,72 @@ def find_image(imageFilename: str, imageFolder: Path):
     return None
 
 
+def collect_xml_files_by_mets(mets:Path) -> List[Path]:
+    """
+    Read METS and return the existing xml-files in correct order
+    """
+    import xml.etree.ElementTree as ET
+    from lxml import etree
+
+    def get_namespace_alias(root, ns_uri):
+        """
+        Given the root element and a namespace URI, return the alias (prefix) used in the document.
+        If no alias is found, return a default alias 'mets'.
+        """
+        for prefix, uri in root.nsmap.items():
+            if uri == ns_uri:
+                return prefix if prefix is not None else 'mets'
+        return "mets"
+
+    # Parse the METS XML file using lxml.
+    tree = etree.parse(mets)
+    root = tree.getroot()
+
+    # Get the namespace URI of the root element.
+    ns_uri = tree.xpath('namespace-uri(.)')
+    # Determine the alias used for that namespace in the document.
+    alias = get_namespace_alias(root, ns_uri)
+
+    # Build the namespace mapping dictionary for XPath queries.
+    ns = {alias: ns_uri, 'xlink': 'http://www.w3.org/1999/xlink'}
+
+    # Try to locate the structMap element. Prefer one with TYPE="MANUSCRIPT", otherwise take the first one.
+    struct_map = root.find(f".//{alias}:structMap", ns)
+    if struct_map is None:
+        raise ValueError("No structMap element found in the METS file.")
+
+    xml_files = []
+
+    # Iterate through all fptr elements in the structMap, preserving order.
+    for fptr in struct_map.findall(f".//{alias}:fptr", ns):
+        # Try to get the FILEID directly from fptr.
+        file_id = fptr.get("FILEID")
+        # If not present, look for an area element within fptr.
+        if not file_id:
+            area = fptr.find(f".//{alias}:area", ns)
+            if area is not None:
+                file_id = area.get("FILEID")
+        if not file_id:
+            continue
+
+        # Find the corresponding <file> element in fileSec by matching the FILE ID.
+        file_elem = root.find(f".//{alias}:file[@ID='{file_id}']", ns)
+        if file_elem is None:
+            continue
+
+        # Retrieve the FLocat element which holds the file reference.
+        flocat = file_elem.find(f"{alias}:FLocat", ns)
+        if flocat is None:
+            continue
+
+        # Extract the file path from the xlink:href attribute.
+        href = flocat.get("{http://www.w3.org/1999/xlink}href")
+        if href and href.lower().endswith('.xml') and mets.parent.joinpath(href.split('/')[-1]).is_file():
+            xml_files.append(mets.parent.joinpath(href.split('/')[-1]))
+    return xml_files
+
+
+
 def collect_xml_files(inputpaths: Iterator[Path|str],
                       exclude: Tuple[str, ...] = ('metadata.xml', 'mets.xml', 'METS.xml')) -> List[Path]:
     """
@@ -187,7 +252,10 @@ def collect_xml_files(inputpaths: Iterator[Path|str],
     empty = True
     for inputpath in inputpaths:
         empty = False
-        if (inputpath.is_file() and inputpath.suffix == '.xml' and inputpath.name not in exclude and
+        if (inputpath.is_file() and inputpath.suffix == '.xml' and inputpath.name.upper() == 'METS.XML'):
+            xml_files = collect_xml_files_by_mets(inputpath)
+            return xml_files
+        elif (inputpath.is_file() and inputpath.suffix == '.xml' and inputpath.name not in exclude and
                 is_page_xml(inputpath)):
             xml_files.append(inputpath)
         elif inputpath.is_dir():

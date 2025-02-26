@@ -361,7 +361,7 @@ Only output the JSON!"""
     @profile('llm-ocr')
     def ocr(inputs: Annotated[List[str],
     typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None,
-            image_folder: Annotated[str, typer.Argument(exists=True,
+            image_folder: Annotated[str, typer.Option(exists=True,
                                                         help="Folder to the images relative to page-xml (default same as input)")] = '.',
             provider: Annotated[
                 str, typer.Option(help="Set the model on the fly, otherwise set via 'llm set-model'",

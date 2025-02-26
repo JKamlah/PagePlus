@@ -12,7 +12,7 @@ from pageplus.io.parser import parse_xml
 from pageplus.io.writer import write_xml
 from pageplus.models.table_elements import TableRegion
 from pageplus.models.text_elements import TextRegion
-from pageplus.models.basic_elements import CoordElement
+from pageplus.models.basic_elements import CoordElement, Region
 
 
 @dataclass
@@ -66,6 +66,19 @@ class Page:
                         ro_ids.append(region_id)
         # Return the collected text from regions
         return ro_ids
+
+    def get_ordered_regions(self, mode: str = 'auto', region_types = ('TableRegion,TextRegion')) -> List:
+        ordered_regions = []
+        for ro_ids in self.get_region_reading_order_ids(mode, region_types):
+            region = self.root.find(f'.//*[@id="{ro_ids}"]')
+            region_tag = ET.QName(region.tag).localname
+            if region is not None and region_tag not in region_types:
+                continue
+            region = {'Region': Region,
+                      'TextRegion': TextRegion,
+                      'TableRegion': TableRegion}.get(region_tag, Region)(region, self.ns, region.getparent())
+            ordered_regions.append(region)
+        return ordered_regions
 
     def valid_region_id(self, id):
         region = self.root.find(f".//{{{self.ns}}}*[@id='r{id}']")

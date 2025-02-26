@@ -72,7 +72,7 @@ else:
     @profile('kraken-ocr')
     def ocr(inputs: Annotated[List[str],
     typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None,
-            image_folder: Annotated[str, typer.Argument(exists=True,
+            image_folder: Annotated[str, typer.Option(exists=True,
                                                         help="Folder to the images relative to page-xml (default same as input)")] = '.',
             model_name: Annotated[str, typer.Option(help="Name of the model (should exist in Model-Directory)")] = None,
             model_dir: Annotated[Path, typer.Option(help="Directory of the model")] = None,

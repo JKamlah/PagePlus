@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass
 
 import lxml.etree as ET
+import numpy as np
 import shapely
 from shapely import affinity, normalize, line_interpolate_point, remove_repeated_points, simplify, is_valid_reason
 from shapely.errors import TopologicalError, EmptyPartError
@@ -25,6 +26,10 @@ class CoordElement:
     def get_id(self) -> str:
         """ Returns the ID attribute of the XML element. """
         return self.xml_element.attrib["id"]
+
+    def get_localname(self) -> str:
+        """ Returns the localn name of the XML element. """
+        return ET.QName(self.xml_element.tag).localname
 
     def get_parent_element(self) -> ET._Element:
         """ Returns the parent XML element. """
@@ -90,6 +95,28 @@ class CoordElement:
 
         return Polygon(coord_tuples)
 
+    def angle(self, side: str = 'longest'):
+        """
+        Get the angle from the longest or shortest side of the minimum rectangle
+        """
+        # Get rectangle coordinates
+        coords = list(self.get_coordinates(returntype='mrr').exterior.coords)
+
+        # Find the longest edge
+        edge_vectors = [(coords[i + 1][0] - coords[i][0], coords[i + 1][1] - coords[i][1]) for i in range(4)]
+        edge_lengths = [np.hypot(dx, dy) for dx, dy in edge_vectors]
+
+        # Use the longest or shortest edge to find the angle
+        if side == 'longest':
+            edge_idx = np.argmax(edge_lengths)
+        else:
+            edge_idx = np.argmin(edge_lengths)
+
+        dx, dy = edge_vectors[edge_idx]
+        angle = np.arctan2(dy, dx)  # Angle in radians
+        angle_degrees = np.degrees(angle)  # Convert to degrees
+        return angle_degrees
+
     def _ensure_closed_ring(self, coord_tuples):
         """ Ensures that the list of coordinate tuples forms a closed ring. """
         return coord_tuples + [coord_tuples[0]] if coord_tuples[0] != coord_tuples[-1] else coord_tuples
@@ -99,6 +126,11 @@ class CoordElement:
         for language in ['primaryLanguage', 'secondaryLanguage', 'language']:
             if language in self.xml_element.attrib:
                 return self.xml_element.attrib[language]
+
+    def get_reading_direction(self) -> str:
+        """ Returns the reading direction. """
+        if 'readingDirection' in self.xml_element.attrib:
+            return self.xml_element.attrib['readingDirection']
 
     def update_coordinates(self, data, inputtype: str = "polygon"):
         """
