@@ -1,5 +1,8 @@
 from pathlib import Path
 from typing import List
+from importlib import util
+import re
+from collections import Counter
 
 import typer
 from rich import print
@@ -11,7 +14,11 @@ from pageplus.analytics.counter import PageCounter
 from pageplus.io.logger import logging
 from pageplus.utils.fs import collect_xml_files
 from pageplus.models.page import Page
-from pageplus.utils.fs import transform_inputs
+from pageplus.utils.fs import transform_inputs, transform_input
+from pageplus.utils.constants import ProfileLevel
+from pageplus.utils.profile import profile, ProfileFnRet
+from pageplus.cli.export import transform_substitutions
+
 
 app = typer.Typer()
 
@@ -170,6 +177,102 @@ def confidences(
     # Save the workbook to a file
     wb.save(f"{output_filename}.xlsx")
 
+if (spec := util.find_spec('pageplus.utils.dinglehopper.edit_distance')) is not None:
+    from pageplus.cli.dinglehopper import get_metrics, summarize_metrics
+
+    @app.command()
+    @profile('pageplus')
+    def compare(
+            gt: Annotated[str, typer.Argument(help="Ground Truth file or directory path or workspace, e.g. main.",
+                                              exists=True, callback=transform_input)] = ...,
+            ocr: Annotated[str, typer.Argument(help="OCR file or directory path or workspace, e.g. main:modified.",
+                                               exists=True, callback=transform_input)] = ...,
+            text_filter: Annotated[str, typer.Option(
+                help="A regular expression, if specific textlines should be filtered")] = None,
+            region_tagfilter: Annotated[str, typer.Option(
+                help="A regular expression, if specific textlines should be filtered")] = None,
+            textline_tagfilter: Annotated[str, typer.Option(
+                help="A regular expression, if specific textlines should be filtered")] = None,
+            substitutions: Annotated[List[str], typer.Option(
+                help="Regex substitutions with pattern==>replacement,...]", callback=transform_substitutions)] = [''],
+            profile: Annotated[str, typer.Option(help="Profile function with tag (default: no profiling active.")] = '',
+            profilelevel: Annotated[List[ProfileLevel],
+            typer.Option(
+                help="Level of profiling. Options: 'stats' (always true), 'params', 'results', 'analytics', 'summary'")
+            ] = ("stats", "params", "analytics", "summary"),
+    ):
+        """
+        Compare the PAGE/ALTO/text document GT against the document OCR using PagePlus Profiling output.
+        """
+        compare.profile = ProfileFnRet()
+        compare.profile.name = profile
+        compare.profile.stats = {'pages': 0, 'lines': 0}
+        print(f"Starting PagePlus comparison with gt={gt} ocr={ocr}")
+        # Your existing logic here
+        if 'params' in profilelevel:
+            compare.profile.params = {'text-filter': text_filter,
+                                      'region-tagfilter': region_tagfilter,
+                                      'textline-tagfilter': textline_tagfilter}
+
+        # Read XML
+        gt_xml_files = collect_xml_files(map(Path, [gt]))
+        # Raise error if no xml files are found
+        if not gt_xml_files:
+            raise FileNotFoundError('No xml files found in input directory')
+
+        compare.profile.dir = gt_xml_files[0].parent.absolute() if len(ocr) > 0 else ''
+
+        reg_filter = re.compile(rf"{text_filter}") if text_filter is not None else '.'
+        all_diff = Counter()
+        all_metrics = []
+        ocr_path = Path(ocr)
+        for gt_file in track(gt_xml_files, description="Comparing gt-files.."):
+            ocr_file = ocr_path.joinpath(gt_file.name)
+            if not ocr_file.exists():
+                continue
+            # Read XML content
+            gt_page = Page(gt_file)
+            ocr_page = Page(ocr_file)
+            text_dict = {}
+            page_diff = Counter()
+            page_metrics = []
+            # Find Textlines
+            for gt_region, ocr_region in zip(gt_page.get_ordered_regions(), ocr_page.get_ordered_regions()):
+                if gt_region.get_id() != ocr_region.get_id():
+                    continue
+                tr_id = gt_region.get_id()
+                if region_tagfilter is not None and region_tagfilter != gt_region.get_tag():
+                    continue
+                text_dict[tr_id] = {}
+                for line_idx, (gt_line, ocr_line) in enumerate(zip(gt_region.textlines, ocr_region.textlines)):
+                    gt_text, ocr_text = gt_line.get_text(), ocr_line.get_text()
+                    for (pattern, replacement) in substitutions:
+                        gt_text = re.sub(rf'{pattern}', rf'{replacement}', gt_text)
+                        ocr_text = re.sub(rf'{pattern}', rf'{replacement}', ocr_text)
+                    if textline_tagfilter is not None and textline_tagfilter != gt_text:
+                        continue
+                    if text_filter is not None and not re.search(reg_filter, gt_text):
+                        continue
+                    if 'analytics' in profilelevel:
+                        print(gt_text + ' ==> ' + ocr_text)
+                        if line_idx == len(gt_region.textlines)-1:
+                            page_metrics.append(get_metrics(gt_text, ocr_text))
+                        else:
+                            page_metrics.append(get_metrics(gt_text+'\n', ocr_text+'\n'))
+
+            if 'results' in profilelevel:
+                compare.profile.results.append({gt_file.name :text_dict})
+            compare.profile.stats['pages'] += any([1 for region in text_dict.values() if len(region.values()) > 0])
+            compare.profile.stats['lines'] += sum([len(region.values()) for region in text_dict.values()])
+            if 'analytics' in profilelevel:
+                metrics = summarize_metrics(page_metrics) if len(page_metrics) > 0 else {}
+                all_metrics.extend(page_metrics)
+                compare.profile.analytics.append({gt_file.name : metrics})
+                all_diff.update(page_diff)
+        if 'summary' in profilelevel:
+            if 'analytics' in profilelevel:
+                metrics = summarize_metrics(all_metrics)
+                compare.profile.summary['analytics'] =  metrics
 
 if __name__ == "__main__":
     app()

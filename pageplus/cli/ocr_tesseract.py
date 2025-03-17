@@ -71,9 +71,11 @@ else:
                 bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
             dry_run: Annotated[bool, typer.Option(help="If True, the function will not write any files.")] = False):
         """
+        EXPERIMENTAL: NOT SAFE TO USE!
         OCR with the existing layout information. Existing text will be overwritten.
         """
         # Turn profiling on
+        print("[red][bold]EXPERIMENTAL[/bold]: NOT SAFE TO USE![/red]")
         ocr.profile = ProfileFnRet()
         ocr.profile.name = profile
         ocr.profile.dir = Path(inputs[0]).absolute() if len(inputs) > 0 else ''
@@ -123,7 +125,7 @@ else:
                 if region_tagfilter is not None and region_tagfilter != textregion.get_tag():
                     continue
                 text_dict[tr_id] = {}
-                for line in textregion.textlines:
+                for line_idx, line in enumerate(textregion.textlines):
                     if textline_tagfilter is not None and textline_tagfilter != line.get_tag():
                         continue
                     text = line.get_text()
@@ -131,14 +133,13 @@ else:
                         continue
                     line_id = line.get_id()
                     text_dict[tr_id][line_id] = {'original': text} if text else {'original': ''}
-
                     # Cut image
                     image_snippet, bbox = crop_image_by_polygon(image,
                                                                 line.get_coordinates(returntype='mrr'),
                                                                 patch_size=1,
-                                                                buffer=8,
+                                                                buffer=0,
                                                                 save_snippet=save_snippets,
-                                                                transparent_background=False,
+                                                                transparent_background=True,
                                                                 square_canvas=False,
                                                                 snippet_dir=imageDir.joinpath(
                                                                     imageFilename.rsplit('.', 1)[0]),
@@ -148,9 +149,7 @@ else:
                     line.update_text(ocr_text)
                     text_dict[tr_id][line_id]['ocr'] = ocr_text
                     if 'analytics' in profilelevel:
-                        line_diff = count_diff(text, ocr_text)
-                        page_diff.update(line_diff)
-                        page_metrics.append(get_metrics(text, ocr_text, line_diff))
+                        page_metrics.append(get_metrics(text, ocr_text))
             if 'results' in profilelevel:
                 ocr.profile.results.append({xml_file.name: text_dict})
             ocr.profile.stats['pages'] += any([1 for region in text_dict.values() if len(region.values()) > 0])
@@ -158,8 +157,7 @@ else:
             if 'analytics' in profilelevel:
                 metrics = summarize_metrics(page_metrics) if len(page_metrics) > 0 else {}
                 all_metrics.extend(page_metrics)
-                ocr.profile.analytics.append({xml_file.name: {'metrics': metrics,
-                                                              'confusions': dict(page_diff)}})
+                ocr.profile.analytics.append({xml_file.name: metrics})
                 all_diff.update(page_diff)
             if not dry_run:
                 fout = xml_file if overwrite else xml_file.parent.joinpath(
@@ -170,8 +168,7 @@ else:
         if 'summary' in profilelevel:
             if 'analytics' in profilelevel:
                 metrics = summarize_metrics(all_metrics)
-                ocr.profile.summary['analytics'] = {'metrics': metrics,
-                                                    'confusions': dict(all_diff)}
+                ocr.profile.summary['analytics'] = metrics
 
 if __name__ == "__main__":
     app()

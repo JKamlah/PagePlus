@@ -113,7 +113,7 @@ def crop_image_by_polygon(image: Image, polygon: Polygon,
         snippet = cropped_image
     if save_snippet:
         snippet_dir.mkdir(parents=True, exist_ok=True)
-        snippet.save(snippet_dir.joinpath(f"{snippet_name}.png")) # Optional: save the mask to
+        snippet.save(snippet_dir.joinpath(f"{snippet_name}.png"), icc_profile=None) # Optional: save the mask to
     return (snippet, bbox)
 
 

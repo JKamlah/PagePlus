@@ -98,7 +98,7 @@ def transform_input(ctx: typer.Context, param: typer.CallbackParam, value: str):
     Returns:
         The transformed value.
     """
-    return transform_inputs(ctx, param, [value])[0]
+    return transform_inputs(ctx, param, [value] if value is not None else None)[0]
 
 
 def transform_inputs(ctx: typer.Context, param: typer.CallbackParam, values: List[str]):

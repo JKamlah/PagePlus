@@ -2,11 +2,12 @@ import os
 import shutil
 import subprocess
 import sys
+import unicodedata
 from collections import Counter
 from importlib import util
 import json
 from pathlib import Path
-from typing import List, Annotated
+from typing import List, Annotated, Literal
 import webbrowser
 import re
 import string
@@ -15,9 +16,6 @@ from datetime import datetime
 import requests
 import typer
 from rich import print
-
-from pageplus.utils.profile import profile, ProfileFnRet
-
 
 app = typer.Typer()
 
@@ -63,7 +61,7 @@ if (spec := util.find_spec('pageplus.utils.dinglehopper.edit_distance')) is None
     @app.command()
     def install() -> None:
         """
-        Before dinglehopper can be used, please use this install command
+        Before dinglehopper and profiling can be used, please use this install command
         to install dinglehopper by Mike Gerber and the qurator team!
         """
         _install()
@@ -231,19 +229,35 @@ else:
         return categories
 
 
-    def get_metrics(gt:str, ocr:str, diffs:dict = None) -> dict:
+    def get_metrics(gt:str, ocr:str, normalization: Literal['NFC', 'NFKC', 'NFD', 'NFKD'] = 'NFC',
+                    line_breaks=True, warning_msg=True) -> dict:
         """Get the accuracy metrics for gt and ocr input."""
         counts = {}
-        wer, counts['word'] = word_error_rate_n(gt.split(' '), ocr.split(' ')) if gt != '' or ocr != '' else (0, 0)
-        cer, counts['character'] = character_error_rate_n(gt, ocr)
+        gt = unicodedata.normalize(normalization, gt)
+        ocr = unicodedata.normalize(normalization, ocr)
+        if warning_msg:
+            if len(gt) == 0: print("[red]Warning: Ground Truth is empty.[/red]")
+            if len(ocr) == 0: print("[red]Warning: Compare text is empty.[/red]")
+        # Handle edge cases: Minimum of 1 character and 1 word for gt and ocr to calculate accuracy
+        if line_breaks:
+            gt += '\n' if not gt.endswith('\n') else gt
+            ocr += '\n' if not ocr.endswith('\n') else ocr
+
+        w_diff, counts['word'] = (count_diff(re.sub(r'\s+', ' ', gt).split(' '),
+                                            re.sub(r'\s+', ' ', ocr).split(' ')),  len(gt.split(' ')))
+        wec = sum([v for k, v in w_diff.items()]) if w_diff else 0
+        wer = wec/counts['word'] if w_diff else 0
+        c_diff, counts['character'] = count_diff(gt, ocr), len(gt)
+        cec = sum([v for k, v in c_diff.items()]) if c_diff else 0
+        cer = sum([v for k, v in c_diff.items()]) / counts['character'] if c_diff else 0
         counts.update(count_categories(gt, categories()))
         metrics = {'count': counts,
                 'error_rate': {'global': {'word': wer, 'character': cer}, 'local': {}},
-                'error_count': {'word': int(wer * counts['word']), 'character': int(cer * counts['character'])}}
-        gt_string = ''.join([k.split(' :: ')[0].replace('None', '')*v for k, v in diffs.items()]) if diffs else ''
+                'error_count': {'word': wec, 'character': cec}}
+        gt_string = ''.join([k.split(' :: ')[0].replace('None', '')*v for k, v in c_diff.items()]) if c_diff else ''
         error_counts = count_categories(gt_string, categories())
-        counts['insertion'] = sum([v for k, v in diffs.items() if re.search('None', k.split(' :: ')[0])]) if diffs else 0
-        counts['deletion'] = sum([v for k, v in diffs.items() if re.search('None', k.split(' :: ')[1])]) if diffs else 0
+        counts['insertion'] = sum([v for k, v in c_diff.items() if re.search('None', k.split(' :: ')[0])]) if c_diff else 0
+        counts['deletion'] = sum([v for k, v in c_diff.items() if re.search('None', k.split(' :: ')[1])]) if c_diff else 0
         for error_key, error_count in error_counts.items():
             if error_key in ['insertion', 'deletion','character', 'word']:
                 error_count = metrics['count'][error_key]
@@ -257,12 +271,13 @@ else:
                 metrics['error_rate']['global'][error_key] = error_count / metrics['count']['character'] if error_count != 0 or \
                                 metrics['count']['character'] != 0 else 0
             metrics['error_count'][error_key] = error_count
+        metrics['confusions'] = {'word': dict(w_diff), 'character': dict(c_diff)}
         return metrics
 
 
     def summarize_metrics(data: list) -> dict:
         """Summarize the accuracy metrics for each run."""
-        sum_metrics = get_metrics('','')
+        sum_metrics = get_metrics('','', line_breaks=False, warning_msg=False)
         for cat in sum_metrics['count']:
             sum_metrics['count'][cat] = sum([metrics['count'][cat] for metrics in data])
             sum_metrics['error_count'][cat] = sum([metrics['error_count'][cat] for metrics in data])
@@ -275,6 +290,10 @@ else:
             if cat not in ['insertion', 'deletion', 'word', 'character']:
                 sum_metrics['error_rate']['local'][cat] = sum_metrics['error_count'][cat] / sum_metrics['count'][cat] if (
                             sum_metrics['error_count'][cat] != 0 and sum_metrics['count'][cat] != 0) else 0
+        for cat in sum_metrics['confusions']:
+            confusion = Counter()
+            [confusion.update(Counter(metrics['confusions'][cat])) for metrics in data]
+            sum_metrics['confusions'][cat] = dict(confusion)
         return sum_metrics
 
 
@@ -397,9 +416,7 @@ else:
             #  print("Skipping {0} and {1}".format(gt_file_path, ocr_file_path))
 
 
-
     @app.command()
-    @profile('dinglehopper')
     def compare(
             gt: Annotated[str, typer.Argument(help="Ground Truth file or directory path or workspace, e.g. main.",
                                               exists=True, callback=transform_input)] = ...,
@@ -419,8 +436,7 @@ else:
             open_folder: Annotated[bool, typer.Option(help="Opens the folder with the results after processing.")]
             = open_folder_default(),
             show_results: Annotated[bool, typer.Option(help="Opens the html version in "
-                                                            "a browser after processing.")] = True,
-            profile: Annotated[str, typer.Option(help="Profile function with tag (default: no profiling active.")] = ''):
+                                                            "a browser after processing.")] = True):
         """
         Compare the PAGE/ALTO/text document GT against the document OCR.
 
@@ -440,13 +456,11 @@ else:
         By default, the text of PAGE files is extracted on 'region' level. You may
         use "--textequiv-level line" to extract from the level of TextLine tags.
         """
-        compare.profile = ProfileFnRet()
         print(f"Starting Dinglehopper comparison with gt={gt}, ocr={ocr}, "
               f"report_prefix={report_prefix}, reports_folder={reports_folder}, reports_folder={reports_folder_prefix},"
               f"metrics={metrics}, differences={differences}, textequiv_level={textequiv_level}")
         # Your existing logic here
         if os.path.isdir(gt):
-            gtdir = Path(gt)
             if not os.path.isdir(ocr):
                 typer.echo("OCR must be a directory if GT is a directory", err=True)
                 raise typer.Exit(code=1)
@@ -464,7 +478,6 @@ else:
                             )
                 pass
         else:
-            gtdir = Path(gt).parent
             reports_folder = reports_folder if reports_folder != '.' else str(Path(ocr).parent.joinpath('Dinglehopper')
                     .joinpath(reports_folder_prefix).absolute())
             Path(reports_folder).mkdir(parents=True, exist_ok=True)
@@ -481,10 +494,6 @@ else:
         if show_results:
             for html in Path(reports_folder).glob('*.html'):
                 webbrowser.open(str(html.absolute()))
-        for jfile in Path(reports_folder).glob('*.json'):
-            compare.profile.results.append({jfile.name.split('.json')[0]: json.load(jfile.open('r'))})
-        compare.profile.dir = gtdir.absolute()
-        compare.profile.name = profile
         if open_folder:
             if sys.platform == "win32":
                 # Windows
@@ -496,6 +505,7 @@ else:
                 # Linux and other Unix-like OS
                 subprocess.run(["xdg-open", reports_folder])
             print(f"Opened workspace [bold green]Dinglehopper result folder[/bold green]: {reports_folder}")
+
 
 if __name__ == "__main__":
     app()

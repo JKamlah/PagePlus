@@ -5,6 +5,7 @@ import sys
 from collections import Counter
 from importlib import util
 from pathlib import Path
+import time
 from typing import List, Annotated
 
 import typer
@@ -28,6 +29,7 @@ def _install() -> None:
     to install litellm!
     """
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-I", "litellm"])
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-I", "json-repair"])
 
 
 if (spec := util.find_spec('litellm')) is None:
@@ -49,10 +51,10 @@ else:
 
     from litellm import completion
     from pydantic import BaseModel
+    import json_repair
 
     llm_workspace = Workspace(Environments.LLM)
     llm_api = LLMAPI(Environments.LLM)
-
 
     ### PACKAGE ###
     @app.command(rich_help_panel="Package")
@@ -140,20 +142,27 @@ else:
 
         def call_llm(input_data, fulltext):
             # Create the prompt text that instructs the model what to do
-            system = """You are an expert in spellchecking.
-            Analyse the input and find all possible OCR errors and misspelling.
-            Preserve hyphenation as it appears. Do not merge words split by hyphens at the end of lines.
-            Please write out our findings numbered in the following manner: 
-
-            The original input is a json object:
-            {'lines': [{'id': id, 'original': text},..]}
-
-            You create add to this input a new entry "corrected" and output also an JSON Object:
-            {'lines': [{'id': id, 'corrected': corrected_text},..]}
-
-            Only output the JSON!"""
-            # print(prompt)
-
+            # TODO: Add situational fitted examples (kNN)?
+            system = ("You are an expert in spellchecking.\n"
+                      "Analyse the input and find all possible OCR errors and misspelling.\n"
+                      "Preserve hyphenation as it appears. Absolutely do not merge words split by hyphens at the end of a line. The split must be preserved exactly as it appears in the original text.\n."
+                      "Each output line must correspond exactly to the original input line. Do not combine, merge, or alter the structure of the text.\n"
+                      "Please write out our findings numbered in the following manner:\n"
+                      "Example"
+                      "<|input|>"
+                      "{'lines': [{'id': 'rx1lx1', 'original': '1n this line arre sume errrors and ends witb a split-'}, "
+                      "{'id': 'rx1lx2', 'original': 'ted w0rd.'}, "
+                      "{'id': 'rx1lx3', 'original': 'I do not mer-'}, "
+                      "{'id': 'rx1lx4', 'original': 'ge words.'}]}"
+                      "<|output|>"
+                      "{'lines': [{'id': 'rx1lx1', 'corrected': 'In this line are some errors and ends with a split-'}, "
+                      "{'id': 'rx1lx2', 'corrected': 'ted word.},"
+                      "{'id': 'rx1lx3', 'corrected': 'I do not mer-'}, "
+                      "{'id': 'rx1lx4', 'corrected': 'ge words.}]}"
+                      "JSON <|input|>\n"
+                      "{'lines': [{'id': id, 'original': text},..]}\n"
+                      "JSON <|output|>\n"
+                      "{'lines': [{'id': id, 'corrected': corrected_text},..]}\n")
             try:
                 import html
                 print(input_data)
@@ -211,7 +220,7 @@ else:
             except Exception as e:
                 print("An error occurred during completion:", e)
                 return {}
-            print(response.choices[0].message.content)
+            #print(response.choices[0].message.content)
             # Extract the JSON string from the response. Adjust indices if necessary.
             json_str = response.choices[0].message.content
             print(json_str)
@@ -226,12 +235,6 @@ else:
                     {**corrected_data[key], **input_data[key]} for key in input_data.keys() & corrected_data.keys()
                 ]
             }
-            # Replace double oblique hyphens
-            if force_linebreak:
-                for idx, line in enumerate(merged_dict['lines']):
-                    merged_dict['lines'][idx]['corrected'] = re.sub('⸗!$', '-', merged_dict['lines'][idx]['corrected'])
-                    merged_dict['lines'][idx]['original'] = re.sub('⸗!$', '-', merged_dict['lines'][idx]['original'])
-
             return merged_dict
 
         xml_files = collect_xml_files(map(Path, inputs))
@@ -247,7 +250,6 @@ else:
                 text_dict = {"lines": []}
                 for line in textregion.textlines:
                     text = line.get_text()
-                    text = re.sub('-$', '⸗!', text) if force_linebreak else text
                     text_dict['lines'].append({'id': line.get_id(), "original": text if text else ''})
                     if len(text_dict['lines']) > 10:
                         corrected_lines['lines'].append(call_llm(text_dict, fulltext))
@@ -382,6 +384,8 @@ Only output the JSON!"""
                 help="A regular expression, if specific textlines should be filtered")] = None,
             only_user_prompt: Annotated[bool, typer.Option(help="Deactivate system prompts (for older API)")] = False,
             json_object: Annotated[bool, typer.Option(help="Use json_object instead of json_schema.")] = False,
+            calls_per_minute: Annotated[
+                     int, typer.Option(help="API call rate limit per minute")] = 120,
             profile: Annotated[str, typer.Option(help="Profile function with tag (default:'' no profiling active.")] = '',
             profilelevel: Annotated[List[ProfileLevel],
                 typer.Option(
@@ -406,16 +410,17 @@ Only output the JSON!"""
         elif 'analytics' in profilelevel:
             from pageplus.cli.dinglehopper import count_diff, get_metrics, summarize_metrics
 
-        system = ("You are an expert in recognizing text in an image, without modifying the results.\n"
-                  "It is not allowed to add additional characters.\n"
-                  "Recognize the text in the images: word by word!  No explanation, no newlines, with punctuations.\n"
-                  "The input:\n"
+        system = ("You are an expert in automatic text recognizing.\n"
+                  "You <|output|> the recognized text with high precision. "
+                  "Recognize the text in the <|input|>: character by character and word by word!  "
+                  "No explanation, no newlines, keep punctuations.\n"
+                  "<|input|>\n"
                   "Image\n"
                   "Do not provide alternative variation!\n"
                   "Output format JSON (a single line with the information)(only output one version via line, dont repeat!):\n"
+                  "<|output|>\n"
                   "{'text': [First-line, Next-line,...]}")
-
-        prompt = ("Please read the content of this image:")
+        prompt = ("<|input|>\n")
         if 'params' in profilelevel:
             ocr.profile.params = {'model': llm_api.model_with_prefix,
                                   'api_base': llm_api.api_base_url,
@@ -431,6 +436,7 @@ Only output the JSON!"""
         reg_filter = re.compile(rf"{text_filter}") if text_filter is not None else '.'
         all_diff = Counter()
         all_metrics = []
+        request_timestamps = []
         for xml_file in xml_files:
             print(xml_file)
             # Read XML content
@@ -456,7 +462,7 @@ Only output the JSON!"""
                 if region_tagfilter is not None and region_tagfilter != textregion.get_tag():
                     continue
                 text_dict[tr_id] = {}
-                for line in textregion.textlines:
+                for line_idx, line in enumerate(textregion.textlines):
                     if textline_tagfilter is not None and textline_tagfilter != line.get_tag():
                         continue
                     text = line.get_text()
@@ -468,6 +474,7 @@ Only output the JSON!"""
                     # Cut image
                     image_snippet, _ = crop_image_by_polygon(image,
                                                           line.get_coordinates(returntype='mrr'),
+                                                          #buffer = 0,
                                                           save_snippet=save_snippets,
                                                           square_canvas=True,
                                                           snippet_dir=imageDir.joinpath(imageFilename.rsplit('.', 1)[0]),
@@ -475,6 +482,15 @@ Only output the JSON!"""
                     # Convert image to Base64
                     image_snippet_b64 = image_to_base64(image_snippet)
                     # Process multiple requests
+                    now = time.time()
+                    # Remove timestamps older than 60 seconds
+                    request_timestamps = [t for t in request_timestamps if now - t < 60]
+                    if len(request_timestamps) >= calls_per_minute:
+                        wait_time = 60 - (now - request_timestamps[0])
+                        print(f"[red]Rate limit reached.[/red] Waiting {wait_time:.2f} seconds...")
+                        time.sleep(wait_time)
+                    # Add the current timestamp
+                    request_timestamps.append(time.time())
                     try:
                         response = completion(
                             model=llm_api.model_with_prefix,
@@ -482,8 +498,8 @@ Only output the JSON!"""
                             api_key=llm_api.api_key,
                             timeout=llm_api.keep_alive_time,
                             stream=False,
-                            temperature= 0.000001, # Can create problems if set to 0
-                            top_p= 0.000001, # Can create problems if set to 0
+                            temperature= 0.0000001, # Can create problems if set to 0
+                            top_p= 0.00000001, # Can create problems if set to 0
                             n=1,  # Generate 1 response
                             messages=[
                                 {
@@ -528,16 +544,13 @@ Only output the JSON!"""
                             max_tokens=300,
                        )
                         try:
-                            import json_repair
                             output = json_repair.repair_json(response.choices[0].message.content, return_objects=True)
                             ocr_text = ' '.join(output["text"]) if isinstance(output["text"], list) else output["text"]
                             print(f'{line_id} -> [green]{ocr_text}[green]')
                             line.update_text(ocr_text)
                             text_dict[tr_id][line_id]['ocr'] = ocr_text
                             if 'analytics' in profilelevel:
-                                line_diff = count_diff(text, ocr_text)
-                                page_diff.update(line_diff)
-                                page_metrics.append(get_metrics(text, ocr_text, line_diff))
+                                page_metrics.append(get_metrics(text, ocr_text))
                         except:
                             print(f"{line_id} -> [red] Error: No valid output[red]")
                     except Exception as e:
@@ -550,8 +563,7 @@ Only output the JSON!"""
             if 'analytics' in profilelevel:
                 metrics = summarize_metrics(page_metrics) if len(page_metrics) > 0 else {}
                 all_metrics.extend(page_metrics)
-                ocr.profile.analytics.append({xml_file.name : {'metrics': metrics,
-                                                               'confusions': dict(page_diff)}})
+                ocr.profile.analytics.append({xml_file.name : metrics})
                 all_diff.update(page_diff)
             if not dry_run:
                 fout = xml_file if overwrite else xml_file.parent.joinpath(llm_api.model.replace('.','_').replace(':','-')).joinpath(xml_file.name)
@@ -561,8 +573,7 @@ Only output the JSON!"""
         if 'summary' in profilelevel:
             if 'analytics' in profilelevel:
                 metrics = summarize_metrics(all_metrics)
-                ocr.profile.summary['analytics'] = {'metrics': metrics,
-                                             'confusions': dict(all_diff)}
+                ocr.profile.summary['analytics'] = metrics
 
 if __name__ == "__main__":
     app()
