@@ -23,7 +23,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 
 
 from pageplus.cli import (system, analytics, validation, modification, export, workspace, projects,
-                          dinglehopper, llm, ocr_kraken, ocr_tesseract, escriptorium, transkribus)
+                          dinglehopper, llm, mets, ocr_kraken, ocr_tesseract, escriptorium, transkribus)
 
 app = typer.Typer()
 app.add_typer(system.app, name="system", rich_help_panel="System")
@@ -36,6 +36,7 @@ app.add_typer(ocr_tesseract.app, name="tesseract", rich_help_panel="Tesseract - 
 app.add_typer(analytics.app, name="analytics", rich_help_panel="PagePlus")
 app.add_typer(validation.app, name="validation", rich_help_panel="PagePlus")
 app.add_typer(modification.app, name="modification", rich_help_panel="PagePlus")
+app.add_typer(mets.app, name="mets", rich_help_panel="PagePlus")
 app.add_typer(workspace.app, name="workspace", rich_help_panel="PagePlus")
 app.add_typer(export.app, name="export", rich_help_panel="PagePlus")
 app.add_typer(projects.app, name="projects", rich_help_panel="PagePlus - projects")
