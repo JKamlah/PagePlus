@@ -36,12 +36,12 @@ def filegrps(
             exists=True,
             help="Path to METS XML file.",
             callback=validate_mets,),],
-    loose: Annotated[bool, typer.Option(help="Allow parsing of unknown attributes and structures.")] = True,):
+    loose: Annotated[bool, typer.Option(help="Allow parsing of unknown attributes and structures.")] = False,):
     """
     Inspect <fileGrp> entries in a METS XML file.
     """
     for idx, doc in enumerate(parse_mets_xml_multiple_roots(mets, loose=loose)):
-        print(f"{idx}. Document")
+        print(f"{idx+1}. Document")
         file_grps = doc.recursive_find(doc, "fileGrp")
 
         for file_grp in file_grps:
@@ -78,7 +78,7 @@ def download(
 
     for idx, doc in enumerate(mets_files):
         # Determine output directory
-        output_dir = base_output if len(mets_files) == 1 else base_output / f"{idx:02}"
+        output_dir = base_output if len(mets_files) == 1 else base_output / f"{(idx + 1):03}"
         output_dir.mkdir(parents=True, exist_ok=True)
 
         for file_grp in doc.recursive_find(doc, "fileGrp"):
@@ -92,7 +92,7 @@ def download(
             grp_folder = output_dir / (use or grp_id or "unknown")
             grp_folder.mkdir(parents=True, exist_ok=True)
 
-            for child in track(file_grp.children, f"{idx}. Document: Downloading {tag or 'all'}..."):
+            for child in track(file_grp.children, f"{idx+1}. Document: Downloading {tag or 'all'}..."):
                 if isinstance(child, FileGrp):
                     # Handle nested FileGrp
                     nested_use = child.attributes.get("USE")

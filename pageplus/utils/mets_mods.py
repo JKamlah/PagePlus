@@ -270,7 +270,7 @@ class MetsHdr(MetsElement):
 @dispatch()
 class Agent(MetsElement):
     tag = "agent"
-    allowed_attributes = {"ROLE": None, "TYPE": None, "OTHERTYPE": None}
+    allowed_attributes = {"ROLE": None, "TYPE": None, "OTHERTYPE": None, "OTHERROLE": None}
     allowed_children = ["name", "note"]
 
 @dispatch()
@@ -278,7 +278,7 @@ class Name(MetsElement):
     tag = "name"
     allowed_attributes = {"type": None, "authority": None, "authorityURI": None,
                           "valueURI": None}
-    allowed_children = ["namePart", "role"]
+    allowed_children = ["namePart", "role", "displayForm"]
     allows_content = True
 
 @dispatch()
@@ -532,6 +532,7 @@ class PageId(MetsElement):
 @dispatch()
 class Url(MetsElement):
     tag = "url"
+    allowed_attributes = {"access": None,}
     allows_content = True
 
 @dispatch()
@@ -767,7 +768,7 @@ class LanguageTerm(MetsElement):
 class Location(MetsElement):
     tag = "location"
     allowed_children = ["physicalLocation", "shelfLocator", "location", "extension", "recordInfo",
-                        "accessCondition", "part"]
+                        "accessCondition", "part", "url"]
 
 @dispatch()
 class PhysicalLocation(MetsElement):
@@ -964,6 +965,12 @@ class Extent(MetsElement):
     tag = "extent"
     allows_content = True
 
+@dispatch()
+class DisplayForm(MetsElement):
+    tag = "displayForm"
+    allows_content = True
+
+
 
 def download_file_from_flocat(file: File, output_folder: Path):
     for child in file.children:
@@ -1001,7 +1008,7 @@ def parse_mets_xml_multiple_roots(xml_source, loose=False) -> List[Mets]:
     mets_elements = []
 
     # Regex to find full <mets:mets ...> ... </mets:mets> blocks
-    pattern = re.compile(r"(<mets:mets[^>]*>)(.*?)(</mets:mets>)", re.DOTALL)
+    pattern = re.compile(r"(<(?:mets:)?mets[^>]*>)(.*?)(</(?:mets:)?mets>)", re.DOTALL)
 
     for match in pattern.finditer(content):
         full_block = match.group(0)
