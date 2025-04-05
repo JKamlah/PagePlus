@@ -972,17 +972,31 @@ class DisplayForm(MetsElement):
 
 
 
-def download_file_from_flocat(file: File, output_folder: Path):
+def download_file_from_flocat(file: File, output_folder: Path, nametag: str = None):
+    import requests
+    requests.packages.urllib3.disable_warnings()
     for child in file.children:
         if isinstance(child, FLocat):
             href = child.attributes.get("{http://www.w3.org/1999/xlink}href")
             if href:
                 try:
-                    filename = href.split("/")[-1]
+                    # Determine filename
+                    if nametag:
+                        filename = file.attributes.get(nametag)
+                        if not filename:
+                            print(f"Warning: Attribute '{nametag}' not found, falling back to href filename.")
+                            filename = href.split("/")[-1]
+                        else:
+                            filename += '.'+href.split("/")[-1].rsplit('.',1)[-1]
+                    else:
+                        filename = href.split("/")[-1]
+
                     target_path = output_folder / filename
                     print(f"Downloading {href} -> {target_path}")
-                    response = requests.get(href, timeout=10)
+
+                    response = requests.get(href, timeout=20, verify=False, headers={'User-Agent': 'Mozilla/5.0'})
                     response.raise_for_status()
+
                     with open(target_path, "wb") as f:
                         f.write(response.content)
                 except Exception as e:

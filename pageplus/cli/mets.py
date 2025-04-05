@@ -69,7 +69,8 @@ def download(
             help="Path to METS XML file.",
             callback=validate_mets,),],
     loose: Annotated[bool, typer.Option(help="Allow parsing of unknown attributes and structures.")] = True,
-    tag: Annotated[str, typer.Option(help="Filter FileGrp by USE or ID.")] = "",):
+    tag: Annotated[str, typer.Option(help="Filter FileGrp by USE or ID.")] = "",
+    nametag: Annotated[str, typer.Option(help="Use the original filename or the USE or ID tag for filename.")] = None):
     """
     Download files referenced in a METS XML document by <fileGrp>.
     """
@@ -102,7 +103,7 @@ def download(
 
                     for file in child.children:
                         if isinstance(file, File):
-                            download_file_from_flocat(file, nested_folder)
+                            download_file_from_flocat(file, nested_folder, nametag)
                 elif isinstance(child, File):
-                    download_file_from_flocat(child, grp_folder)
+                    download_file_from_flocat(child, grp_folder, nametag)
 

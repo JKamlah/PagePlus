@@ -23,6 +23,15 @@ def update_pip() -> None:
     """
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", "pip"])
 
+@app.command(rich_help_panel="PagePlus")
+def update_ssl() -> None:
+    """
+    Updates ssl-certificates for download options
+    Returns:
+    None
+    """
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", "PyOpenSSL", "cryptography", "ndg-httpsclient"])
+
 
 @app.command(rich_help_panel="PagePlus")
 def update_pageplus() -> None:
