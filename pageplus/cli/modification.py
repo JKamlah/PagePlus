@@ -486,5 +486,59 @@ def sort_and_merge(
         page.save_xml(fout)
 
 
+@app.command()
+def remove_empty(
+        inputs: Annotated[List[str], typer.Argument(exists=True,
+                                                    help="Paths or workspace to the files to be validated.",
+                                                    callback=transform_inputs)] = None,
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Filename of the output directory. Default is creating an output directory, "
+                 "called PagePlusOutput, in the input directory.", callback=transform_output)] = None,
+        level: Annotated[List[str], typer.Option(
+                help="Granularity levels to process: 'region', 'textline', or both.",
+                case_sensitive=False)] = ["region", "textline"],
+        overwrite: Annotated[bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False):
+    """
+    Removes empty textlines and empty regions
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+
+    if not xml_files:
+        raise FileNotFoundError('No xml files found in input directory')
+
+    for xml_file in track(sorted(xml_files), description="Validating files..."):
+        filename = xml_file.name
+        print('[green]Checking file:[/green] ' + filename)
+
+        page = Page(xml_file)
+
+        # Merge cells into textregions
+        for tableregion in page.regions.tableregions:
+            for cell in tableregion.tablecells:
+                page.regions.textregions.append(cell)
+
+        for region in list(page.regions.textregions):
+            del_count = 0
+            for line in region.textlines:
+                if 'textline' in level and not line.validate_text():
+                    print(f"[red]{line.get_id()} removed.[/red]")
+                    page.delete_element(line.xml_element)
+                    del_count += 1
+            if 'region' in level and del_count == len(region.textlines):
+                print(f"[red]{region.get_id()} removed.[/red]")
+                page.delete_element(region.xml_element)
+        page.load_regions()
+
+        if 'region' in level and page.regions.tableregions:
+            for tableregion in page.regions.tableregions:
+                if not tableregion.tablecells:
+                    print(f"[red]{tableregion.get_id()} removed.[/red]")
+                    page.delete_element(tableregion.xml_element)
+            page.load_regions()
+
+        fout = xml_file if overwrite else determine_output_path(xml_file, outputdir, filename)
+        logging.info(f'Wrote modified xml file to output directory: {fout}')
+        page.save_xml(fout)
+
 if __name__ == "__main__":
     app()
