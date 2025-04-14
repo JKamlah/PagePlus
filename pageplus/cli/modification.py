@@ -495,15 +495,20 @@ def remove_empty(
             help="Filename of the output directory. Default is creating an output directory, "
                  "called PagePlusOutput, in the input directory.", callback=transform_output)] = None,
         level: Annotated[List[str], typer.Option(
-                help="Granularity levels to process: 'region', 'textline', or both.",
-                case_sensitive=False)] = ["region", "textline"],
-        overwrite: Annotated[bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
+                help="Granularity levels to process: 'textregion', 'tableregion', 'textline', "
+                     "or all (default: TextRegion and Textline).",
+                case_sensitive=False)] = ("TextRegion", "Textline"),
+        region_tagfilter: Annotated[List[str], typer.Option(
+            help="A regular expression, if only specific region should be processed")] = None,
+        textline_tagfilter: Annotated[List[str], typer.Option(
+            help="A regular expression, if only specific textlinet should be processed")] = None,
+        skip_tag: Annotated[List[str], typer.Option(
+                help="Tags that should be skipped.")] = None,
         dry_run: Annotated[bool, typer.Option(help="Perform a dry run without writing any files.")] = False):
     """
     Removes empty textlines and empty regions
     """
     xml_files = collect_xml_files(map(Path, inputs))
-
     if not xml_files:
         raise FileNotFoundError('No xml files found in input directory')
 
@@ -514,31 +519,48 @@ def remove_empty(
         page = Page(xml_file)
 
         # Merge cells into textregions
-        for tableregion in page.regions.tableregions:
-            for cell in tableregion.tablecells:
-                page.regions.textregions.append(cell)
-
-        for region in list(page.regions.textregions):
+        textregion_number = len(page.regions.textregions)
+        if 'TableRegion' in level:
+            for tableregion in page.regions.tableregions:
+                for cell in tableregion.tablecells:
+                    if (region_tagfilter is not None and tableregion.get_tag() not in region_tagfilter) \
+                            or (skip_tag is not None and tableregion.get_tag() in skip_tag):
+                        print(f"[orange3]Skip: {tableregion.get_tag()} - {tableregion.get_id()}[/orange3]")
+                        continue
+                    page.regions.textregions.append(cell)
+        for ridx, region in enumerate(list(page.regions.textregions)):
             del_count = 0
+            if (region_tagfilter is not None and region.get_tag() not in region_tagfilter) \
+                or (skip_tag is not None and region.get_tag() in skip_tag):
+                print(f"[orange3]Skip: {region.get_tag()} - {region.get_id()}[/orange3]")
+                continue
             for line in region.textlines:
-                if 'textline' in level and not line.validate_text():
-                    print(f"[red]{line.get_id()} removed.[/red]")
+                if (textline_tagfilter is not None and line.get_tag() not in textline_tagfilter) \
+                        or (skip_tag is not None and line.get_tag() in skip_tag):
+                    print(f"[orange3]Skip: {line.get_tag()} - {line.get_id()}[/orange3]")
+                    continue
+                if 'Textline' in level and not line.validate_text():
+                    print(f"[red]Textline removed: {line.get_id()}.[/red]")
                     page.delete_element(line.xml_element)
                     del_count += 1
-            if 'region' in level and del_count == len(region.textlines):
-                print(f"[red]{region.get_id()} removed.[/red]")
+            if ('TextRegion' in level or 'TableRegion' in level) and del_count == len(region.textlines):
+                regiontype = 'TextRegion' if textregion_number > ridx else 'TableCell'
+                print(f"[red]{regiontype} removed: {region.get_id()}.[/red]")
                 page.delete_element(region.xml_element)
         page.load_regions()
 
-        if 'region' in level and page.regions.tableregions:
+        if 'TableRegion' in level:
             for tableregion in page.regions.tableregions:
+                if (region_tagfilter is not None and tableregion.get_tag() not in region_tagfilter) \
+                        or (skip_tag is not None and tableregion.get_tag() in skip_tag):
+                    continue
                 if not tableregion.tablecells:
-                    print(f"[red]{tableregion.get_id()} removed.[/red]")
+                    print(f"[red]Table removed: {tableregion.get_id()}.[/red]")
                     page.delete_element(tableregion.xml_element)
             page.load_regions()
 
         if not dry_run:
-            fout = xml_file if overwrite else determine_output_path(xml_file, outputdir, filename)
+            fout = xml_file if outputdir else determine_output_path(xml_file, outputdir, filename)
             logging.info(f'Wrote modified xml file to output directory: {fout}')
             page.save_xml(fout)
 
