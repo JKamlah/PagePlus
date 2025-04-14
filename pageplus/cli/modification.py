@@ -497,7 +497,8 @@ def remove_empty(
         level: Annotated[List[str], typer.Option(
                 help="Granularity levels to process: 'region', 'textline', or both.",
                 case_sensitive=False)] = ["region", "textline"],
-        overwrite: Annotated[bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False):
+        overwrite: Annotated[bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
+        dry_run: Annotated[bool, typer.Option(help="Perform a dry run without writing any files.")] = False):
     """
     Removes empty textlines and empty regions
     """
@@ -536,9 +537,10 @@ def remove_empty(
                     page.delete_element(tableregion.xml_element)
             page.load_regions()
 
-        fout = xml_file if overwrite else determine_output_path(xml_file, outputdir, filename)
-        logging.info(f'Wrote modified xml file to output directory: {fout}')
-        page.save_xml(fout)
+        if not dry_run:
+            fout = xml_file if overwrite else determine_output_path(xml_file, outputdir, filename)
+            logging.info(f'Wrote modified xml file to output directory: {fout}')
+            page.save_xml(fout)
 
 if __name__ == "__main__":
     app()
