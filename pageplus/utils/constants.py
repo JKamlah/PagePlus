@@ -20,6 +20,15 @@ class ProfileLevel(str, Enum):
     analytics = "analytics"
     summary = "summary"
 
+class OutputFormats(str, Enum):
+    """
+    Level of function profiling
+    """
+    txt = "txt"
+    page = "page"
+    alto = "alto"
+    json = "json"
+
 
 class DrawingsPDF(str, Enum):
     """
@@ -77,6 +86,7 @@ class Environments(str, Enum):
     TRANSKRIBUS     = "Transkribus"
     DINGLEHOPPER    = "Dinglehopper"
     LLM             = "LLM"
+    GEMINI          = "GEMINI"
 
     def as_prefix(self):
         return f"{self.name.upper()}_"
@@ -99,3 +109,22 @@ class Environments(str, Enum):
 
 # Converts boolean values to on and off
 Bool2OnOff = {True: "on", False: "off"}
+
+MIME_IMAGE_EXTENSIONS = {
+    'image/jpeg': '.jpg',
+    'image/pjpeg': '.jpg',
+    'image/png': '.png',
+    'image/gif': '.gif',
+    'image/webp': '.webp',
+    'image/bmp': '.bmp',
+    'image/x-windows-bmp': '.bmp',
+    'image/x-icon': '.ico',
+    'image/vnd.microsoft.icon': '.ico',
+    'image/tiff': '.tiff',
+    'image/x-tiff': '.tiff',
+    'image/svg+xml': '.svg',
+    'image/heic': '.heic',
+    'image/heif': '.heif',
+    'image/avif': '.avif',
+    'image/vnd.adobe.photoshop': '.psd',
+}
