@@ -28,7 +28,7 @@ class CoordElement:
         return self.xml_element.attrib["id"]
 
     def get_localname(self) -> str:
-        """ Returns the localn name of the XML element. """
+        """ Returns the local name of the XML element. """
         return ET.QName(self.xml_element.tag).localname
 
     def get_parent_element(self) -> ET._Element:

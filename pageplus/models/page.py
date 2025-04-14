@@ -35,7 +35,9 @@ class Page:
         """
         if self.tree is None or self.root is None:
             self.tree, self.root, self.ns = self._open_xml(self.filename)
+        self.load_regions()
 
+    def load_regions(self):
         text_region_xpath = f"{{{self.ns}}}TextRegion"
         self.regions.textregions = [TextRegion(ele, self.ns, parent=self) \
                                     for ele in self.root.iter(text_region_xpath)]
