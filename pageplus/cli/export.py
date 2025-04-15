@@ -21,6 +21,7 @@ from pageplus.utils import fs
 from pageplus.utils.constants import DrawingsPDF
 from pageplus.utils.fs import (collect_xml_files,
                                transform_inputs,
+                               transform_substitutions,
                                open_folder_default,
                                find_image)
 from pageplus.utils.image import get_image, crop_image_by_polygon
@@ -454,12 +455,6 @@ if (spec := util.find_spec('pikepdf')) is None:
 
 else:
 
-    def transform_substitutions(ctx: typer.Context, param: typer.CallbackParam, values):
-        """Transform substitutions into valid (pattern, replacement) tuples."""
-        if values is None or not values:
-            return []
-        return [tuple(value.split("==>", 1)) for value in values if "==>" in value]
-
     @app.command()
     def pdf(inputs: Annotated[List[str],
     typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None,
@@ -480,7 +475,7 @@ else:
         Creates a PDF file without word level
         """
         from pageplus.utils.pdf.renderer import page_to_pdf
-        from pikepdf import Pdf
+        from pikepdf import Pdf, ObjectStreamMode
 
         # Read XML
         xml_files = collect_xml_files(map(Path, inputs))
@@ -518,8 +513,12 @@ else:
             # Save the merged PDF
             print(f"Converted all PAGE XML files to pdf: '{xml_files[0].parent.joinpath(output_filename+'.pdf')}'.")
             merged_pdf.save(f'{xml_files[0].parent.joinpath(output_filename+'.pdf')}',
-                            recompress_flate=True)
-
+                            compress_streams=True,
+                            recompress_flate=True,
+                            object_stream_mode=ObjectStreamMode.generate,  # <--- use the ENUM, not a string!
+                            linearize=False,
+                            normalize_content=False,
+                            qdf=False)
 
 if __name__ == "__main__":
     app()

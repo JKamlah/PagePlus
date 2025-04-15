@@ -10,7 +10,7 @@ pageplus = "pageplus.main:app"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-typer = {extras = ["all"], version = "^0.9.0"}
+typer = {extras = ["all"], version = "^0.15.2"}
 lxml = "^5.1.0"
 shapely = "^2.0.2"
 python-dotenv = "^1.0.1"
