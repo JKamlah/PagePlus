@@ -85,7 +85,7 @@ else:
             print("[red]Warning:[/red] 'analytics' profiling level requires 'dinglehopper' package to be installed. "
                   "It will be disabled.")
         elif 'analytics' in profilelevel:
-            from pageplus.cli.dinglehopper import count_diff, get_metrics, summarize_metrics
+            from pageplus.cli.dinglehopper import get_metrics, summarize_metrics
 
         if 'params' in profilelevel:
             ocr.profile.params = {'model': model_name,

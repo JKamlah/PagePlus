@@ -45,7 +45,7 @@ def get_environment() -> None:
      table.add_column("Setting", justify="right", style="cyan", no_wrap=True)
      table.add_column("Value")
      table.add_row(f"Loaded environment",
-                   Environments[get_key(dotfile, Environments.PAGEPLUS.as_prefix_environment())])
+                   Environments[get_key(dotfile, Environments.PAGEPLUS.as_prefix_environment())].name)
      print(table)
 
 

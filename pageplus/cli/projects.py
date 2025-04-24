@@ -3,8 +3,6 @@ from rich import print
 
 app = typer.Typer()
 
-from pageplus.utils.fs import transform_inputs
-
 ## TODO: Template for adding project specific methods
 
 @app.command()

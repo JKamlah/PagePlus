@@ -32,7 +32,7 @@ if (spec := util.find_spec('escriptorium_connector')) is None:
 
 else:
     from escriptorium_connector import EscriptoriumConnector
-    from dotenv import load_dotenv, find_dotenv, get_key, set_key, dotenv_values, unset_key
+    from dotenv import load_dotenv, find_dotenv, set_key, dotenv_values
 
     from pageplus.utils.constants import Environments, WorkState, Bool2OnOff
     from pageplus.utils.envs import str_to_env, filter_envs
@@ -384,7 +384,7 @@ else:
         if not es_api.valid_login():
             return
 
-        escr = EscriptoriumConnector(es_api.base_url, *es_api.credentials, es_api.api_key, es_api.api_base)
+        escr = EscriptoriumConnector(es_api.base_url, *es_api.credentials, es_api.api_key, es_api.api_base_url)
         overwrite = Bool2OnOff.get(overwrite)
 
         # Create a BytesIO object to hold the zip file in memory

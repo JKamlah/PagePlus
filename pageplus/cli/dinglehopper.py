@@ -1,17 +1,15 @@
 import os
+import re
 import shutil
+import string
 import subprocess
 import sys
 import unicodedata
+import webbrowser
 from collections import Counter
 from importlib import util
-import json
 from pathlib import Path
 from typing import List, Annotated, Literal
-import webbrowser
-import re
-import string
-from datetime import datetime
 
 import requests
 import typer
@@ -108,9 +106,9 @@ else:
 
         for k, (g, o) in enumerate(seq_align(gt_things, ocr_things, score_hint)):
             if g != o:
-                if isinstance(gt_in, ExtractedText):
-                    gt_id = gt_in.segment_id_for_pos(g_pos) if g is not None else None
-                    ocr_id = ocr_in.segment_id_for_pos(o_pos) if o is not None else None
+                #if isinstance(gt_in, ExtractedText):
+                    # gt_id = gt_in.segment_id_for_pos(g_pos) if g is not None else None
+                    # ocr_id = ocr_in.segment_id_for_pos(o_pos) if o is not None else None
                     # Deletions and inserts only produce one id + None, UI must
                     # support this, i.e. display for the one id produced
                 if differences:
@@ -311,8 +309,8 @@ else:
 
 
     def process(
-        gt: str,
-        ocr: str,
+        gt: str | bytes,
+        ocr: str | bytes,
         report_prefix: str,
         reports_folder: str = ".",
         *,
