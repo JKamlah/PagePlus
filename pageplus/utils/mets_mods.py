@@ -9,6 +9,7 @@ from lxml import etree
 from lxml.etree import Element, tostring
 
 from pageplus.utils.exceptions import NotValidMetsException, MetsError
+from pageplus.utils.constants import MIME_IMAGE_EXTENSIONS
 
 # Define METS namespaces.
 NSMAP = {
@@ -24,6 +25,7 @@ NSMAP = {
 }
 XSI = "{%s}" % NSMAP['xsi']
 XLINK = "{%s}" % NSMAP['xlink']
+FALLBACK_NAMESPACE = "http://example.com/some/namespace"
 
 
 def validate_mets(ctx: typer.Context, param: typer.CallbackParam, value: str):
@@ -49,7 +51,6 @@ def repair_namespace(mets: str):
     """
     Repair the namespace of the mets
     """
-    FALLBACK_NAMESPACE = "http://example.com/some/namespace"
 
     # Define default known namespaces
     with open(mets, "r", encoding="utf-8") as f:
@@ -60,18 +61,16 @@ def repair_namespace(mets: str):
         inner_content = match.group(2)
 
         # Collect all prefixes used in the block
-        used_prefixes = set()
-        for line in inner_content.splitlines():
-            line = line.lstrip()
-            match_prefix = re.match(r'<([a-zA-Z0-9_]+):', line)
-            if match_prefix:
-                used_prefixes.add(match_prefix.group(1))
+        used_prefixes = set(re.findall(r'</?([a-zA-Z_][\w\-]*):[a-zA-Z_][\w\-]*', inner_content))
 
         # Check if xsi or xlink is used in attributes (like xsi:type or xlink:href)
         if re.search(r'\bxsi:', inner_content):
             used_prefixes.add("xsi")
+        if re.search(r'\bmods:', inner_content):
+            used_prefixes.add("mods")
         if re.search(r'\bxlink:', inner_content):
             used_prefixes.add("xlink")
+
 
         # Parse existing xmlns declarations
         existing_decls = dict(re.findall(r'xmlns:([a-zA-Z0-9_]+)="([^"]+)"', original_opening_tag))
@@ -145,18 +144,29 @@ class MetsElement:
     allowed_attributes: dict = {}
     allowed_children: list = []
     allows_content: bool = False
+    loose: bool = False
+    verbose: bool = False
 
-    def __init__(self, *, attributes: dict = None, content: str = None):
+    def __init__(self, *, attributes: dict = None, content: str = None, loose: bool = True, verbose: bool = False):
+        self.loose = loose
+        self.verbose = verbose
         self.attributes = self.allowed_attributes.copy()
         if attributes:
             for key, value in attributes.items():
                 if key in self.attributes:
                     self.attributes[key] = value
                 else:
-                    raise MetsError(f"Attribute '{key}' is not allowed in element '{self.tag}'.")
+                    if not loose:
+                        MetsError(f"WARNING: Attribute '{key}' is not allowed in element '{self.tag}'.")
+                    if self.verbose:
+                        print(f"WARNING: Attribute '{key}' is not allowed in element '{self.tag}'.")
+                    self.attributes[key] = value
+
         if content is not None:
-            if not self.allows_content:
+            if not self.allows_content and not loose:
                 raise MetsError(f"Element '{self.tag}' does not allow content.")
+            if not self.allows_content and self.verbose:
+                print(MetsError(f"WARNING: Element '{self.tag}' does not allow content."))
             self.content = content
         else:
             self.content = None
@@ -167,7 +177,13 @@ class MetsElement:
         if child.tag in self.allowed_children:
             self.children.append(child)
         else:
-            raise MetsError(f"Child element '{child.tag}' not allowed in parent '{self.tag}'.")
+            if self.loose:
+                if self.verbose:
+                    print(MetsError(f"WARNING: Child element '{child.tag}' not allowed in parent '{self.tag}'."))
+                self.children.append(child)
+            else:
+                raise MetsError(f"WARNING: Child element '{child.tag}' not allowed in parent '{self.tag}'.")
+
 
     def remove_child(self, child: "MetsElement"):
         """Remove a child element."""
@@ -233,19 +249,20 @@ class Mets(MetsElement):
                 return result
         return None
 
-    def extract_use_tags_from_element(self, element) -> List[str]:
+    @staticmethod
+    def extract_use_tags_from_element(element) -> List[str]:
         """
         Extract all 'USE' attribute values from 'file' elements within 'fileGrp' structures
         inside the provided 'fileSec' element.
         """
         use_tags = []
 
-        def recurse_element(element):
-            for child in element.children:
-                if child.attributes.get("USE", False):
-                    recurse_element(child)
-                elif isinstance(child, File):
-                    use = child.attributes.get("USE")
+        def recurse_element(xml_element):
+            for xml_child in xml_element.children:
+                if xml_child.attributes.get("USE", False):
+                    recurse_element(xml_child)
+                elif isinstance(xml_child, File):
+                    use = xml_child.attributes.get("USE")
                     if use is not None:
                         use_tags.append(use)
 
@@ -641,7 +658,7 @@ class Mods(MetsElement):
 class Info(MetsElement):
     tag = "info"
     allowed_attributes = {"version": None}
-    allows_content = False
+    allows_content = True
 
 @dispatch()
 class Version(MetsElement):
@@ -661,11 +678,13 @@ class RelatedItem(MetsElement):
     allowed_children = ["recordInfo", "titleInfo", "originInfo", "part",
                         "typeOfResource", "language", "note", "classification", "relatedItem", "identifier",
                         "location", "extension", "name", "subject", "accessCondition"]
+    allows_content = True
 
 @dispatch()
 class RecordInfo(MetsElement):
     tag = "recordInfo"
     allowed_children = ["recordIdentifier", "recordCreationDate", "recordChangeDate", "descriptionStandard"]
+    allows_content = True
 
 @dispatch()
 class RecordIdentifier(MetsElement):
@@ -683,6 +702,7 @@ class Identifier(MetsElement):
 class PhysicalDescription(MetsElement):
     tag = "physicalDescription"
     allowed_children = ["digitalOrigin", "extent", "note"]
+    allows_content = True
 
 @dispatch()
 class DigitalOrigin(MetsElement):
@@ -693,6 +713,7 @@ class DigitalOrigin(MetsElement):
 class TitleInfo(MetsElement):
     tag = "titleInfo"
     allowed_children = ["title", "subTitle", "nonSort"]
+    allows_content = True
 
 @dispatch()
 class SubTitle(MetsElement):
@@ -703,6 +724,7 @@ class SubTitle(MetsElement):
 class OriginInfo(MetsElement):
     tag = "originInfo"
     allowed_children = ["dateIssued", "place", "publisher", "issuance", "edition"]
+    allows_content = True
 
 @dispatch()
 class Edition(MetsElement):
@@ -729,6 +751,7 @@ class DateIssued(MetsElement):
 class Place(MetsElement):
     tag = "place"
     allowed_children = ["placeTerm"]
+    allows_content = True
 
 @dispatch()
 class PlaceTerm(MetsElement):
@@ -741,12 +764,14 @@ class Part(MetsElement):
     tag = "part"
     allowed_attributes = {"order": None, "type": None}
     allowed_children = ["detail", "date"]
+    allows_content = True
 
 @dispatch()
 class Detail(MetsElement):
     tag = "detail"
     allowed_attributes = {"type": None}
     allowed_children = ["number"]
+    allows_content = True
 
 @dispatch()
 class Number(MetsElement):
@@ -757,6 +782,7 @@ class Number(MetsElement):
 class Language(MetsElement):
     tag = "language"
     allowed_children = ["languageTerm"]
+    allows_content = True
 
 @dispatch()
 class LanguageTerm(MetsElement):
@@ -769,6 +795,7 @@ class Location(MetsElement):
     tag = "location"
     allowed_children = ["physicalLocation", "shelfLocator", "location", "extension", "recordInfo",
                         "accessCondition", "part", "url"]
+    allows_content = True
 
 @dispatch()
 class PhysicalLocation(MetsElement):
@@ -780,6 +807,7 @@ class PhysicalLocation(MetsElement):
 class Rights(MetsElement):
     tag = "rights"
     allowed_children = ["owner", "ownerLogo", "ownerSiteURL", "ownerContact", "license"]
+    allows_content = True
 
 @dispatch()
 class Owner(MetsElement):
@@ -810,6 +838,7 @@ class License(MetsElement):
 class Links(MetsElement):
     tag = "links"
     allowed_children = ["reference", "presentation", "iiif", "sru"]
+    allows_content = True
 
 @dispatch()
 class Reference(MetsElement):
@@ -846,14 +875,14 @@ class AccessCondition(MetsElement):
 @dispatch()
 class Extension(MetsElement):
     tag = "extension"
-    allows_content = False
+    allows_content = True
     allowed_children = ['externalType', 'info', 'id', 'odid', 'datatype', 'type', 'state']
 
 @dispatch()
 class ExternalType(MetsElement):
     tag = "externalType"
     allowed_attributes = {"recordSyntax": None, "code": None}
-    allows_content = False
+    allows_content = True
 
 @dispatch()
 class RecordCreationDate(MetsElement):
@@ -928,6 +957,7 @@ class NamePart(MetsElement):
 class Role(MetsElement):
     tag = "role"
     allowed_children = ["roleTerm"]
+    allows_content = True
 
 @dispatch()
 class RoleTerm(MetsElement):
@@ -943,6 +973,7 @@ class Subject(MetsElement):
         "occupation", "hierarchicalGeographic", "cartographics", "geographicCode",
         "language", "subject"
     ]
+    allows_content = True
 
 @dispatch()
 class Topic(MetsElement):
@@ -971,44 +1002,85 @@ class DisplayForm(MetsElement):
     allows_content = True
 
 
+def add_dynamic_tag(tag_name: str):
+    class_name = tag_name[0].upper() + tag_name[1:]  # Capitalize or adjust as needed
 
-def download_file_from_flocat(file: File, output_folder: Path, nametag: str = None):
-    import requests
+    # Create a new class with the desired name
+    new_class = type(
+        class_name,                # 👈 This becomes the class name
+        (MetsElement,),           # 👈 Inherit from MetsElement
+        {
+            "tag": tag_name,
+            "allowed_attributes": {},
+            "allowed_children": [],
+            "allows_content": True
+        }
+    )
+
+    # Register in the dispatch dictionary
+    METS_MODS_DISPATCH[tag_name] = new_class
+    return new_class
+
+def download_file_from_flocat(file: File, output_folder: Path, nametag: str = None, overwrite: bool = False):
     requests.packages.urllib3.disable_warnings()
+
+    mimetype = file.attributes.get("MIMETYPE", "image/jpeg").lower()
+    img_ext = MIME_IMAGE_EXTENSIONS.get(mimetype, "")
+
     for child in file.children:
-        if isinstance(child, FLocat):
-            href = child.attributes.get("{http://www.w3.org/1999/xlink}href")
-            if href:
-                try:
-                    # Determine filename
-                    if nametag:
-                        filename = file.attributes.get(nametag)
-                        if not filename:
-                            print(f"Warning: Attribute '{nametag}' not found, falling back to href filename.")
-                            filename = href.split("/")[-1]
-                        else:
-                            filename += '.'+href.split("/")[-1].rsplit('.',1)[-1]
-                    else:
-                        filename = href.split("/")[-1]
+        if not isinstance(child, FLocat):
+            continue
 
-                    target_path = output_folder / filename
-                    print(f"Downloading {href} -> {target_path}")
+        href = child.attributes.get("{http://www.w3.org/1999/xlink}href")
+        if not href:
+            continue
 
-                    response = requests.get(href, timeout=20, verify=False, headers={'User-Agent': 'Mozilla/5.0'})
-                    response.raise_for_status()
+        try:
+            # Determine base filename
+            if nametag:
+                filename = file.attributes.get(nametag)
+                if not filename:
+                    print(f"Warning: Attribute '{nametag}' not found. Falling back to filename from href.")
+                    filename = Path(href).name
+                else:
+                    # Add extension from href if it exists
+                    href_ext = Path(href).suffix
+                    filename += href_ext if href_ext else img_ext
+            else:
+                filename = Path(href).name
 
-                    with open(target_path, "wb") as f:
-                        f.write(response.content)
-                except Exception as e:
-                    print(f"Failed to download {href}: {e}")
+            # Ensure file has extension
+            if not Path(filename).suffix and img_ext:
+                filename += img_ext
 
+            target_path = output_folder / filename
+            print(f"Downloading {href} -> {target_path}")
 
-def parse_mets_xml_multiple_roots(xml_source, loose=False) -> List[Mets]:
+            if target_path.exists() and not overwrite:
+                print("Already exists and skipped! Use 'overwrite=True' to force download.")
+                continue
+
+            response = requests.get(
+                href,
+                timeout=20,
+                verify=False,
+                headers={"User-Agent": "Mozilla/5.0"}
+            )
+            response.raise_for_status()
+
+            with open(target_path, "wb") as f:
+                f.write(response.content)
+
+        except Exception as e:
+            print(f"Failed to download {href}: {e}")
+
+def parse_mets_xml_multiple_roots(xml_source, loose=False, verbose=False) -> List[Mets]:
     """
     Parse XML content containing multiple <mets:mets> root elements using pattern matching.
 
     :param xml_source: Path, bytes, or file-like object.
     :param loose: Whether to skip unknown elements.
+    :param verbose: debug
     :return: List of Mets objects.
     """
     if isinstance(xml_source, str) and Path(xml_source).exists():
@@ -1028,23 +1100,25 @@ def parse_mets_xml_multiple_roots(xml_source, loose=False) -> List[Mets]:
         full_block = match.group(0)
         # Parse each block as standalone XML
         try:
-            parsed = parse_mets_xml(BytesIO(full_block.encode('utf-8')), loose=loose)
+            parsed = parse_mets_xml(BytesIO(full_block.encode('utf-8')), loose=loose, verbose=verbose)
             if parsed:
                 mets_elements.append(parsed)
         except Exception as e:
             if not loose:
                 raise MetsError(f"Error parsing METS block: {e}")
-            print(f"Error parsing METS block: {e}")
+            if verbose:
+                print(f"Error parsing METS block: {e}")
             # else skip silently
     return mets_elements
 
 
-def parse_mets_xml(mets, loose=False) -> Mets | None:
+def parse_mets_xml(mets, loose=False, verbose=False) -> Mets | None:
     """
     Parse a METS XML file or file-like object into a corresponding MetsElement object.
 
     :param mets: Filename or file-like object containing the METS XML.
     :param loose: If True, unknown elements are skipped. Otherwise, an error is raised.
+    :param verbose: debug
     :return: The root MetsElement object.
     """
     parent_stack = []
@@ -1055,41 +1129,36 @@ def parse_mets_xml(mets, loose=False) -> Mets | None:
     else:
         f = mets
     try:
-        # TODO: LEGACY - Parse with recovery into a BytesIO or similar, then re-parse via iterparse
-        #parser = etree.XMLParser(recover=True)
-        #tree = etree.parse(f, parser)
-        #root_bytes = etree.tostring(tree)
-        # from io import BytesIO
-
         # Now iterparse on cleaned tree bytes
         context = etree.iterparse(f, events=("start", "end"), recover=True)
 
         for event, element in context:
             # Extract local (namespace-free) tag name.
             localname = etree.QName(element.tag).localname
-            if localname in METS_MODS_DISPATCH:
-                if event == 'start':
-                    content = element.text.strip() if element.text and element.text.strip() else None
-                    if element.attrib and content is not None:
-                        obj = METS_MODS_DISPATCH[localname](attributes=element.attrib, content=content)
-                    elif element.attrib:
-                        obj = METS_MODS_DISPATCH[localname](attributes=element.attrib)
-                    elif content is not None:
-                        obj = METS_MODS_DISPATCH[localname](content=content)
-                    else:
-                        obj = METS_MODS_DISPATCH[localname]()
-                    parent_stack.append(obj)
-                elif event == 'end':
-                    child = parent_stack.pop()
-                    if parent_stack:
-                        parent_stack[-1].add_child(child)
-                    else:
-                        return child
-            else:
+            if localname not in METS_MODS_DISPATCH:
                 if loose:
-                    continue
+                    if verbose:
+                        print(f"WARNING: Add \"{localname}\" dynamically to the xml-object.")
+                    METS_MODS_DISPATCH[localname] = add_dynamic_tag(localname)
                 else:
                     raise MetsError(f"Element \"{localname}\" not found in dispatch.")
+            if event == 'start':
+                content = element.text.strip() if element.text and element.text.strip() else None
+                if element.attrib and content is not None:
+                    obj = METS_MODS_DISPATCH[localname](attributes=element.attrib, content=content, loose=loose, verbose=verbose)
+                elif element.attrib:
+                    obj = METS_MODS_DISPATCH[localname](attributes=element.attrib, loose=loose, verbose=verbose)
+                elif content is not None:
+                    obj = METS_MODS_DISPATCH[localname](content=content, loose=loose, verbose=verbose)
+                else:
+                    obj = METS_MODS_DISPATCH[localname](loose=loose, verbose=verbose)
+                parent_stack.append(obj)
+            elif event == 'end':
+                child = parent_stack.pop()
+                if parent_stack:
+                    parent_stack[-1].add_child(child)
+                else:
+                    return child
         raise MetsError("No root element found.")
     finally:
         if close_after:
