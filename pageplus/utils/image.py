@@ -1,18 +1,19 @@
-import os
 import base64
-from pathlib import Path
+import os
 from io import BytesIO
+from pathlib import Path
+from typing import Any
+
 from PIL import Image, ImageDraw
 from PIL.Image import Image as ImageType
 from shapely.geometry import Polygon
-from typing import Tuple, Any
 
 
 def get_image(image_path):
     """
         Read an image file to a pil object and return the format (image extension)
 
-        :param file_path: Path to the image file
+        :param image_path: Path to the image file
         :return: Base64 encoded string of the image
     """
     # Open the image
@@ -46,12 +47,16 @@ def crop_image_by_polygon(image: Image, polygon: Polygon,
     relative to the cropped image. Finally, if the resulting snippet is smaller than the minimum size,
     it is centered on a new transparent canvas of the required dimensions.
 
-    :param image: PIL Image to crop.
-    :param polygon: Shapely Polygon (or similar) with an `exterior.coords` attribute and `bounds` property.
-    :param min_image_size: Minimum size (width, height) for the final snippet.
-    :param buffer: Integer value to buffer the polygon.
-    :param snippet_name: Optional name for the snippet (used for saving).
-    :return: A PIL Image object of the cropped (and possibly expanded) image.
+    :param image: The PIL Image to crop.
+    :param polygon: A Shapely Polygon (or similar) with `exterior.coords` and `bounds` attributes.
+    :param patch_size: Minimum size (in pixels) for width and height of the final patch.
+    :param buffer: Number of pixels to expand the polygon's boundary before cropping.
+    :param transparent_background: Whether to use a transparent background when expanding the canvas.
+    :param square_canvas: If True, pads the cropped image to make it square.
+    :param save_snippet: Whether to save the resulting cropped image to disk.
+    :param snippet_dir: Directory in which to save the snippet, if saving is enabled.
+    :param snippet_name: Optional filename for the saved snippet (without extension).
+    :return: A tuple containing the cropped (and possibly padded) PIL Image and the offset (x, y) of the crop.
     """
     # Buffer the polygon
     buffered_polygon = polygon.buffer(buffer)
@@ -114,7 +119,7 @@ def crop_image_by_polygon(image: Image, polygon: Polygon,
     if save_snippet:
         snippet_dir.mkdir(parents=True, exist_ok=True)
         snippet.save(snippet_dir.joinpath(f"{snippet_name}.png"), icc_profile=None) # Optional: save the mask to
-    return (snippet, bbox)
+    return snippet, bbox
 
 
 def image_to_base64(image):

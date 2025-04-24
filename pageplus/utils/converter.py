@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from enum import Enum
-import json
 import re
+from enum import Enum
+
 from typing_extensions import Type, Iterable
+
 
 def strings_to_enum(name: str, strings: list[str] | Iterable[str]) -> Type[Enum]:
     # Create a dictionary with member names and their values both set to the strings from the list

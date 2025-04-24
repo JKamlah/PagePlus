@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Tuple, Iterator, List
+from typing import Tuple, Iterator, List, Any
 import sys
 import subprocess
 
@@ -148,6 +148,12 @@ def transform_inputs(ctx: typer.Context, param: typer.CallbackParam, values: Lis
         raise InputsDoNotExistException(values)
     return ret_values
 
+def transform_substitutions(ctx: typer.Context, param: typer.CallbackParam, values):
+    """Transform substitutions into valid (pattern, replacement) tuples."""
+    if values is None or not values:
+        return []
+    return [tuple(value.split("==>", 1)) for value in values if "==>" in value]
+
 def find_image(imageFilename: str, imageFolder: Path):
     """
     Finds the image file in the specified folder.
@@ -169,7 +175,6 @@ def collect_xml_files_by_mets(mets:Path) -> List[Path]:
     """
     Read METS and return the existing xml-files in correct order
     """
-    import xml.etree.ElementTree as ET
     from lxml import etree
 
     def get_namespace_alias(root, ns_uri):
@@ -194,7 +199,6 @@ def collect_xml_files_by_mets(mets:Path) -> List[Path]:
     # Build the namespace mapping dictionary for XPath queries.
     ns = {alias: ns_uri, 'xlink': 'http://www.w3.org/1999/xlink'}
 
-    # Try to locate the structMap element. Prefer one with TYPE="MANUSCRIPT", otherwise take the first one.
     struct_map = root.find(f".//{alias}:structMap", ns)
     if struct_map is None:
         raise ValueError("No structMap element found in the METS file.")
@@ -297,7 +301,7 @@ def is_page_xml(file_path: Path) -> bool:
         # Not an XML file, or XML is malformed
         return False
 
-def is_page_version(file_path: Path) -> bool:
+def is_page_version(file_path: Path) -> Any | None:
     """
     Return page xml version
     """

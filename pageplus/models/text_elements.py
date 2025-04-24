@@ -238,7 +238,7 @@ class TextRegion(Region):
 
         for region in regions:
             region_polygon = Polygon(region['coords']).convex_hull
-            region_polygon.buffer(padding_region, cap_style=3, join_style=3)
+            region_polygon.buffer(padding_region, cap_style="flat", join_style="bevel")
             region['region_linearring'].append(LinearRing(shapely.geometry.polygon.orient(region_polygon,
                                                                                           sign=1.0).exterior.coords))
             region['region_coordstr'].append(self.convert_coordinates_polygon_to_str(region['region_linearring'][0]))

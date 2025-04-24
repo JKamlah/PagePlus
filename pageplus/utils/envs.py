@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Tuple, Iterator, List
+from typing import List
 
-from dotenv import load_dotenv, find_dotenv, get_key, dotenv_values
+from dotenv import load_dotenv, dotenv_values
 
 
 def filter_envs(pattern: str) -> dict:

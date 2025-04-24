@@ -1,5 +1,3 @@
-import shapely.errors as ShapelyErrors
-
 class PageXMLError(Exception):
     pass
 
@@ -12,8 +10,8 @@ class InputsDoNotExistException(Exception):
 
 class NotValidMetsException(Exception):
     """Exception raised when the input no volid mets file is."""
-    def __init__(self, input, message="The input is no valid mets file"):
-        self.message = f"{message}: {input}"
+    def __init__(self, mets, message="The input is no valid mets file"):
+        self.message = f"{message}: {mets}"
         super().__init__(self.message)
 
 class MetsError(Exception):

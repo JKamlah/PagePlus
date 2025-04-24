@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Any
 
 import lxml.etree as ET
 import numpy as np
@@ -121,13 +122,13 @@ class CoordElement:
         """ Ensures that the list of coordinate tuples forms a closed ring. """
         return coord_tuples + [coord_tuples[0]] if coord_tuples[0] != coord_tuples[-1] else coord_tuples
 
-    def get_language(self) -> str:
+    def get_language(self) -> Any | None:
         """ Returns the language. """
         for language in ['primaryLanguage', 'secondaryLanguage', 'language']:
             if language in self.xml_element.attrib:
                 return self.xml_element.attrib[language]
 
-    def get_reading_direction(self) -> str:
+    def get_reading_direction(self) -> Any | None:
         """ Returns the reading direction. """
         if 'readingDirection' in self.xml_element.attrib:
             return self.xml_element.attrib['readingDirection']

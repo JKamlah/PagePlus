@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import unicodedata
 import zlib
+from abc import ABC
 from importlib.resources import files as package_files
 from importlib import util
 
@@ -20,7 +21,7 @@ if (spec := util.find_spec('pikepdf')) is not None:
     from pikepdf.canvas import Font
 
 
-    class EncodableFont(Font):
+    class EncodableFont(Font, ABC):
         def text_encode(self, text: str) -> bytes:
             raise NotImplementedError()
 

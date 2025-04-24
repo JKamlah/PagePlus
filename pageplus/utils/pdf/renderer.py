@@ -2,47 +2,37 @@
 # SPDX-License-Identifier: MPL-2.0
 # Edited: 2025, Jan Kamlah
 
-from importlib import util
-from pathlib import Path
-from math import atan, cos, pi
 import re
+from importlib import util
+from math import pi
 
-from rich import print
 from PIL import Image
+from rich import print
 
 from pageplus.models.page import Page
 from pageplus.models.text_elements import TextRegion, Textline
-from pageplus.models.basic_elements import Region
-from pageplus.models.table_elements import TableRegion
 
 if (spec := util.find_spec('pikepdf')) is not None:
-    from pikepdf import Matrix, Name, Rectangle
+    from pikepdf import Matrix, Name
     from pikepdf.canvas import (
-        BLACK,
         BLUE,
         CYAN,
-        DARKGREEN,
-        GREEN,
         MAGENTA,
-        RED,
         Canvas,
         Text,
         TextDirection,
         Color
     )
     from pikepdf import (
-        Dictionary,
         Name,
-        Pdf,
     )
-    from pikepdf.canvas import Font
     from pageplus.utils.pdf.font import GlyphlessFont
 
 
     def page_to_pdf(page: Page,
                     image: Image = None,
                     fontname: Name = Name("/f-0-0"),
-                    font: Font = GlyphlessFont(),
+                    font: GlyphlessFont = GlyphlessFont(),
                     invisible_text: bool = True,
                     draw: list = None,
                     dpi: int = 400,
@@ -84,8 +74,9 @@ if (spec := util.find_spec('pikepdf')) is not None:
                 return
 
             line_text = line.get_text()
-            for (pattern, replacement) in substitutions:
-                re.sub(rf'{pattern}', rf'{replacement}', line_text)
+            if substitutions:
+                for (pattern, replacement) in substitutions:
+                    re.sub(rf'{pattern}', rf'{replacement}', line_text)
 
             if (line_bbox[0], line_bbox[1]) == (line_bbox[2], line_bbox[3]):
                 print("line box is invalid so we cannot render it: box=%s text=%s",

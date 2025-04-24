@@ -8,13 +8,17 @@ from typing_extensions import Annotated, Pattern
 from pageplus.io.logger import logging
 from pageplus.models.page import Page
 
-if (spec := util.find_spec('spellchecker')):
+if spec := util.find_spec('spellchecker'):
     from spellchecker import SpellChecker
 
     class SpellCheckerPP(SpellChecker):
         """
         Spellchecer by Peter Norvig & Tyler Barrus! Extend for PagePlus needs.
         """
+
+        def __init__(self):
+            self._leading_trailing_filter = None
+            self._ignore_last_character = None
 
         @property
         def ignore_last_character(self) -> bool:

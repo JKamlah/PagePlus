@@ -80,7 +80,7 @@ def confidences(
     just print a report of all pages
     Args:
         inputs: An iterator of Path objects pointing to the XML files to be checked.
-
+        output_filename: Name of the output file
     Raises:
         FileNotFoundError: If no XML files are found in the given input paths.
     """
@@ -194,7 +194,7 @@ if (spec := util.find_spec('pageplus.utils.dinglehopper.edit_distance')) is not 
             textline_tagfilter: Annotated[str, typer.Option(
                 help="A regular expression, if specific textlines should be filtered")] = None,
             substitutions: Annotated[List[str], typer.Option(
-                help="Regex substitutions with pattern==>replacement,...]", callback=transform_substitutions)] = [''],
+                help="Regex substitutions with pattern==>replacement,...]", callback=transform_substitutions)] = (''),
             profile: Annotated[str, typer.Option(help="Profile function with tag (default: no profiling active.")] = '',
             profilelevel: Annotated[List[ProfileLevel],
             typer.Option(
