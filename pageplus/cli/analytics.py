@@ -6,6 +6,7 @@ from collections import Counter
 
 import typer
 from rich import print
+from rich.style import Color
 from rich.table import Table
 from rich.progress import track
 from typing_extensions import Annotated
@@ -45,7 +46,7 @@ def statistics(
 
     # Create statistics for all pages
     pagescounter = PageCounter()
-
+    counters = {}
     # Loop through all XML files
     for xml_file in track(xml_files, description="Collecting statistics.."):
         filename = xml_file.name
@@ -63,12 +64,14 @@ def statistics(
 
         # Log statistics for the current page
         page_counter.statistics(pre_text=f"Statistics for {filename}")
-
+        counters[filename] = page_counter
         # Aggregate statistics for all pages
         pagescounter += page_counter
 
     # Log cumulative statistics
     pagescounter.statistics(pre_text=f"Statistics for all {len(xml_files)} PAGE-XML")
+    counters[f'All {len(xml_files)} PAGE-XML'] = pagescounter
+    return counters
 
 @app.command()
 def confidences(
@@ -140,7 +143,6 @@ def confidences(
     table.add_column("Confidence", justify="right", no_wrap=True)
     table.add_column(f"Confidence level\n(Very low=<Q1-1.5*IQR\nLow=Q1–1.5*IQR-Q1\nModerate=Q1–Median\nMedian=Median–Q3\n"
                      f"High=Q3–Q3+1.5*IQR\nVery high=>Q3+1.5*IQR)", justify="left", no_wrap=True)
-    from rich.style import Color
 
     colors = {'0': "bright_white",
               '1': "red1",
@@ -177,6 +179,8 @@ def confidences(
     # Save the workbook to a file
     wb.save(f"{output_filename}.xlsx")
 
+    return table
+
 if (spec := util.find_spec('pageplus.utils.dinglehopper.edit_distance')) is not None:
     from pageplus.cli.dinglehopper import get_metrics, summarize_metrics
 
@@ -194,7 +198,7 @@ if (spec := util.find_spec('pageplus.utils.dinglehopper.edit_distance')) is not 
             textline_tagfilter: Annotated[str, typer.Option(
                 help="A regular expression, if specific textlines should be filtered")] = None,
             substitutions: Annotated[List[str], typer.Option(
-                help="Regex substitutions with pattern==>replacement,...]", callback=transform_substitutions)] = (''),
+                help="Regex substitutions with pattern==>replacement,...]", callback=transform_substitutions)] = [''],
             profile: Annotated[str, typer.Option(help="Profile function with tag (default: no profiling active.")] = '',
             profilelevel: Annotated[List[ProfileLevel],
             typer.Option(
