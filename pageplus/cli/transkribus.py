@@ -579,12 +579,12 @@ else:
                                           help="Choose the documents inside this folder with "
                                           "'original', or the 'modified' scripts inside the subfolder.",
                                            case_sensitive=False)] = "original",
-                 overwrite: Annotated[bool, typer.Option(help="Overwrite existing Transcription")] = True,
                  convert: Annotated[
                      ConvertOptions, typer.Option(help="Convert options (recommended just convert all)")] = "All",
                  outputdir: Annotated[Path, typer.Option('--outputdir', '-o',
                                                          help=f"Path to the output directory where "
-                                                              f"the text files will be saved")] = None) -> None:
+                                                              f"the text files will be saved. If not specified, "
+                                                              f"input files will be overwritten.")] = None) -> None:
         """
         If you want to use Transkribus PAGE-XML for other tools, sometimes you need to convert their version into
         the official, current PRIMA version.
@@ -599,7 +599,7 @@ else:
         envs = dotenv_values()
         wsfolder = Path(get_key(find_dotenv(), ts_workspace.prefix_ws + workspace)).joinpath(
             envs.get(Environments.PAGEPLUS.as_prefix_workstate(workstate), ''))
-        outputdir = wsfolder if overwrite else Path(outputdir)
+        outputdir = wsfolder if outputdir is None else Path(outputdir)
         outputdir.mkdir(parents=True, exist_ok=True)
         if wsfolder.exists() and outputdir is not None:
             with Status("Translating from Transkribus variant of PAGE to standard-conformant PAGE") as status:

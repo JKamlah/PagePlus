@@ -174,6 +174,7 @@ def fulltext(
     xml_files = collect_xml_files(map(Path, inputs))
     if not xml_files:
         raise FileNotFoundError('No XML files found in the input directory.')
+    text_output_path = None
     for xml_file in track(xml_files, description="Extracting fulltext.."):
         filename = xml_file.stem  # Extracts the filename without the extension
         logging.info(f'Processing file: {filename}')
@@ -190,6 +191,7 @@ def fulltext(
                                                              reading_order_mode=ro_mode.value,
                                                              dehyphenate=dehyphenate)
             fout.write(extracted_text)
+    if text_output_path:
         fs.open_folder(text_output_path.parent) if open_folder else None
 
 @app.command()
@@ -456,8 +458,7 @@ if (spec := util.find_spec('pikepdf')) is None:
 else:
 
     @app.command()
-    def pdf(inputs: Annotated[List[str],
-    typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None,
+    def pdf(inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None,
             image_folder: Annotated[str, typer.Option(exists=True,
                                                         help="Folder to the images relative to page-xml (default same as input)")] = '.',
             same_names: Annotated[bool, typer.Option(
@@ -476,7 +477,6 @@ else:
         """
         from pageplus.utils.pdf.renderer import page_to_pdf
         from pikepdf import Pdf, ObjectStreamMode
-
         # Read XML
         xml_files = collect_xml_files(map(Path, inputs))
         # Raise error if no xml files are found

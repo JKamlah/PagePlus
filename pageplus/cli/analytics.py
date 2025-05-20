@@ -11,7 +11,7 @@ from rich.table import Table
 from rich.progress import track
 from typing_extensions import Annotated
 
-from pageplus.analytics.counter import PageCounter
+from pageplus.utils.counter import PageCounter
 from pageplus.io.logger import logging
 from pageplus.utils.fs import collect_xml_files
 from pageplus.models.page import Page

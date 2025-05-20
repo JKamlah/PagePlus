@@ -76,12 +76,12 @@ def download(
     tag: Annotated[str, typer.Option(help="Filter FileGrp by USE or ID tag.")] = "",
     nametag: Annotated[str, typer.Option(help="Use the original filename or the USE or ID tag for filename. (default: all)")] = None,
     selection: Annotated[List[int], typer.Option(help="The documents that should be downloaded, e.g 0,1,3 .")] = None,
-    overwrite: Annotated[bool, typer.Option(help="Overwrite existing files.")] = False):
+    outputdir: Annotated[Path, typer.Option(help="Directory to save the files. If not specified, files will be saved in the same directory as the METS file.")] = None):
     """
     Download files referenced in a METS XML document by <fileGrp>.
     """
     mets_files = parse_mets_xml_multiple_roots(mets, loose=not strict, verbose=verbose)
-    base_output = Path(mets).parent
+    base_output = Path(mets).parent if outputdir is None else Path(outputdir)
 
     for idx, doc in enumerate(mets_files):
         # Determine output directory
@@ -111,9 +111,9 @@ def download(
 
                     for file in child.children:
                         if isinstance(file, File):
-                            download_file_from_flocat(file, nested_folder, nametag, overwrite=overwrite)
+                            download_file_from_flocat(file, nested_folder, nametag, overwrite=True)
                 elif isinstance(child, File):
-                    download_file_from_flocat(child, grp_folder, nametag, overwrite=overwrite)
+                    download_file_from_flocat(child, grp_folder, nametag, overwrite=True)
 
 @app.command()
 def get_oai(

@@ -60,7 +60,6 @@ if spec := util.find_spec('kraken') is None:
         else:
             print(f"Error: {env_path} is not a valid directory!")
 
-
 else:
 
     from kraken.lib import models
@@ -93,8 +92,6 @@ else:
             typer.Option(
                 help="Level of profiling. Options: 'stats' (always true), 'params', 'results', 'analytics', 'summary'")
             ] = ("stats", "params", "analytics", "summary"),
-            overwrite: Annotated[
-                bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
             dry_run: Annotated[bool, typer.Option(help="If True, the function will not write any files.")] = False):
         """
         OCR with the existing layout information. Existing text will be overwritten.
@@ -222,7 +219,7 @@ else:
                 ocr.profile.analytics.append({xml_file.name: metrics})
                 all_diff.update(page_diff)
             if not dry_run:
-                fout = xml_file if overwrite else xml_file.parent.joinpath(
+                fout = xml_file if outputdir is None else xml_file.parent.joinpath(
                     model_path.with_suffix('').name.replace('.', '_').replace(':', '-')).joinpath(xml_file.name)
                 fout.parent.mkdir(parents=True, exist_ok=True)
                 logging.info(f'Wrote modified xml file to output directory: {fout}')

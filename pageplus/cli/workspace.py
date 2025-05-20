@@ -12,42 +12,12 @@ from dotenv import load_dotenv, find_dotenv, get_key, set_key
 from pageplus.utils.constants import Environments
 from pageplus.utils.workspace import Workspace
 
-
 def current_workspace() -> Workspace:
     env = get_key(find_dotenv(), Environments.PAGEPLUS.as_prefix_environment())
     return Workspace(Environments[env]) if env else Workspace(Environments.PAGEPLUS)
 
 def pp_workspace():
     return current_workspace()
-
-
-### Environment ###
-@app.command(rich_help_panel="Environment")
-def set_environment(environment: Annotated[Environments, typer.Argument(help="Name of environment")]) -> None:
-     """
-     Set the default environment - you can use our environment workspace names as input in the pageplus functions
-     and the loaded workspace is used if no input path is given
-     """
-     dotfile = find_dotenv()
-     set_key(dotfile, Environments.PAGEPLUS.as_prefix_environment(), environment.name)
-     print(f"[green]Environment is updated:[green] {environment.value}")
-
-
-@app.command(rich_help_panel="Environment")
-def get_environment() -> None:
-     """
-     Get the default environment - you can use our environment workspace names as input in the pageplus functions
-     and the loaded workspace is used if no input path is given
-     """
-     dotfile = find_dotenv()
-     get_key(dotfile, Environments.PAGEPLUS.as_prefix_environment())
-     table = Table(title=f"[green]{Environments.PAGEPLUS.value} Environment[/green]")
-     table.add_column("Setting", justify="right", style="cyan", no_wrap=True)
-     table.add_column("Value")
-     table.add_row(f"Loaded environment",
-                   Environments[get_key(dotfile, Environments.PAGEPLUS.as_prefix_environment())].name)
-     print(table)
-
 
 ### WORKSPACE ###
 def validate_workspace(ctx: typer.Context, param: typer.CallbackParam, value: str) -> str:
@@ -101,7 +71,8 @@ def backup_xmlfiles(backup_folder: Annotated[Path,
     Returns:
     None
     """
-    pp_workspace().backup(backup_folder,workspace)
+    pp_workspace().backup(backup_folder, workspace)
+
 
 @app.command(rich_help_panel="Workspace")
 def restore_xmlfiles(backup_folder: Annotated[Path,
@@ -115,8 +86,7 @@ def restore_xmlfiles(backup_folder: Annotated[Path,
     Returns:
     None
     """
-    pp_workspace().restore(backup_folder,workspace)
-
+    pp_workspace().restore(backup_folder, workspace)
 
 
 @app.command(rich_help_panel="Workspace")
@@ -170,7 +140,12 @@ def load_local_document(
     None
     """
     #TODO: Validationcheck missing
+    from pageplus.utils.envs import str_to_env
     load_dotenv()
+    workspace = str_to_env(workspace)
+    if workspace == '':
+        print(f"[red bold]Warning:[/red bold] Workspace name is not valid[/red bold]")
+        return
     if workspace in pp_workspace().names() and not overwrite_workspace:
         print(f"[red bold]Warning:[/red bold] The environment variable {workspace} already exists."
               " Please set [green]overwrite-workspace[/green] "
@@ -178,7 +153,7 @@ def load_local_document(
     if inputdir.is_dir():
         set_key(find_dotenv(), pp_workspace().prefix_ws + workspace, str(inputdir.absolute()))
         if loading:
-            load_workspace(pp_workspace().prefix_ws + workspace)
+            load_workspace(workspace)
     else:
         print(f"[red]Warning:[/red] The inputdir does not point to an existing folder.")
 

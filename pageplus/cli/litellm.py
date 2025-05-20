@@ -47,14 +47,14 @@ else:
 
     from pageplus.utils.constants import Environments, LLMProvider
     from pageplus.utils.workspace import Workspace
-    from pageplus.utils.llm.api import LLMAPI
+    from pageplus.utils.llm.api import LITELLMAPI
 
     from litellm import completion
     from pydantic import BaseModel
     import json_repair
 
     llm_workspace = Workspace(Environments.LLM)
-    llm_api = LLMAPI(Environments.LLM)
+    llm_api = LITELLMAPI(Environments.LLM)
 
     ### PACKAGE ###
     @app.command(rich_help_panel="Package")
@@ -379,9 +379,9 @@ Only output the JSON!"""
             text_filter: Annotated[str, typer.Option(
                 help="A regular expression, if specific textlines should be filtered")] = None,
             region_tagfilter: Annotated[str, typer.Option(
-                help="A regular expression, if specific textlines should be filtered")] = None,
+                help="A regular expression, if only specific region should be processed")] = None,
             textline_tagfilter: Annotated[str, typer.Option(
-                help="A regular expression, if specific textlines should be filtered")] = None,
+                help="A regular expression, if only specific textline should be processed")] = None,
             only_user_prompt: Annotated[bool, typer.Option(help="Deactivate system prompts (for older API)")] = False,
             json_object: Annotated[bool, typer.Option(help="Use json_object instead of json_schema.")] = False,
             calls_per_minute: Annotated[
