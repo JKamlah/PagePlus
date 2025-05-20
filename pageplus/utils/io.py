@@ -163,7 +163,7 @@ def load_gemini2d_json(json_path: [str|Path]) -> List[dict]:
     return data
 
 # --- Generate PAGE XML Content (remains the same) ---
-def gemini2d_to_page(data: json, image: Path) -> str:
+def gemini2d_to_page(data: json, image: Path, settings: dict = None) -> str:
     try:
         with Image.open(image) as img:
             img_width, img_height = img.size
@@ -173,7 +173,7 @@ def gemini2d_to_page(data: json, image: Path) -> str:
     except Exception as e:
         logging.error(f"Error opening or reading image '{image}': {e}")
 
-    _, data = gemini2d_preprocess(data, img)
+    _, data = gemini2d_preprocess(data, img, settings)
 
     page_xml_lines = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
                       '<PcGts xmlns="http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15 http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15/pagecontent.xsd">',
@@ -190,7 +190,7 @@ def gemini2d_to_page(data: json, image: Path) -> str:
 
         for idx, line_data in enumerate(region_data['lines']):
             # PAGE XML Coords: top-left, top-right, bottom-right, bottom-left
-            page_xml_lines.append(f'            <TextLine id="{region_id}_l{idx+1}">')
+            page_xml_lines.append(f'            <TextLine id="{region_id}_l{idx+1}" custom=" structure {{type:{line_data['line_structure_type']}}}">')
             page_xml_lines.append(f'                <Coords points="{' '.join([f"{int(x)},{int(y)}" for x, y in line_data['line_polygon']]).strip()}"/>')
             page_xml_lines.append(f'                <Baseline points="{' '.join([f"{int(x)},{int(y)}" for x, y in line_data['line_baseline']]).strip()}"/>')
             page_xml_lines.append(f'                <TextEquiv>')
@@ -206,11 +206,10 @@ def gemini2d_to_page(data: json, image: Path) -> str:
 
 
 
-
-
 def gemini2d_preprocess(
     data: json,
-    img: Image.Image
+    img: Image.Image,
+    settings: dict = None
 ) -> Tuple[Optional[Tuple[int, int]], List[Dict[str, Any]]]:
     """
     Reads JSON bounding box data (relative 0-1000), calculates absolute line
@@ -242,6 +241,8 @@ def gemini2d_preprocess(
     bbox_key = 'box_2d'
     primary_text_key = 'text'
     secondary_text_key = 'text_content'
+    structure_type_key = 'type'
+    secondary_structure_type_key = 'tag'
 
     for i, entry in enumerate(data):
         if not isinstance(entry, dict):
@@ -258,6 +259,8 @@ def gemini2d_preprocess(
                         break
                 else:
                     text = ""
+
+            structure_type = entry.get(structure_type_key, "paragraph") or entry.get(secondary_structure_type_key, "paragraph")
 
             if not relative_bbox or len(relative_bbox) != 4:
                 logging.warning(f"Skipping entry {i} due to missing or invalid bbox: {relative_bbox}")
@@ -301,6 +304,7 @@ def gemini2d_preprocess(
                     'line_text': lines[0],
                     'line_polygon': polygon,
                     'line_baseline': baseline,
+                    'line_structure_type': structure_type,
                 })
 
             else:
@@ -325,6 +329,7 @@ def gemini2d_preprocess(
                             'line_text': line_text,
                             'line_polygon': polygon,
                             'line_baseline': baseline,
+                            'line_structure_type': structure_type,
                         })
                 else:
                     line_box_height = box_height / len(lines)
@@ -350,6 +355,7 @@ def gemini2d_preprocess(
                             'line_text': line_text,
                             'line_polygon': polygon,
                             'line_baseline': baseline,
+                            'line_structure_type': structure_type,
                         })
         except Exception as e:
             logging.warning(f"Skipping entry {i} due to unexpected error: {e}")

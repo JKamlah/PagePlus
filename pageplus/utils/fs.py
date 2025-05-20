@@ -263,6 +263,8 @@ def collect_xml_files(inputpaths: Iterator[Path|str],
                 is_page_xml(inputpath)):
             xml_files.append(inputpath)
         elif inputpath.is_dir():
+            print([xml_file for xml_file in inputpath.glob('*.xml') if
+                              xml_file.name not in exclude])
             xml_files.extend([xml_file for xml_file in inputpath.glob('*.xml') if
                               xml_file.name not in exclude and is_page_xml(xml_file)])
         else:
@@ -295,7 +297,7 @@ def is_page_xml(file_path: Path) -> bool:
         # Typical namespace URI for PAGE is something like: "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15"
         # Adjust the namespace URI according to the version of PAGE XML you're expecting
         page_namespace = "http://schema.primaresearch.org/PAGE/gts/pagecontent/"
-        return root.tag.startswith(f"{{{page_namespace}")
+        return (root.tag.startswith(f"{{{page_namespace}") or root.tag.startswith("PcGts"))
 
     except ET.ParseError:
         # Not an XML file, or XML is malformed

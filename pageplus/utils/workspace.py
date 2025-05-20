@@ -3,6 +3,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from typing import Type
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -20,7 +21,7 @@ from pageplus.utils.fs import collect_xml_files
 
 @dataclass
 class Workspace:
-    environment: Environments = Environments.PAGEPLUS
+    environment: Environments | Type[Environments] = Environments.PAGEPLUS
     env_value: str = field(init=False)
     env_prefix: str = field(init=False)
     prefix_ws: str = field(init=False)
@@ -71,18 +72,32 @@ class Workspace:
         table.add_column("Workspace folder")
         [table.add_row('[green bold]Loaded workspace[/green bold]',
                        f"[cyan]{key.replace(self.prefix_ws, '')}[/cyan]")
-         for (var, key) in filter_envs(self.prefix_loaded_ws).items()]
-        [table.add_row(var.replace(self.prefix_ws, ''), key) for (var, key)
+         for (val, key) in filter_envs(self.prefix_loaded_ws).items()]
+        [table.add_row(val.replace(self.prefix_ws, ''), key) for (val, key)
          in filter_envs(self.prefix_ws).items()]
-        print(table)
-
+        print(table)     
 
     def names(self):
         """
         Return workspace names directly, assuming these are valid
         Conversion to lowercase for case-insensitive handling is done in the callback
         """
-        return [var.replace(self.prefix_ws, '') for var in filter_envs(self.prefix_ws).keys()]
+        return [key.replace(self.prefix_ws, '') for key in filter_envs(self.prefix_ws).keys()]
+    
+    def loaded(self):
+        """
+        Get name of the oaded workspace
+        Returns:
+        """
+        return [val.replace(self.prefix_ws, '') for val in filter_envs(self.prefix_loaded_ws).values()][0]
+
+
+    def path(self, workspace: str) -> None:
+        """
+        Get path of a workspace
+        Returns:
+        """
+        return get_key(find_dotenv(), self.prefix_ws + workspace)
 
 
     def load(self, workspace: str) -> None:
@@ -92,11 +107,14 @@ class Workspace:
         None
         """
         dotfile = find_dotenv()
-        workspace = self.prefix_ws+str_to_env(workspace)
-        if get_key(dotfile, workspace):
+        if workspace == '':
             set_key(dotfile, self.prefix_loaded_ws, workspace)
         else:
-            print(f"[red]Warning: {workspace} workspace not found![/red]")
+            workspace = self.prefix_ws+str_to_env(workspace)
+            if get_key(dotfile, workspace):
+                set_key(dotfile, self.prefix_loaded_ws, workspace)
+            else:
+                print(f"[red]Warning: {workspace} workspace not found![/red]")
 
 
     def update(self) -> None:

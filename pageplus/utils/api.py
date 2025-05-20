@@ -1,11 +1,10 @@
 from dataclasses import dataclass, field
 
 import typer
+from dotenv import find_dotenv, get_key, dotenv_values, set_key
 from rich import print
 from rich.table import Table
 from typing_extensions import Annotated
-
-from dotenv import find_dotenv, get_key, dotenv_values, set_key
 
 from pageplus.utils.constants import Environments, Provider
 from pageplus.utils.envs import filter_envs
@@ -43,7 +42,6 @@ class API:
         providername = get_key(find_dotenv(), self.environment.name.upper() + "_PROVIDER")
         return providername if providername else ''
 
-    from typing import Tuple
     @provider.setter
     def provider(self, providername: Annotated[Provider, typer.Argument(help="Provider and service name")],
                  service: Annotated[str, typer.Argument(help="Service")] = "DEFAULT") -> None:

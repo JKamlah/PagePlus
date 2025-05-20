@@ -20,6 +20,7 @@ class ProfileLevel(str, Enum):
     analytics = "analytics"
     summary = "summary"
 
+
 class OutputFormats(str, Enum):
     """
     Level of function profiling
@@ -28,6 +29,18 @@ class OutputFormats(str, Enum):
     page = "page"
     alto = "alto"
     json = "json"
+
+
+class TextLevel(str, Enum):
+    """
+    Level of text 
+    """
+    TextRegion = "TextRegion"
+    Textline = "Textline"
+    Word = "Word"
+    Glyph = "Glyph"
+    TableRegion = "TableRegion"
+    
 
 
 class DrawingsPDF(str, Enum):
@@ -92,10 +105,10 @@ class Environments(str, Enum):
         return f"{self.name.upper()}_"
 
     def as_prefix_workspace(self):
-        return f"{self.name.upper()}_WS_"
+        return f"PAGEPLUS_WS_"
 
     def as_prefix_loaded_workspace(self):
-        return f"{self.name.upper()}_LOADED_WS"
+        return f"PAGEPLUS_LOADED_WS"
 
     def as_prefix_environment(self):
         return f"{self.name.upper()}_ENVIRONMENT"

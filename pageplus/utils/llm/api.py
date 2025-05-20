@@ -15,7 +15,7 @@ if (spec := util.find_spec('litellm')) is not None:
     import litellm
 
     @dataclass
-    class LLMAPI(API):
+    class LITELLMAPI(API):
         environment: Environments = Environments.PAGEPLUS
         keep_alive_time = 60.0
 
@@ -153,8 +153,13 @@ if (spec := util.find_spec('google')) is not None:
             """
             Checks if api key is valid
             """
-            print('[green]Valid API key[green]') if litellm.check_valid_key(self.model, self.api_key) \
-                else print('[red]Not a valid API key[red]')
+            try:
+                genai.Client(api_key=self.api_key)
+                print(f"[green]Valid API key[green]")
+                return True
+            except Exception as e:
+                print('[red]Not a valid API key[red]')
+                return False
 
         @property
         def model(self, prefix=False) -> str:
@@ -208,15 +213,14 @@ if (spec := util.find_spec('google')) is not None:
             None
             """
             modellist = self.client().models.list()
-            print(modellist.page_size)
             if modellist:
-                print(f"[green]Available models for provider {self.provider.replace('__',' - ')}[/green]")
+                print(f"[green]Available models for Gemini[/green]")
                 table = Table(title=f"[green]Models overview[/green]")
-                table.add_column(f"Provider", justify="right", style="cyan", no_wrap=True)
                 table.add_column("Model")
-                table.add_row(self.provider.replace('__',' - '),
-                              '\n'.join([model.name for model in modellist]))
+                for model in modellist:
+                    table.add_row(model.name)
                 print(table)
+            return table
 
         def show_modeldetails(self, model: str):
             """
