@@ -168,6 +168,7 @@ class Page:
         write_xml(self, filepath)
         filepath.parent.mkdir(parents=True, exist_ok=True)
         self.tree.write(str(filepath.absolute()),
+                        pretty_print=True,
                         xml_declaration=True,
                         standalone=True,
                         encoding='utf-8')
@@ -300,45 +301,48 @@ class Page:
         """
         Deletes elements at a specific text level ('word', 'line', or 'region') from the PAGE XML.
         """
-        if level == 'word':
-            self._delete_words()
+        if level == 'Word':
+            count = self._delete_words()
+            print(f"Deleted {count} Words.")
 
-        elif level == 'line':
-            self._delete_lines()
+        elif level == 'Textline':
+            count = self._delete_text([line for region in self.regions.textregions+self.regions.tableregions for line in region.textlines])
+            print(f"Deleted {count} TextLines")
 
-        elif level == 'region':
-            self._delete_regions()
+        elif level == 'TextRegion':
+            count = self._delete_text(self.regions.textregions)
+            print(f"Deleted {count} TextRegions")
+        
+        elif level == 'TableRegion':
+            count = self._delete_text(self.regions.tableregions)
+            print(f"Deleted {count} TableRegions")
 
     def _delete_words(self) -> None:
         """
         Deletes all 'Word' elements from the PAGE XML.
         """
+        count = 0
         for word_element in self.root.iter(f"{{{self.ns}}}Word"):
             self.delete_element(word_element)
+            count += 1
+        return count
 
-    def _delete_lines(self) -> None:
+    def _delete_text(self, elements: list) -> None:
         """
         Deletes all 'TextEquiv' elements from 'TextLine' elements in the PAGE XML.
         """
-        for region in self._iterate_regions():
-            for textline in region.textlines:
-                text_equiv = textline.xml_element.find(f"{{{self.ns}}}TextEquiv")
-                if text_equiv is not None:
-                    self.delete_element(text_equiv)
-
-    def _delete_regions(self) -> None:
-        """
-        Deletes all 'TextEquiv' elements from 'TextRegion' elements in the PAGE XML.
-        """
-        for region in self._iterate_regions():
-            text_equiv = region.xml_element.find(f"{{{self.ns}}}TextEquiv")
+        count = 0
+        for element in elements:
+            text_equiv = element.xml_element.find(f"{{{self.ns}}}TextEquiv")
             if text_equiv is not None:
                 self.delete_element(text_equiv)
+                count += 1
+        return count
 
     def _iterate_regions(self):
         """
         Generator to iterate through all regions in the page.
         """
-        for regiontypes, regions in self.regions.__dict__.items():
+        for regiontype, regions in self.regions.__dict__.items():
             for region in regions:
                 yield region

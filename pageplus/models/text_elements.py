@@ -98,31 +98,36 @@ class TextRegion(Region):
         return line2.bounds[0] < line1.bounds[2]
 
     def sort_lines(self, mode: str = 'single_col'):
-        """
-        Sorts text lines based on their vertical positions and adjusts for lines that are horizontally misaligned.
-        Currently, only 'single_col' mode is implemented.
-        """
-        if mode != 'single_col':
-            return  # Other modes are not implemented
-
+        num_lines = len(self.textlines)
+        orig_sorted_lines = []
         # Sorting after y coordinates
-        orig_sorted_textlines = [(idx, textline.get_coordinates(returntype="linearring").minimum_rotated_rectangle)
-                                 for idx, textline in enumerate(self.textlines)]
-        sorted_textlines = sorted(orig_sorted_textlines, key=lambda x: x[1].centroid.y)
-
-        # More complex sorting considering the proximity of lines and their horizontal positions
-        for i in range(len(sorted_textlines) - 1):
-            for j in range(i + 1, len(sorted_textlines)):
-                # TODO: Chech this behavior
-                if len(sorted_textlines[i]) < 3 or len(sorted_textlines[j]) < 3: continue
-                line1, line2 = sorted_textlines[i][2], sorted_textlines[j][2]
-                if self._textlines_near_same_height(line1, line2):
-                    logging.info(
-                        f"RO-Lineheight: In textregion {self.get_id()} the lines {self.textlines[sorted_textlines[i][0]].get_id()} ({self.textlines[sorted_textlines[i][0]].get_text()}) and {self.textlines[sorted_textlines[j][0]].get_id()} ({self.textlines[sorted_textlines[j][0]].get_text()}) at the same height")
-                    if self._should_swap_textlines(line1, line2):
-                        logging.info(
-                            f"RO-Lineswap: In textregion {self.get_id()} the lines {self.textlines[sorted_textlines[i][0]].get_id()} and {self.textlines[sorted_textlines[j][0]].get_id()} got swapped.")
-                    sorted_textlines[i], sorted_textlines[j] = sorted_textlines[j], sorted_textlines[i]
+        for idx, textline in enumerate(self.textlines):
+            mrr = textline.get_coordinates(returntype="linearring").minimum_rotated_rectangle
+            orig_sorted_lines.append((idx, mrr.centroid, mrr))
+        sorting_lines = sorted(orig_sorted_lines, key=lambda x: x[1].y)
+        sl_idx = 0
+        while sl_idx < num_lines-1:
+            for sl_next in range(1, 4):
+                if sl_idx+sl_next > num_lines-1: continue
+                rng = range(max(int(sorting_lines[sl_idx][2].bounds[1]), int(sorting_lines[sl_idx+sl_next][2].bounds[1])),
+                     min(int(sorting_lines[sl_idx][2].bounds[3]), int(sorting_lines[sl_idx+sl_next][2].bounds[3]))+1)
+                # Y coordinate difference to find lines which are nearly in the same height
+                if len(rng)*.25 > int(abs(((sorting_lines[sl_idx+sl_next][1].y - sorting_lines[sl_idx][1].y)))):
+                    logging.info(f"RO-Lineheight: In textregion {self.get_id()} the lines {self.textlines[sorting_lines[sl_idx][0]].get_id()} ({self.textlines[sorting_lines[sl_idx][0]].get_text()}) and {self.textlines[sorting_lines[sl_idx+sl_next][0]].get_id()} ({self.textlines[sorting_lines[sl_idx+sl_next][0]].get_text()}) at the same height")
+                    # Check if the second line is behind the first (x-coordindate)
+                    if sorting_lines[sl_idx+sl_next][1].bounds[0] < sorting_lines[sl_idx][2].bounds[0]:
+                        logging.info(f"RO-Lineswap: In textregion {self.get_id()} the lines {self.textlines[sorting_lines[sl_idx][0]].get_id()} and {self.textlines[sorting_lines[sl_idx+sl_next][0]].get_id()} got swapped.")
+                        sorting_lines[sl_idx], sorting_lines[sl_idx+sl_next] = sorting_lines[sl_idx+sl_next],\
+                            sorting_lines[sl_idx],
+                        break
+            else:
+                sl_idx += 1
+        new_sorting = [idx for (idx, _, _) in sorting_lines]
+        if new_sorting != sorted(new_sorting):
+            self.textlines = list(np.array(self.textlines)[new_sorting])
+            for textline in self.textlines:
+                self.xml_element.remove(textline.xml_element)
+                self.xml_element.append(textline.xml_element)
 
     def _textlines_near_same_height(self, line1: Polygon, line2: Polygon) -> bool:
         """ Helper function to check if two lines are near the same height """

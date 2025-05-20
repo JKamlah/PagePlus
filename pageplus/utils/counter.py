@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 
+from rich import print
+
 from pageplus.io.logger import logging
 
 
@@ -14,7 +16,7 @@ class PageCounter:
     words: int = 0
     glyphs: int = 0
 
-    def statistics(self, pre_text: str = "") -> None:
+    def statistics(self, pre_text: str = "") -> str:
         """
         Logs the statistics of the page elements.
         """
@@ -24,7 +26,8 @@ class PageCounter:
                         f"Overall lines:        {self.textlines}\n"
                         f"Overall words:        {self.words}\n"
                         f"Overall glyphs:       {self.glyphs}")
-        logging.info(log_message)
+        print(log_message)
+        return log_message
 
     def __add__(self, other: PageCounter) -> PageCounter:
         """

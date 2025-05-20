@@ -237,9 +237,10 @@ class CoordElement:
         region_polygon = LinearRing(coord_tuples)
         if not region_polygon.is_valid:
             reason = is_valid_reason(region_polygon)
-            logging.warning(f"{self.get_id()}: Region is not valid. Error: {reason}")
             if 'Ring Self-intersection' in reason:
-                logging.warning(f"We recommend to use the repair function to delete the self-intersection part.")
+                logging.warning(f"{self.get_id()}: Region is not valid. Error: {reason}\nWe recommend to use the repair function to delete the self-intersection part.")
+            else:
+                logging.warning(f"{self.get_id()}: Region is not valid. Error: {reason}")
             return False
 
         parent_coords = self.get_parent_element().find(f"{{{self.ns}}}Coords")
