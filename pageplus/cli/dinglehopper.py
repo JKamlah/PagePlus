@@ -41,7 +41,7 @@ def _install() -> None:
                         line = line.replace('            return old_word_break(c, index)',
                                             '            return old_word_break(c)')
                         f.write(line)
-            if fname == 'extracted_text.py':
+            if fname in ['extracted_text.py', 'ocr_files.py']:
                 shutil.copy(output_filename, output_filename.with_suffix('.old'))
                 with open(output_filename, 'w') as f:
                     for line in output_filename.with_suffix('.old').open('r').readlines():
