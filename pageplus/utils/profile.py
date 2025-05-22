@@ -56,9 +56,12 @@ def profile(funcname: str):
                 if len(ret.analytics) > 0:
                     profilelog["analytics"] = ret.analytics
                 profilelog["summary"] = ret.summary
-                ret.dir.mkdir(parents=True, exist_ok=True)
-                # Load existing data
-                fpath = ret.dir.joinpath("PagePlusProfile.json")
+                if ret.dir.is_file():
+                    ret.dir.parent.mkdir(parents=True, exist_ok=True)
+                    fpath = ret.dir.parent.joinpath("PagePlusProfile.json")
+                else:
+                    ret.dir.mkdir(parents=True, exist_ok=True)
+                    fpath = ret.dir.joinpath("PagePlusProfile.json")
                 if fpath.exists():
                     data = json.loads(fpath.read_text())
                 else:
