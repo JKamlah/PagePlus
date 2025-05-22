@@ -468,7 +468,7 @@ Only output the JSON!"""
             if not imagePath:
                 print(f"Warning: Image {imageFilename} not found in {image_folder}")
                 continue
-            imageDir = Path(image_folder)
+            imageDir = Path(xml_file).parent
             image, image_format = get_image(imagePath)
             text_dict = {}
             page_diff = Counter()
