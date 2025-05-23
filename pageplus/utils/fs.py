@@ -154,7 +154,7 @@ def transform_substitutions(ctx: typer.Context, param: typer.CallbackParam, valu
         return []
     return [tuple(value.split("==>", 1)) for value in values if "==>" in value]
 
-def find_image(imageFilename: str, imageFolder: Path):
+def find_image(imageFilename: str, imageFolder: Path) -> Path:
     """
     Finds the image file in the specified folder.
 
@@ -167,7 +167,7 @@ def find_image(imageFilename: str, imageFolder: Path):
     """
     image_path = imageFolder.joinpath(imageFilename)
     if image_path.is_file():
-        return Path(image_path.absolute())
+        return image_path
     return None
 
 
