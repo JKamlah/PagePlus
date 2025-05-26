@@ -20,6 +20,12 @@ openpyxl = "^3"
 json_repair = "^0.36.1"
 pillow = "^11.1.0"
 langcodes = "^3.5.0"
+jinja2 = "^3.1.6"
+rapidfuzz = "^3.13.0"
+uniseg = "^0.10.0"
+multimethod = "^2.0"
+attrs = "^25.3.0"
+chardet = "^5.2.0"
 
 
 [build-system]
