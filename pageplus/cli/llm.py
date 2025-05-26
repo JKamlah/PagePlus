@@ -396,6 +396,7 @@ Only output the JSON!"""
             json_object: Annotated[bool, typer.Option(help="Use json_object instead of json_schema.")] = False,
             calls_per_minute: Annotated[
                      int, typer.Option(help="API call rate limit per minute")] = 120,
+            skip_non_valid: Annotated[bool, typer.Option(help="Ignores non-valid response and keeps the original text)")] = False,
             profile: Annotated[str, typer.Option(help="Profile function with tag (default:'' no profiling active.")] = '',
             profilelevel: Annotated[List[ProfileLevel],
                 typer.Option(
@@ -570,6 +571,11 @@ Only output the JSON!"""
                                 page_metrics.append(get_metrics(text, ocr_text))
                         except:
                             print(f"{line_id} -> [red] Error: No valid output[red]")
+                            ocr_text = ''
+                            line.update_text(ocr_text)
+                            text_dict[tr_id][line_id]['ocr'] = ocr_text
+                            if 'analytics' in profilelevel:
+                                page_metrics.append(get_metrics(text, ocr_text))
                     except Exception as e:
                         print("An error occurred during completion:", e)
                         continue

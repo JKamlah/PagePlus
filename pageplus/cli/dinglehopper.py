@@ -233,9 +233,13 @@ else:
         counts = {}
         gt = unicodedata.normalize(normalization, gt)
         ocr = unicodedata.normalize(normalization, ocr)
+        missed = {'line': 0, 'word': 0, 'character': 0}
         if warning_msg:
             if len(gt) == 0: print("[red]Warning: Ground Truth is empty.[/red]")
-            if len(ocr) == 0: print("[red]Warning: Compare text is empty.[/red]")
+            if len(ocr.strip()) == 0:
+                print("[red]Warning: Compare text is empty. The characters will be counted as missed.[/red]")
+                missed = {'line': 1, 'word': len(gt.split(' ')), 'character': len(gt)}
+                gt = '\n'
         # Handle edge cases: Minimum of 1 character and 1 word for gt and ocr to calculate accuracy
         if line_breaks:
             gt += '\n' if not gt.endswith('\n') else gt
@@ -250,8 +254,9 @@ else:
         cer = sum([v for k, v in c_diff.items()]) / counts['character'] if c_diff else 0
         counts.update(count_categories(gt, categories()))
         metrics = {'count': counts,
-                'error_rate': {'global': {'word': wer, 'character': cer}, 'local': {}},
-                'error_count': {'word': wec, 'character': cec}}
+                   'error_rate': {'global': {'word': wer, 'character': cer}, 'local': {}},
+                   'error_count': {'word': wec, 'character': cec},
+                   'missed_count': missed}
         gt_string = ''.join([k.split(' :: ')[0].replace('None', '')*v for k, v in c_diff.items()]) if c_diff else ''
         error_counts = count_categories(gt_string, categories())
         counts['insertion'] = sum([v for k, v in c_diff.items() if re.search('None', k.split(' :: ')[0])]) if c_diff else 0
@@ -292,6 +297,8 @@ else:
             confusion = Counter()
             [confusion.update(Counter(metrics['confusions'][cat])) for metrics in data]
             sum_metrics['confusions'][cat] = dict(confusion)
+        for cat in sum_metrics['missed_count']:
+            sum_metrics['missed_count'][cat] = sum([metrics['missed_count'][cat] for metrics in data])
         return sum_metrics
 
 
