@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Dict, Any, Union
 from collections import Counter, defaultdict
 
 import lxml.etree as ET
@@ -73,7 +73,10 @@ class Page:
         ordered_regions = []
         for ro_ids in self.get_region_reading_order_ids(mode, region_types):
             region = self.root.find(f'.//*[@id="{ro_ids}"]')
-            region_tag = ET.QName(region.tag).localname
+            try:
+                region_tag = ET.QName(region.tag).localname
+            except:
+                continue
             if region is not None and region_tag not in region_types:
                 continue
             region = {'Region': Region,
@@ -81,6 +84,12 @@ class Page:
                       'TableRegion': TableRegion}.get(region_tag, Region)(region, self.ns, region.getparent())
             ordered_regions.append(region)
         return ordered_regions
+  
+    def get_region_by_id(self, id) -> Region:
+        for region in self.regions.textregions + self.regions.tableregions:
+            if region.get_id() == id:
+                return region
+        return None
 
     def valid_region_id(self, id):
         region = self.root.find(f".//{{{self.ns}}}*[@id='r{id}']")
@@ -232,7 +241,28 @@ class Page:
 
     def get_coordinates(self, returntype: str = "string"):
         return self.page_coords(returntype)
+    
+    def get_tags(self, levels: list[str] = ['Word', 'TableRegion', 'Textline', 'TextRegion'], details: bool = False):
+        """
+        Get all tags for a specific level ('Word', 'TableRegion', 'Textline', or 'TextRegion') from the PAGE XML.
+        """
+        from collections import defaultdict
+        tag_counts = defaultdict(lambda: defaultdict(int))
 
+        for region in self.regions.textregions + self.regions.tableregions:
+            region_name = region.__class__.__name__
+            if region_name in levels:
+                tag = region.get_tag()
+                tag_counts[tag][region_name] += 1
+
+            if 'Textline' in levels:
+                for line in region.textlines:
+                    tag = line.get_tag()
+                    tag_counts[tag]['Textline'] += 1
+
+        return tag_counts.keys() if not details else dict(tag_counts)
+
+    
     def page_coords(self, returntype: str = "string"):
         """
         Returns the coordinates of the page in various formats.
@@ -297,9 +327,15 @@ class Page:
         """
         element.getparent().remove(element)
 
-    def delete_textlevel(self, level: str = "word") -> None:
+    def add_element(self, element: ET._Element) -> None:
         """
-        Deletes elements at a specific text level ('word', 'line', or 'region') from the PAGE XML.
+        Adds a given element to the PAGE XML.
+        """
+        element.getparent().addnext(element)
+
+    def delete_textlevel(self, level: str = "Word") -> None:
+        """
+        Deletes elements at a specific text level ('Word', 'TableRegion', 'Textline', or 'TextRegion') from the PAGE XML.
         """
         if level == 'Word':
             count = self._delete_words()
@@ -346,3 +382,4 @@ class Page:
         for regiontype, regions in self.regions.__dict__.items():
             for region in regions:
                 yield region
+                

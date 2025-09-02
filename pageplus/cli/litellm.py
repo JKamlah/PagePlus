@@ -14,7 +14,7 @@ from rich import print
 
 from pageplus.io.logger import logging
 from pageplus.models.page import Page
-from pageplus.utils.constants import ProfileLevel
+from pageplus.utils.constants import ProfileLevel, ImageExtension
 from pageplus.utils.fs import collect_xml_files, find_image
 from pageplus.utils.fs import transform_inputs
 from pageplus.utils.image import image_to_base64, get_image, crop_image_by_polygon
@@ -360,7 +360,7 @@ Only output the JSON!"""
 
 
     @app.command()
-    @profile('llm-ocr')
+    @profile('litellm-ocr')
     def ocr(inputs: Annotated[List[str],
     typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None,
             image_folder: Annotated[str, typer.Option(exists=True,
@@ -373,8 +373,9 @@ Only output the JSON!"""
                                                     callback=ocr_settings)] = None,
             same_names: Annotated[bool, typer.Option(
                 help="Use the page-xml filename to search for the image (default use imageFilename from pagexml file)")] = False,
-            image_extension: Annotated[str, typer.Option(
-                help="Filename extension of the images (only active with 'same_names' option)")] = '.jpg',
+            image_extensions: Annotated[List[ImageExtension], typer.Option(
+                help="Image file extensions to try (only active with 'same_names')", case_sensitive=False
+            )] = ['.png', '.jpg', '.jpeg', '.tif', '.tiff'],
             save_snippets: Annotated[bool, typer.Option(help="Save snippets (debug option)")] = False,
             text_filter: Annotated[str, typer.Option(
                 help="A regular expression, if specific textlines should be filtered")] = None,
@@ -387,9 +388,8 @@ Only output the JSON!"""
             calls_per_minute: Annotated[
                      int, typer.Option(help="API call rate limit per minute")] = 120,
             profile: Annotated[str, typer.Option(help="Profile function with tag (default:'' no profiling active.")] = '',
-            profilelevel: Annotated[List[ProfileLevel],
-                typer.Option(
-                    help="Level of profiling. Options: 'stats' (always true), 'params', 'results', 'analytics', 'summary'")
+            profilelevel: Annotated[List[ProfileLevel], typer.Option(
+                help="Level of profiling. Options: 'stats' (always true), 'params', 'results', 'analytics', 'summary'")
             ] = ("stats", "params", "analytics", "summary"),
             overwrite: Annotated[
                 bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
@@ -441,17 +441,24 @@ Only output the JSON!"""
             print(xml_file)
             # Read XML content
             page = Page(xml_file)
-            page.delete_textlevel('region')
+            page.delete_textlevel('TextRegion')
             # Find image (same name or image filename from page-xml file)
-            imageFilename = page.imageFilename() if not same_names else xml_file.with_suffix(image_extension).name
-            imageDir = xml_file
-            for _ in range(0, len(image_folder.split('../'))):
-                imageDir = imageDir.parent
-            imageDir = imageDir.joinpath('./' + image_folder.rsplit('./')[0])
-            imagePath = find_image(imageFilename, imageDir)
+            if not same_names:
+                imageFilename = page.imageFilename()
+                imagePath = find_image(imageFilename, xml_file.parent / image_folder)
+            else:
+                imagePath = None
+                for ext in image_extensions:
+                    candidate = xml_file.with_suffix(ext.value).name
+                    candidate_path = find_image(candidate, xml_file.parent / image_folder)
+                    if candidate_path:
+                        imagePath = candidate_path
+                        break
+                imageFilename = imagePath.name if imagePath else xml_file.with_suffix(image_extensions[0].value).name
             if not imagePath:
-                print(f"Warning: Image {imageFilename} not found in {imageDir}")
+                print(f"Warning: Image {imageFilename} not found in {image_folder}")
                 continue
+            imageDir = Path(xml_file).parent
             image, image_format = get_image(imagePath)
             text_dict = {}
             page_diff = Counter()
@@ -474,7 +481,7 @@ Only output the JSON!"""
                     # Cut image
                     image_snippet, _ = crop_image_by_polygon(image,
                                                           line.get_coordinates(returntype='mrr'),
-                                                          #buffer = 0,
+                                                          #buffer = 10,
                                                           save_snippet=save_snippets,
                                                           square_canvas=True,
                                                           snippet_dir=imageDir.joinpath(imageFilename.rsplit('.', 1)[0]),
@@ -491,10 +498,11 @@ Only output the JSON!"""
                         time.sleep(wait_time)
                     # Add the current timestamp
                     request_timestamps.append(time.time())
+                    print(llm_api.model_with_prefix)
                     try:
                         response = completion(
                             model=llm_api.model_with_prefix,
-                            api_base=llm_api.api_base_url,
+                            #api_base=llm_api.api_base_url,
                             api_key=llm_api.api_key,
                             timeout=llm_api.keep_alive_time,
                             stream=False,
@@ -552,7 +560,12 @@ Only output the JSON!"""
                             if 'analytics' in profilelevel:
                                 page_metrics.append(get_metrics(text, ocr_text))
                         except:
-                            print(f"{line_id} -> [red] Error: No valid output[red]")
+                            print(f"{line_id} -> [red] Error: Non-valid output[red]")
+                            ocr_text = ''
+                            line.update_text(ocr_text)
+                            text_dict[tr_id][line_id]['ocr'] = ocr_text
+                            if 'analytics' in profilelevel:
+                                page_metrics.append(get_metrics(text, ocr_text))
                     except Exception as e:
                         print("An error occurred during completion:", e)
                         continue

@@ -167,7 +167,7 @@ def find_image(imageFilename: str, imageFolder: Path):
     """
     image_path = imageFolder.joinpath(imageFilename)
     if image_path.is_file():
-        return str(image_path.absolute())
+        return image_path
     return None
 
 

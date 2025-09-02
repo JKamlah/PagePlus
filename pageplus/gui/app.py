@@ -6,18 +6,32 @@ import json
 import dotenv
 import base64
 
-from pageplus.gui.cli_bridge import CLIBridge
-from pageplus.gui.settings import Settings
-from pageplus.gui.load_files import LoadFilesPage
+from pageplus.utils.logger import setup_logger, configure_external_logging
+
+setup_logger()
+# Configure external logging
+configure_external_logging()
+
+from pageplus.gui.cli_bridges import (
+    CLIBridge,
+    AnalysisBridge,
+    ExportBridge,
+    SettingsBridge,
+    ValidationBridge,
+    WorkspaceBridge,
+    ModificationBridge,
+)
+from pageplus.gui.cli_bridges.gemini import GeminiBridge
+from pageplus.gui.utils.settings import Settings
+from pageplus.gui.views.load_files import LoadFilesPage
 from pageplus.gui.views.workspace import show_workspace
 from pageplus.gui.views.analysis import show_analysis
 from pageplus.gui.views.validation import show_validation
 from pageplus.gui.views.export import show_export
 from pageplus.gui.views.settings import show_settings
+from pageplus.gui.views.modification import show_modification
+from pageplus.gui.views.gemini import show_gemini
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 # Initialize settings
 settings = Settings()
@@ -30,10 +44,11 @@ st.set_page_config(
 )
 
 # Constants
-STORAGE_DIR = Path.home() / ".pageplus"
+STORAGE_DIR = Path(__file__).parent / "storage"
 STORAGE_FILE = STORAGE_DIR / "loaded_files.json"
-ENV_FILE = Path(__file__).parent.parent.parent / ".env"
-LOGO_PATH = Path(__file__).parent.parent.parent.absolute().joinpath('assets/Tight_PagePlus_Logo.png')
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+ENV_FILE = PROJECT_ROOT / ".env"
+LOGO_PATH = PROJECT_ROOT / 'assets/Tight_PagePlus_Logo.png'
 
 # Read and encode the image
 with open(LOGO_PATH, "rb") as img_file:
@@ -91,8 +106,19 @@ def main():
     # Initialize session state
     if 'loaded_files' not in st.session_state:
         st.session_state.loaded_files = load_previous_files()
-    if 'cli_bridge' not in st.session_state:
-        st.session_state.cli_bridge = CLIBridge()
+    
+    # Initialize bridges
+    if 'bridges' not in st.session_state:
+        st.session_state.bridges = {
+            'base': CLIBridge(),
+            'analysis': AnalysisBridge(),
+            'export': ExportBridge(),
+            'settings': SettingsBridge(),
+            'validation': ValidationBridge(),
+            'workspace': WorkspaceBridge(),
+            'modification': ModificationBridge(),
+            'gemini': GeminiBridge(),
+        }
 
     # Initialize pages
     load_page = LoadFilesPage()
@@ -108,11 +134,13 @@ def main():
     )
     st.sidebar.title("Navigation")
     page = st.sidebar.radio(
-        "",
+        "Select Page",
         ["✨ Home",
          "📂 Input",  
          "🔍 Analytics", 
          "✅ Validation", 
+         "🛠️ Modification",
+         "🌟 Gemini",
          "📤 Export",
          "🗂️ Workspace",
          "⚙️ Settings"]
@@ -124,27 +152,36 @@ def main():
     elif page == "📂 Input":
         load_page.show()
         st.session_state.loaded_files = load_page.get_loaded_files()
-        # Save loaded files to persistent storage
         save_loaded_files(st.session_state.loaded_files)
     elif page == "🔍 Analytics":
         if not st.session_state.loaded_files:
             st.warning("Please load files first in the 'Input' page.")
         else:
-            show_analysis(st.session_state.cli_bridge)
+            show_analysis(st.session_state.bridges['analysis'])
     elif page == "✅ Validation":
         if not st.session_state.loaded_files:
             st.warning("Please load files first in the 'Input' page.")
         else:
-            show_validation(st.session_state.cli_bridge)
+            show_validation(st.session_state.bridges['validation'])
+    elif page == "🛠️ Modification":
+        if not st.session_state.loaded_files:
+            st.warning("Please load files first in the 'Input' page.")
+        else:
+            show_modification(st.session_state.bridges['modification'])
+    elif page == "🌟 Gemini":
+        if not st.session_state.loaded_files:
+            st.warning("Please load files first in the 'Input' page.")
+        else:
+            show_gemini(st.session_state.bridges['gemini'])
     elif page == "📤 Export":
         if not st.session_state.loaded_files:
             st.warning("Please load files first in the 'Input' page.")
         else:
-            show_export(st.session_state.cli_bridge)
+            show_export(st.session_state.bridges['export'])
     elif page == "🗂️ Workspace":
-        show_workspace(st.session_state.cli_bridge)
+        show_workspace(st.session_state.bridges['workspace'])
     elif page == "⚙️ Settings":
-        show_settings(st.session_state.cli_bridge)
+        show_settings(st.session_state.bridges['settings'])
 
 
 def show_home():
@@ -165,7 +202,7 @@ def show_home():
     📂 Input: Load PAGE-XML files to process  
     🔍 Analytics: Analyze the content of PAGE-XML files  
     ✅ Validation: Validate PAGE-XML files  
-    🛠️ Modification Tools: Modify processed documents  
+    🛠️ Modification: Modify processed documents  
     🖋️ OCR: Do OCR on PAGE-XML files with several OCR engines  
     🤖 LLM: Perform different tasks on PAGE-XML files with LLMs  
     🌟 Gemini: Use Gemini to process images and validate PAGE-XML output  

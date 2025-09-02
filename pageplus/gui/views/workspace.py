@@ -1,6 +1,13 @@
 import streamlit as st
+from streamlit.components.v1 import html
 from pageplus.utils.workspace import Workspace
 from pageplus.utils.constants import Environments
+from dotenv import find_dotenv, set_key
+from pageplus.gui.utils.picker import select_directory
+import logging
+
+# Silence watchdog debug messages
+logging.getLogger('watchdog.observers.inotify_buffer').setLevel(logging.WARNING)
 
 def show_workspace(cli_bridge):
     """Display workspace management page."""
@@ -10,7 +17,7 @@ def show_workspace(cli_bridge):
     try:
         ws = Workspace(Environments.PAGEPLUS)
         workspace_names = ws.names()
-        loaded_workspace = ws.loaded() if ws.loaded() else None
+        loaded_workspace = ws.loaded() if ws.loaded() and ws.loaded() in workspace_names else None
     except Exception as e:
         st.error(f"Error getting workspaces: {str(e)}")
         workspace_names = []
@@ -56,7 +63,6 @@ def show_workspace(cli_bridge):
                         st.error(f"Error resetting workspace: {str(e)}")
     else:
         st.info("No workspaces available. Please create a workspace first.")
-    
     # Update workspaces
     if st.button("Update Workspaces"):
         try:
@@ -68,7 +74,11 @@ def show_workspace(cli_bridge):
     
     # Backup/Restore
     st.subheader("Backup and Restore")
-    backup_folder = st.text_input("Backup Folder", value="Backup")
+    backup_folder = st.text_input(
+        "Backup Folder",
+        value="Backup",
+        label_visibility="visible"
+    )
     col1, col2 = st.columns(2)
     with col1:
         if st.button("Backup XML Files"):
@@ -91,18 +101,14 @@ def show_workspace(cli_bridge):
     # Delete workspace
     st.subheader("Delete Workspace")
     if workspace_names:
-        workspace_to_delete = st.selectbox(
-            "Select Workspace to Delete",
-            options=workspace_options if 'workspace_options' in locals() else workspace_names,
-            index=None
-        )
-        if workspace_to_delete:
+        if selected_workspace:
             # Remove green dot from workspace name for processing
-            workspace_to_delete = workspace_to_delete.replace("🟢 ", "")
+            selected_workspace = selected_workspace.replace("🟢 ", "")
             if st.button("Delete Selected Workspace"):
                 try:
-                    cli_bridge.delete_workspace(workspace_to_delete)
-                    st.success(f"Workspace '{workspace_to_delete}' deleted successfully!")
+                    cli_bridge.delete_workspace(selected_workspace)
+                    st.success(f"Workspace '{selected_workspace}' deleted successfully!")
+                    cli_bridge.update_workspaces()
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error deleting workspace: {str(e)}")
@@ -111,47 +117,68 @@ def show_workspace(cli_bridge):
     st.subheader("Copy Workspace")
     col1, col2 = st.columns(2)
     with col1:
-        destination_path = st.text_input("Destination Path")
+        destination_path = st.text_input(
+            "Destination Path",
+            label_visibility="visible"
+        )
     with col2:
-        new_workspace = st.text_input("New Workspace Name (optional)")
+        new_workspace = st.text_input(
+            "New Workspace Name (optional)",
+            label_visibility="visible"
+        )
     
     if workspace_names:
-        workspace_to_copy = st.selectbox(
-            "Select Workspace to Copy",
-            options=workspace_options if 'workspace_options' in locals() else workspace_names,
-            index=None
-        )
-        if workspace_to_copy:
+        if selected_workspace:
             # Remove green dot from workspace name for processing
-            workspace_to_copy = workspace_to_copy.replace("🟢 ", "")
+            selected_workspace = selected_workspace.replace("🟢 ", "")
             if st.button("Copy Selected Workspace"):
                 try:
                     cli_bridge.copy_workspace(
                         destination_path,
-                        workspace_to_copy,
+                        selected_workspace,
                         new_workspace
                     )
                     st.success("Workspace copied successfully!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error copying workspace: {str(e)}")
+
+    st.subheader("Add New Workspace")
+
+    if st.button("Select Directory"):
+        selected_paths = select_directory()
+        if selected_paths:
+            st.session_state.workspace_dir = selected_paths
+        elif selected_paths is not None:
+            st.info("Directory selection cancelled.")
     
-    # Load local document
-    st.subheader("Load Local Document")
-    col1, col2 = st.columns(2)
-    with col1:
-        input_dir = st.text_input("Input Directory")
-    with col2:
-        overwrite = st.checkbox("Overwrite Workspace")
+    if 'workspace_dir' in st.session_state:
+        st.text_input(
+            "Selected Directory",
+            value=st.session_state.workspace_dir,
+            disabled=True,
+            label_visibility="visible" if 'workspace_dir' in st.session_state else "hidden"
+        )
+
+    workspace_name = st.text_input(
+        "Workspace Name",
+        placeholder="Enter workspace name",
+        label_visibility="visible"
+    )
     
-    if st.button("Load Local Document"):
-        try:
-            cli_bridge.load_local_document(
-                input_dir,
-                selected_workspace if 'selected_workspace' in locals() else None,
-                overwrite
-            )
-            st.success("Local document loaded successfully!")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error loading local document: {str(e)}") 
+    if st.button("Add Workspace"):
+        if workspace_name and 'workspace_dir' in st.session_state:
+            try:
+                cli_bridge.load_local_document(st.session_state.workspace_dir, workspace_name, False)
+                st.success(f"Workspace '{workspace_name}' added successfully!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error adding workspace: {str(e)}")
+        else:
+            st.error("Please provide both workspace name and directory")
+
+    # Show success message from session state if it exists
+    if 'workspace_success' in st.session_state:
+        st.success(st.session_state.workspace_success)
+        # Clear the success message after showing it
+        del st.session_state.workspace_success

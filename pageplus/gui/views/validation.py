@@ -2,6 +2,9 @@ import streamlit as st
 from rich.table import Table
 import pandas as pd
 import re
+from typing import List
+
+from pageplus.gui.cli_bridges.validation import ValidationBridge
 
 
 def strip_rich_text(text: str) -> str:
@@ -23,66 +26,85 @@ def rich_table_to_dataframe(rich_table: Table) -> pd.DataFrame:
     return pd.DataFrame(data_rows, columns=headers)
 
 
-def show_validation(cli_bridge):
-    """Display validation page with validation options."""
-    st.title("✅ Validation")
-    
+def show_validation(bridge: ValidationBridge) -> None:
+    """Show validation view."""
     if not st.session_state.loaded_files:
         st.warning("Please load files first in the 'Input' page.")
         return
-    
-    # Validation options
-    st.subheader("Validation Options")
-    
-    # Select validation type
-    validation_type = st.selectbox(
-        "Select Validation Type",
-        ["Text Validation", "Layout Validation"]
-    )
-    
-    if validation_type == "Text Validation":
-        show_text_validation(cli_bridge)
-    elif validation_type == "Layout Validation":
-        show_layout_validation(cli_bridge)
 
+    st.title("Validation")
+    
+    # Info text about validation
+    with st.expander("About Validation", expanded=False):
+        st.info("""
+        This validation tool checks your PageXML files for various issues:
 
-def show_text_validation(cli_bridge):
-    """Display text validation options and results."""
-    st.subheader("Text Validation")
+        - **Missing Baseline**: Text lines without baseline coordinates
+        - **Single Point Baseline**: Baselines with only one point
+        - **Baseline Outside Region**: Baselines extending beyond text region
+        - **Partial Baseline Outside**: Some baseline points outside text region
+        - **Empty Text**: Text lines or regions without content
+        - **Empty Region**: Regions without any text content
+        - **Insufficient Coordinates**: Elements with too few coordinate points
+        - **Polygon Self-Intersection**: Invalid polygon shapes
+        - **Invalid Region Polygon**: Regions with invalid polygon structure
+        - **Outside Parent Region**: Elements outside their parent region
+        - **Validation Error**: General validation errors
+        """)
     
-    # Text validation options
-    check_spelling = st.checkbox("Check Spelling", value=True)
-    check_grammar = st.checkbox("Check Grammar", value=True)
-    check_consistency = st.checkbox("Check Consistency", value=True)
+    # Get available files from session state
+    selected_files = [str(f) for f in st.session_state.loaded_files]
     
-    if st.button("Run Text Validation"):
-        with st.spinner("Validating text..."):
-            try:
-                results = cli_bridge.validate_files(
-                    files=st.session_state.loaded_files
+    # Initialize validation results in session state if not present
+    if 'validation_results' not in st.session_state:
+        st.session_state.validation_results = None
+    
+    if st.button("Run Validation"):
+        st.session_state.validation_results = bridge.validate_files(selected_files)
+    
+    # Show results and filters if validation has been run
+    if st.session_state.validation_results is not None:
+        result = st.session_state.validation_results
+        
+        if not result.empty:
+            # Get unique filenames and validation types from results
+            available_filenames = sorted(result['Filename'].unique())
+            available_types = sorted(result['Validation Type'].unique())
+            
+            # Add filters after results are available
+            st.subheader("Filter Results")
+            
+            # Create two columns for filters
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Filename filter
+                selected_filename = st.selectbox(
+                    "Select file to display",
+                    options=["All Files"] + available_filenames,
+                    index=0
                 )
-                st.success("Validation completed!")
-                st.dataframe(results)
-            except Exception as e:
-                st.error(f"Error during validation: {str(e)}")
-
-
-def show_layout_validation(cli_bridge):
-    """Display layout validation options and results."""
-    st.subheader("Layout Validation")
-    
-    # Layout validation options
-    check_margins = st.checkbox("Check Margins", value=True)
-    check_spacing = st.checkbox("Check Spacing", value=True)
-    check_alignment = st.checkbox("Check Alignment", value=True)
-    
-    if st.button("Run Layout Validation"):
-        with st.spinner("Validating layout..."):
-            try:
-                results = cli_bridge.validate_files(
-                    files=st.session_state.loaded_files
+            
+            with col2:
+                # Validation type selection
+                selected_types = st.multiselect(
+                    "Select validation types to display",
+                    available_types,
+                    default=available_types
                 )
-                st.success("Validation completed!")
-                st.dataframe(results)
-            except Exception as e:
-                st.error(f"Error during validation: {str(e)}") 
+            
+            # Filter results by selected filename and validation types
+            filtered_result = result
+            if selected_filename != "All Files":
+                filtered_result = filtered_result[
+                    filtered_result['Filename'] == selected_filename
+                ]
+            if selected_types:
+                filtered_result = filtered_result[
+                    filtered_result['Validation Type'].isin(selected_types)
+                ]
+            
+            st.dataframe(filtered_result)
+            st.success(f"Found {len(filtered_result)} validation results.")
+        else:
+            st.error("No validation results found.")

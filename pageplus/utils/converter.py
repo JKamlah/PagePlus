@@ -28,8 +28,12 @@ def custom_to_dict(s):
         for pair in values.split(';'):
             pair = pair.strip()
             if pair:
-                k, v = pair.split(':', 1)
-                inner_dict[k.strip()] = convert_value(v.strip())
+                if ':' in pair:
+                    k, v = pair.split(':', 1)
+                    inner_dict[k.strip()] = convert_value(v.strip())
+                else:
+                    # If no key is provided, use the value as both key and value
+                    inner_dict[pair] = convert_value(pair)
         result[key] = inner_dict
 
     return result

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from enum import Enum
+from enum import Enum, auto
 
 
 class WorkState(str, Enum):
@@ -141,3 +141,32 @@ MIME_IMAGE_EXTENSIONS = {
     'image/avif': '.avif',
     'image/vnd.adobe.photoshop': '.psd',
 }
+
+class ImageExtension(str, Enum):
+    png = '.png'
+    jpg = '.jpg'
+    jpeg = '.jpeg'
+    tif = '.tif'
+    tiff = '.tiff'
+    bmp = '.bmp'
+    gif = '.gif'
+    heic = '.heic'
+    heif = '.heif'
+    webp = '.webp'
+
+
+class PcGtsVersion(Enum):
+    """Enum for different PAGE XML versions."""
+    V2010_01_12 = "2010-01-12"
+    V2010_03_19 = "2010-03-19"
+    V2013_07_15 = "2013-07-15"
+    V2015_07_15 = "2015-07-15"
+    V2016_07_15 = "2016-07-15"
+    V2017_07_15 = "2017-07-15"
+    V2018_07_15 = "2018-07-15"
+    V2019_07_15 = "2019-07-15"
+
+    @classmethod
+    def get_latest(cls) -> 'PcGtsVersion':
+        """Get the latest version."""
+        return cls.V2019_07_15

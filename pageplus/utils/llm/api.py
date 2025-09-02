@@ -102,7 +102,7 @@ if (spec := util.find_spec('litellm')) is not None:
                               '\n'.join([model['id'] for model in modellist]))
                 print(table)
 
-if (spec := util.find_spec('google')) is not None:
+if (spec := util.find_spec('google')) is not None and (spec := util.find_spec('google.genai')) is not None:
     from google import genai
     from google.genai.errors import ClientError
 

@@ -39,7 +39,7 @@ class TextRegion(Region):
             return sum(len(line.get_text()) for line in self.textlines if not line.is_text_empty())
 
         return 0
-
+    
     def delete_textlines(self, idx_list: list):
         """
         Deletes textlines from the region based on a list of indices.
@@ -220,8 +220,15 @@ class TextRegion(Region):
         current_polygon = self.textlines[line_index].get_coordinates(returntype='polygon')
         return unary_union([previous_polygon, bridge_polygon, current_polygon])
 
+    def get_mean_textline_centroid(self):
+        """
+        Gets the mean centroid of the textlines in the region.
+        """
+        textline_polygons = [line.get_coordinates("polygon") for line in self.textlines]
+        return MultiPoint([poly.centroid for poly in textline_polygons if poly is not None]).centroid
+
     def split_region_by_textlinecoords(self, col: int = 2, center_mode: tuple = (3, (0, 2)), padding_region: int = 12,
-                                       min_mean_grp_distance: int = 500, subtract_small_from_big: bool = True) -> list:
+                                       min_mean_grp_distance: int = 500, subtract_small_from_big: bool = False) -> list:
         """ Split a region by finding a mean value dividing the textlines """
         regions = [defaultdict(list) for _ in range(col)]
         textline_polygons = [line.get_coordinates("polygon") for line in self.textlines]
@@ -277,6 +284,14 @@ class TextRegion(Region):
         """
         return any(textline.get_id() == id for textline in self.textlines)
 
+    def get_textline_by_id(self, id: str) -> Textline|None:
+        """
+        Returns a textline if the text region contains a text line with the specified ID.
+        """
+        for textline in self.textlines:
+            if textline.get_id() == id:
+                return textline
+        return None
 
 @dataclass
 class Textline(CoordElement):
@@ -325,16 +340,103 @@ class Textline(CoordElement):
             ET.SubElement(self.xml_element, 'Baseline', {'points': coords_string})
 
     # Text methods
-    def update_text(self, text: str, index: int = 0) -> None:
+    def _ensure_and_update_unicode(self, parent_element: ET.Element, text: str) -> None:
         """
-        Updates the text of the element with the provided string at the specified index.
+        Helper function to find or create a Unicode sub-element and set its text.
         """
-        text_equivs = self.xml_element.findall(f"{{{self.ns}}}TextEquiv")
-        for text_equiv in text_equivs:
-            if str(text_equiv.attrib.get("index", 0)) == str(index):
-                unicode_element = text_equiv.find(f"{{{self.ns}}}Unicode")
-                if unicode_element is not None:
-                    unicode_element.text = text
+        ns_unicode = f"{{{self.ns}}}Unicode"
+        unicode_element = parent_element.find(ns_unicode)
+        if unicode_element is None:
+            unicode_element = ET.SubElement(parent_element, ns_unicode)
+        unicode_element.text = text
+
+    def update_text(self, text: str, index: int = 0, update_lowest_index: bool = True) -> None:
+        """
+        Updates the text of an element's TextEquiv.
+
+        The behavior is as follows:
+        1. If no TextEquiv elements exist, a new one is created with the specified `index` and `text`.
+        2. If a TextEquiv with the exact specified `index` exists, its text is updated.
+           (An absent 'index' attribute is treated as "0" for this comparison).
+        3. If no exact match is found and `update_lowest_index` is True:
+           - The TextEquiv element with the numerically lowest *existing* index has its text updated.
+           - Its original `index` attribute is *not* changed.
+           - For determining the "lowest existing index", an absent or empty 'index' attribute
+             is treated as "0". Non-integer index values are ignored.
+           - If multiple elements share the same lowest numerical index, the first one
+             encountered during iteration is chosen.
+           - If no elements have a parsable numerical index, this step has no effect, and
+             the function proceeds to step 4.
+        4. If none of the above conditions lead to an update (e.g., no exact match AND
+           (`update_lowest_index` is False OR (`update_lowest_index` is True but no
+           existing TextEquiv had a parsable numerical index to update))), then a new
+           TextEquiv is created with the specified `index` and `text`.
+        
+        Args:
+            text (str): The text to update.
+            index (int, optional): The target index for the TextEquiv element. Defaults to 0.
+            update_lowest_index (bool, optional): If True and the target `index` is not found,
+                                                 this flag enables updating the text of the
+                                                 TextEquiv with the numerically lowest
+                                                 existing index. Defaults to True.
+        """
+        ns_text_equiv = f"{{{self.ns}}}TextEquiv"
+        str_target_index = str(index) # Convert target index to string once for comparisons
+
+        text_equivs = list(self.xml_element.findall(ns_text_equiv)) # Get all once
+
+        # 1. If no TextEquiv elements exist, create one with the *requested* index
+        if not text_equivs:
+            new_text_equiv = ET.SubElement(self.xml_element, ns_text_equiv)
+            new_text_equiv.set("index", str_target_index)
+            self._ensure_and_update_unicode(new_text_equiv, text)
+            return
+
+        # 2. Try to find and update existing TextEquiv with matching *requested* index
+        for te in text_equivs:
+            current_te_index_str = te.attrib.get("index")
+            # Normalize for comparison: treat missing index as "0" for matching purposes
+            # This aligns with a common interpretation of a "default" index.
+            effective_index_for_match = "0" if current_te_index_str is None else current_te_index_str
+            
+            if effective_index_for_match == str_target_index:
+                self._ensure_and_update_unicode(te, text)
+                if te.attrib.get('conf', None) is not None:
+                    te.attrib.pop("conf")
+                return
+        
+        # 3. If no matching *requested* index was found AND update_lowest_index is True
+        if update_lowest_index:
+            lowest_indexed_element_to_update = None
+            min_numerical_value_found = float('inf') # Initialize with a very large number
+
+            for te in text_equivs:
+                try:
+                    # For finding the "lowest", treat missing or empty 'index' as "0"
+                    idx_str_for_numerical = te.attrib.get("index")
+                    if not idx_str_for_numerical: # Handles None or empty string ""
+                        idx_str_for_numerical = "0"
+                    
+                    current_numerical_idx = int(idx_str_for_numerical)
+
+                    if current_numerical_idx < min_numerical_value_found:
+                        min_numerical_value_found = current_numerical_idx
+                        lowest_indexed_element_to_update = te
+                except ValueError:
+                    # If 'index' attribute is present, non-empty, but not a valid integer (e.g., "abc"), skip it.
+                    pass 
+            
+            if lowest_indexed_element_to_update is not None:
+                # Update the text of this lowest-indexed element.
+                # DO NOT change its 'index' attribute.
+                self._ensure_and_update_unicode(lowest_indexed_element_to_update, text)
+                if lowest_indexed_element_to_update.attrib.get('conf', None) is not None:
+                    lowest_indexed_element_to_update.attrib.pop("conf")
+                return
+            
+        new_text_equiv = ET.SubElement(self.xml_element, ns_text_equiv)
+        new_text_equiv.set("index", str_target_index)
+        self._ensure_and_update_unicode(new_text_equiv, text)
 
     # Gemometry methods
     def validate_baseline(self, update=False) -> bool:

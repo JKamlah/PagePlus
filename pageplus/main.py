@@ -1,28 +1,13 @@
-import logging
-import warnings
-
 import typer
+from pageplus.utils.logger import configure_external_logging
 
-# Silence!
-logging.getLogger("requests").setLevel(logging.WARNING)
-logging.getLogger("urllib3").setLevel(logging.WARNING)
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("LiteLLM").setLevel(logging.WARNING)
-logging.getLogger("httpcore").setLevel(logging.WARNING)
-logging.getLogger("openai._base_client").setLevel(logging.WARNING)
-logging.getLogger("websockets").setLevel(logging.WARNING)
-logging.getLogger("asyncio").setLevel(logging.WARNING)
-logging.getLogger("kraken").setLevel(logging.WARNING)
-logging.getLogger("pytesseract").setLevel(logging.WARNING)
-logging.getLogger("PIL").setLevel(logging.WARNING)
-logging.getLogger("pikepdf").setLevel(logging.WARNING)
-warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
-
-
-
+# Configure external logging
+configure_external_logging()
 from pageplus.cli import (litellm, system, analytics, validation, visualize, modification, ingest, export, workspace, projects,
-                          dinglehopper, gemini, mets, ocr_kraken, ocr_tesseract, escriptorium, transkribus)
+                         dinglehopper, gemini, mets, ocr_kraken, ocr_tesseract, escriptorium, transkribus)
 
+
+# Create Typer app
 app = typer.Typer()
 app.add_typer(system.app, name="system", rich_help_panel="System")
 app.add_typer(escriptorium.app, name="escriptorium", rich_help_panel="Transcription-Platform")

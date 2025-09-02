@@ -11,7 +11,7 @@ from rich import print
 
 from pageplus.io.logger import logging
 from pageplus.models.page import Page
-from pageplus.utils.constants import ProfileLevel
+from pageplus.utils.constants import ProfileLevel, ImageExtension
 from pageplus.utils.fs import collect_xml_files, find_image
 from pageplus.utils.fs import transform_inputs
 from pageplus.utils.image import get_image, crop_image_by_polygon
@@ -52,8 +52,9 @@ else:
             model_name: Annotated[str, typer.Option(help="Name of the model (should exist in Tessdata-Directory)")] = None,
             same_names: Annotated[bool, typer.Option(
                 help="Use the page-xml filename to search for the image (default use imageFilename from pagexml file)")] = False,
-            image_extension: Annotated[str, typer.Option(
-                help="Filename extension of the images (only active with 'same_names' option)")] = '.jpg',
+            image_extensions: Annotated[List[ImageExtension], typer.Option(
+                help="Image file extensions to try (only active with 'same_names')", case_sensitive=False
+            )] = ['.png', '.jpg', '.jpeg', '.tif', '.tiff'],
             save_snippets: Annotated[bool, typer.Option(help="Save snippets (debug option)")] = False,
             text_filter: Annotated[str, typer.Option(
                 help="A regular expression, if specific textlines should be filtered")] = None,
@@ -106,15 +107,22 @@ else:
             page = Page(xml_file)
             page.delete_textlevel('region')
             # Find image (same name or image filename from page-xml file)
-            imageFilename = page.imageFilename() if not same_names else xml_file.with_suffix(image_extension).name
-            imageDir = xml_file
-            for _ in range(0, len(image_folder.split('../'))):
-                imageDir = imageDir.parent
-            imageDir = imageDir.joinpath('./' + image_folder.rsplit('./')[0])
-            imagePath = find_image(imageFilename, imageDir)
+            if not same_names:
+                imageFilename = page.imageFilename()
+                imagePath = find_image(imageFilename, xml_file.parent / image_folder)
+            else:
+                imagePath = None
+                for ext in image_extensions:
+                    candidate = xml_file.with_suffix(ext.value).name
+                    candidate_path = find_image(candidate, xml_file.parent / image_folder)
+                    if candidate_path:
+                        imagePath = candidate_path
+                        break
+                imageFilename = imagePath.name if imagePath else xml_file.with_suffix(image_extensions[0].value).name
             if not imagePath:
-                print(f"Warning: Image {imageFilename} not found in {imageDir}")
+                print(f"Warning: Image {imageFilename} not found in {image_folder}")
                 continue
+            imageDir = Path(xml_file).parent
             image, image_format = get_image(imagePath)
             text_dict = {}
             page_diff = Counter()

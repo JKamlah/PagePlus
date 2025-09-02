@@ -36,25 +36,55 @@ class CoordElement:
         """ Returns the parent XML element. """
         return self.xml_element.getparent()
 
+    def get_width_height(self, method: str = "mrr") -> tuple:
+        """ Returns the width and height of the XML element. """
+        rect = self.get_coordinates(returntype="mrr")  
+        if rect is not None:
+            if method == "mrr":
+                minx, miny, maxx, maxy = rect.bounds
+                width = maxx - minx
+                height = maxy - miny
+            elif method == "exterior":
+                import math
+                coords = list(rect.exterior.coords)
+                side1 = math.dist(coords[0], coords[1])
+                side2 = math.dist(coords[1], coords[2])
+                width, height = sorted([side1, side2]) 
+            return width, height
+        return 0, 0
+    
     def get_tag(self) -> str:
         """ Returns the structure tag of the element. """
-        if "type" in self.xml_element.attrib:
-            return self.xml_element.attrib["type"]
-        if "custom" in self.xml_element.attrib:
-            custom = self.xml_element.attrib["custom"]
-            customdict = custom_to_dict(custom)
-            return customdict.get('structure', {}).get('type', '')
+        try:
+            if "type" in self.xml_element.attrib:
+                return self.xml_element.attrib["type"]
+            if "custom" in self.xml_element.attrib:
+                custom = self.xml_element.attrib["custom"]
+                customdict = custom_to_dict(custom)
+                return customdict.get('structure', {}).get('type', '')
+        except Exception as e:
+            logging.error(f"Error getting tag for element {self.xml_element.attrib['id']}: {e}")
         return ''
 
     def set_tag(self, tag:str) -> None:
         """ Set the structure tag of the element. """
         if "type" in self.xml_element.attrib:
-            self.xml_element.attrib["type"] = tag
-            return
-        if "custom" in self.xml_element:
+            if tag == '':
+                self.xml_element.attrib.pop("type")
+            else:
+                self.xml_element.attrib["type"] = tag
+        if "custom" in self.xml_element.attrib:
             custom = self.xml_element.attrib["custom"]
             customdict = custom_to_dict(custom)
-            customdict['structure']['type'] = tag
+            customdict['structure'] = customdict.get('structure', {})
+            if customdict['structure'].get('type', False) and tag == '':
+                customdict['structure'].pop('type')
+                if len(customdict['structure']) == 0:
+                    customdict.pop('structure')
+            else:
+                customdict['structure']['type'] = tag
+        elif tag == '':
+            return
         else:
             customdict = {'structure': {'type': tag}}
         self.xml_element.attrib["custom"] = dict_to_custom(customdict)
@@ -139,6 +169,7 @@ class CoordElement:
         formatted according to the 'inputtype'.
         """
         if inputtype == "polygon":
+            #self.fit_into_parent(data)
             coordstr = self.convert_coordinates_polygon_to_str(data)
         elif inputtype == "tuple":
             coordstr = self.convert_coordinates_tuples_to_str(data)
@@ -146,7 +177,6 @@ class CoordElement:
             coordstr = data
         else:
             return
-
         coordstr = " ".join(self._remove_adjacent_duplicates(coordstr.split(' ')))
         coords = self.xml_element.find(f'{{{self.ns}}}Coords')
         coords.set('points', coordstr)
@@ -183,7 +213,9 @@ class CoordElement:
         text_equivs = self.xml_element.findall(f"{{{self.ns}}}TextEquiv")
         for text_equiv in text_equivs:
             if str(text_equiv.attrib.get("index", 0)) == "0":
-                return "".join(text_equiv.find(f"{{{self.ns}}}Unicode").itertext())
+                return "".join(text_equiv.find(f"{{{self.ns}}}Unicode").itertext()).strip()
+            if str(text_equiv.attrib.get("index", 1)) == "1":
+                return "".join(text_equiv.find(f"{{{self.ns}}}Unicode").itertext()).strip()
         return None
 
     def is_text_empty(self) -> bool:
@@ -353,7 +385,6 @@ class CoordElement:
         Adjusts the current element to fit within its parent element.
         """
         coords = self.get_coordinates(returntype="linearring")
-
         if parent_coords is None or not isinstance(parent_coords, LinearRing):
             parent_element = self.get_parent_element().find(f"{{{self.ns}}}Coords")
             if parent_element is not None and parent_element.attrib['points'] != '0,0 0,0':
@@ -394,6 +425,8 @@ class CoordElement:
         Buffers the coordinates of the element based on specified parameters and updates the element.
         """
         coords = self.get_coordinates(returntype="linearring")
+        if coords is None:
+            return
         buffered_coords = CoordElement._buffer(coords, distance, direction, simplify, rectangle)
         self.update_coordinates(buffered_coords)
 
@@ -408,19 +441,19 @@ class CoordElement:
         else:
             padded_polygon = polygon
         if direction in ["width", "horizontal"]:
-            coords = affinity.scale(polygon.minimum_rotated_rectangle, xfact=0.9, yfact=0.9).exterior.coords
-            lines = sorted([LineString([c1, c2]) for c1, c2 in zip(coords[:-1], coords[1:])],
-                           key=lambda x: x.length if direction == "width" else abs(x.xy[0][0] - x.xy[0][1]),
-                           reverse=False)
-            scaled_lines = [affinity.scale(line, xfact=10, yfact=10, origin='centroid') for line in lines]
-            upper_lower_bound = Polygon(list(scaled_lines[2].coords) + list(scaled_lines[3].coords))
-            padded_polygon = padded_polygon.intersection(upper_lower_bound)
-            if isinstance(padded_polygon, GeometryCollection):
-                logging.warning(f"Cutting upper and lower bound produced multiple areas")
-                return polygon
-            extensions = [sorted(list(split(padded_polygon, line).geoms), key=lambda x: x.area, reverse=False)[0]
-                          for line in scaled_lines[:2]]
             try:
+                coords = affinity.scale(polygon.minimum_rotated_rectangle, xfact=0.9, yfact=0.9).exterior.coords
+                lines = sorted([LineString([c1, c2]) for c1, c2 in zip(coords[:-1], coords[1:])],
+                            key=lambda x: x.length if direction == "width" else abs(x.xy[0][0] - x.xy[0][1]),
+                            reverse=False)
+                scaled_lines = [affinity.scale(line, xfact=10, yfact=10, origin='centroid') for line in lines]
+                upper_lower_bound = Polygon(list(scaled_lines[2].coords) + list(scaled_lines[3].coords))
+                padded_polygon = padded_polygon.intersection(upper_lower_bound)
+                if isinstance(padded_polygon, GeometryCollection):
+                    logging.warning(f"Cutting upper and lower bound produced multiple areas")
+                    return polygon
+                extensions = [sorted(list(split(padded_polygon, line).geoms), key=lambda x: x.area, reverse=False)[0]
+                            for line in scaled_lines[:2]]
                 padded_polygon = unary_union(extensions + [Polygon(polygon)])
             except:
                 return polygon

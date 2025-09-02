@@ -18,7 +18,7 @@ from pageplus.io.logger import logging
 from pageplus.models.page import Page
 from pageplus.models.text_elements import Textline
 from pageplus.utils import fs
-from pageplus.utils.constants import DrawingsPDF
+from pageplus.utils.constants import DrawingsPDF, ImageExtension
 from pageplus.utils.fs import (collect_xml_files,
                                transform_inputs,
                                transform_substitutions,
@@ -49,8 +49,9 @@ typer.Argument(exists=True, help="Paths to the XML files to be checked.", callba
                                                     help="Folder to the images relative to page-xml (default same as input)")] = '.',
         same_names: Annotated[bool, typer.Option(
             help="Use the page-xml filename to search for the image (default use imageFilename from pagexml file)")] = False,
-        image_extension: Annotated[str, typer.Option(
-            help="Filename extension of the images (only active with 'same_names' option)")] = '.jpg',
+        image_extensions: Annotated[List[ImageExtension], typer.Option(
+            help="Image file extensions to try (only active with 'same_names')", case_sensitive=False
+        )] = ['.png', '.jpg', '.jpeg', '.tif', '.tiff'],
         transparent_background: Annotated[bool, typer.Option(help="The background outside the masked is transparent.)")] = False,
         save_text: Annotated[bool, typer.Option(help="Save also the text.)")] = False,
         text_filter: Annotated[str, typer.Option(
@@ -69,15 +70,22 @@ typer.Argument(exists=True, help="Paths to the XML files to be checked.", callba
         # Read XML content
         page = Page(xml_file)
         # Find image (same name or image filename from page-xml file)
-        imageFilename = page.imageFilename() if not same_names else xml_file.with_suffix(image_extension).name
-        imageDir = xml_file
-        for _ in range(0, len(image_folder.split('../'))):
-            imageDir = imageDir.parent
-        imageDir = imageDir.joinpath('./' + image_folder.rsplit('./')[0])
-        imagePath = find_image(imageFilename, imageDir)
+        if not same_names:
+            imageFilename = page.imageFilename()
+            imagePath = find_image(imageFilename, xml_file.parent / image_folder)
+        else:
+            imagePath = None
+            for ext in image_extensions:
+                candidate = xml_file.with_suffix(ext.value).name
+                candidate_path = find_image(candidate, xml_file.parent / image_folder)
+                if candidate_path:
+                    imagePath = candidate_path
+                    break
+            imageFilename = imagePath.name if imagePath else xml_file.with_suffix(image_extensions[0].value).name
         if not imagePath:
-            print(f"Warning: Image {imageFilename} not found in {imageDir}")
+            print(f"Warning: Image {imageFilename} not found in {image_folder}")
             continue
+        imageDir = Path(xml_file).parent
         image, image_format = get_image(imagePath)
         text_dict = {}
         # Find Textlines
@@ -149,7 +157,7 @@ def fulltext(
         outputdir: Annotated[Optional[str], typer.Option(
             help="Path to the output directory where the text files will be saved. "
                  "If not specified, an output directory named Fulltext will be created "
-                 "in each input file’s parent directory.")] = None,
+                 "in each input file's parent directory.")] = None,
         dehyphenate: Annotated[bool, typer.Option(help="Dehyphenate the textlines (no impact on coordinates)")] = False,
         ro: Annotated[bool, typer.Option(help="Use the region reading order (default: Textline order)")] = False,
         ro_mode: Annotated[ReadingOrderMode, typer.Option(
@@ -288,7 +296,7 @@ def alto(
         outputdir: Annotated[Optional[str], typer.Option(
             help="Path to the output directory where the text files will be saved. "
                  "If not specified, an output directory named Fulltext will be created "
-                 "in each input file’s parent directory.")] = None) -> None:
+                 "in each input file's parent directory.")] = None) -> None:
 
     """
     Converts PAGE XML files to ALTO XML files. (experimental)
@@ -459,14 +467,21 @@ else:
 
     @app.command()
     def pdf(inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None,
+            images: Annotated[List[str], typer.Option(exists=True,
+                                                        help="List of images to be used for the PDF export.")] = None,
             image_folder: Annotated[str, typer.Option(exists=True,
                                                         help="Folder to the images relative to page-xml (default same as input)")] = '.',
             same_names: Annotated[bool, typer.Option(
                 help="Use the page-xml filename to search for the image (default use imageFilename from pagexml file)")] = False,
-            image_extension: Annotated[str, typer.Option(
-                help="Filename extension of the images (only active with 'same_names' option)")] = '.jpg',
+            image_extensions: Annotated[List[ImageExtension], typer.Option(
+                help="Image file extensions to try (only active with 'same_names')", case_sensitive=False
+            )] = ['.png', '.jpg', '.jpeg', '.tif', '.tiff'],
             dpi: Annotated[int, typer.Option(
-                help="Resolution of the image")] = 400,
+                help="Resolution of the image (use None for auto-detection)")] = None,
+            optimize_compression: Annotated[bool, typer.Option(
+                help="Enable image compression optimization")] = True,
+            max_resolution: Annotated[Optional[int], typer.Option(
+                help="Maximum image resolution (DPI) for resizing (None = use native)")] = None,
             draw: Annotated[Optional[list[DrawingsPDF]], typer.Option(
                 help="Activate drawing for region, line, baseline and words. (Debug Option)")] = None,
             substitutions: Annotated[List[str], typer.Option(
@@ -483,22 +498,40 @@ else:
         if not xml_files:
             raise FileNotFoundError('No xml files found in input directory')
         pdf_files = []
-
         for xml_file in track(xml_files, description="Rendering data to a PDF file.."):
             # Read XML content
-            page = Page(xml_file)
-            imageFilename = page.imageFilename() if not same_names else xml_file.with_suffix(image_extension).name
-            imageDir = xml_file
-            for _ in range(0, len(image_folder.split('../'))):
-                imageDir = imageDir.parent
-            imageDir = imageDir.joinpath('./' + image_folder.rsplit('./')[0])
-            imagePath = find_image(imageFilename, imageDir)
-            if not imagePath:
-                print(f"Warning: Image {imageFilename} not found in {imageDir}")
+            try:
+                page = Page(xml_file)
+                imagePath = None
+                if images:
+                    match = [image for image in images if xml_file.with_suffix('').name == Path(image).with_suffix('').name]
+                    if match:
+                        imagePath = Path(match[0]).absolute()
+                if not imagePath:
+                    if not same_names:
+                        imageFilename = page.imageFilename()
+                        imagePath = find_image(imageFilename, xml_file.parent / image_folder)
+                    else:
+                        imagePath = None
+                        for ext in image_extensions:
+                            candidate = xml_file.with_suffix(ext.value).name
+                            candidate_path = find_image(candidate, xml_file.parent / image_folder)
+                            if candidate_path:
+                                imagePath = candidate_path
+                                break
+                        imageFilename = imagePath.name if imagePath else xml_file.with_suffix(image_extensions[0].value).name
+                    if not imagePath:
+                        print(f"Warning: Image {imageFilename} not found in {image_folder}")
+                        continue
+                image = Image.open(imagePath)
+                image = image.convert('RGB')
+                canvas = page_to_pdf(page, image, draw=draw, dpi=dpi, 
+                                   substitutions=substitutions, 
+                                   optimize_compression=optimize_compression,
+                                   max_resolution=max_resolution)
+            except Exception as e:
+                print(f"Error: {e}")
                 continue
-            image = Image.open(imagePath)
-            image = image.convert('RGB')
-            canvas = page_to_pdf(page, image, draw=draw, dpi=dpi, substitutions=substitutions)
             pdf_files.append(canvas.to_pdf())
 
 

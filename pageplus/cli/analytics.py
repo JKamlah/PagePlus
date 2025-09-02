@@ -278,5 +278,41 @@ if (spec := util.find_spec('pageplus.utils.dinglehopper.edit_distance')) is not 
                 metrics = summarize_metrics(all_metrics)
                 compare.profile.summary['analytics'] =  metrics
 
+@app.command()
+def tags(
+        inputs: Annotated[List[str], typer.Argument(exists=True,
+                                                    help="Paths or workspace to the files to be validated.",
+                                                    callback=transform_inputs)] = None,
+        levels: Annotated[List[str], typer.Option(
+                help="Granularity levels to process: 'TextRegion', 'TableRegion', 'Textline', "
+                     " (default: TextRegion, Textline).")] = ("TextRegion", "Textline", "TableRegion")):
+    """
+    Analyzes tags with details across all pages.
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError('No xml files found in input directory')
+
+    tag_analysis = {}
+    
+    for xml_file in track(sorted(xml_files), description="Analyzing tags in files..."):
+        filename = xml_file.name
+        print('[green]Processing file:[/green] ' + filename)
+
+        page = Page(xml_file)
+        
+        # Get tag details for the page
+        tag_details = page.get_tags(levels=levels, details=True)
+        
+        # Store the analysis in the dictionary
+        tag_analysis[filename] = tag_details
+        
+        # Print summary for this file
+        print(f'{filename}: {tag_details}')
+        #for tag, count in tag_details.get('counts', {}).items():
+        #     print(f"  - {tag}: {count} occurrences")
+    
+    return tag_analysis
+
 if __name__ == "__main__":
     app()

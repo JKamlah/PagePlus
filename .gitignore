@@ -8,7 +8,11 @@
 *.so
 pageplus/utils/dinglehopper
 pageplus/utils/transkribus
-
+pageplus/gui/storage/loaded_files.json
+pageplus/utils/pdf/fonts/
+pageplus/cli/visualize.py
+tests/
+.cursorrules
 
 # Packages #
 ############

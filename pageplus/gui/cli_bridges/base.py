@@ -1,8 +1,12 @@
 import io
 import contextlib
 import logging
+from pathlib import Path
+import tempfile
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
+
 
 def capture_output(func, *args, **kwargs):
     """Capture stdout from a function call."""
@@ -10,6 +14,7 @@ def capture_output(func, *args, **kwargs):
     with contextlib.redirect_stdout(buffer):
         func(*args, **kwargs)
     return buffer.getvalue()
+
 
 def capture_logging(func, *args, **kwargs):
     """Capture both stdout and logging output from a function call."""
@@ -31,3 +36,10 @@ def capture_logging(func, *args, **kwargs):
 
     return buffer.getvalue()
 
+
+class CLIBridge:
+    """Base bridge between GUI and CLI functionality."""
+
+    def __init__(self, output_dir: Optional[Path] = None):
+        self.output_dir = output_dir or Path(tempfile.mkdtemp())
+        self.output_dir.mkdir(parents=True, exist_ok=True) 

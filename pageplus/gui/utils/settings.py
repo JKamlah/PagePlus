@@ -1,17 +1,17 @@
 import os
 from pathlib import Path
 from typing import Dict, Any
-from dotenv import load_dotenv, set_key
+from dotenv import set_key, dotenv_values
 
 
 class Settings:
     """Handle application settings persistence using .env file."""
     
     def __init__(self):
-        self.config_dir = Path.home() / ".pageplus"
+        self.config_dir = Path(__file__).parent.parent.parent.parent
         self.env_file = self.config_dir / ".env"
         self._ensure_env_file()
-        self._load_settings()
+        self.settings =self._load_settings()
     
     def _ensure_env_file(self) -> None:
         """Ensure .env file exists with default values."""
@@ -29,24 +29,28 @@ class Settings:
     
     def _load_settings(self) -> None:
         """Load settings from .env file."""
-        load_dotenv(self.env_file)
+        return dotenv_values(self.env_file)
+    
+    def _convert_key(self, key: str) -> str:
+        """Convert key to UPPER_SNAKE_CASE if it's not already."""
+        if key.isupper() and '_' in key:
+            return key
+        return ''.join(
+            ['_' + c.upper() if c.isupper() else c.upper() for c in key]
+        ).lstrip('_')
     
     def get(self, key: str, default: Any = None) -> str:
         """Get a setting value."""
-        # Convert from camelCase to UPPER_SNAKE_CASE
-        env_key = ''.join(
-            ['_' + c.upper() if c.isupper() else c.upper() for c in key]
-        ).lstrip('_')
-        return os.getenv(env_key, default)
+        env_key = self._convert_key(key)
+        return self.settings.get(env_key, default)
     
-    def set(self, key: str, value: str) -> None:
+    def set(self, key: str, value: Any) -> None:
         """Set a setting value and save."""
-        # Convert from camelCase to UPPER_SNAKE_CASE
-        env_key = ''.join(
-            ['_' + c.upper() if c.isupper() else c.upper() for c in key]
-        ).lstrip('_')
-        set_key(self.env_file, env_key, value)
-        self._load_settings()  # Reload environment
+        env_key = self._convert_key(key)
+        # Convert value to string, handling None and other types
+        str_value = str(value) if value is not None else ""
+        set_key(self.env_file, env_key, str_value)
+        self.settings = self._load_settings()  # Reload environment
     
     def update(self, settings: Dict[str, str]) -> None:
         """Update multiple settings at once and save."""

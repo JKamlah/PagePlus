@@ -204,6 +204,7 @@ else:
         return  {
             "insertion": 0,
             "deletion": 0,
+            "substitution": 0,
             "whitespace": 0,
             "punctuation": 0,
             "digits": 0,
@@ -254,10 +255,11 @@ else:
                 'error_count': {'word': wec, 'character': cec}}
         gt_string = ''.join([k.split(' :: ')[0].replace('None', '')*v for k, v in c_diff.items()]) if c_diff else ''
         error_counts = count_categories(gt_string, categories())
-        counts['insertion'] = sum([v for k, v in c_diff.items() if re.search('None', k.split(' :: ')[0])]) if c_diff else 0
-        counts['deletion'] = sum([v for k, v in c_diff.items() if re.search('None', k.split(' :: ')[1])]) if c_diff else 0
+        counts['deletion'] = sum([v for k, v in c_diff.items() if re.search('None', k.split(' :: ')[0])]) if c_diff else 0
+        counts['insertion'] = sum([v for k, v in c_diff.items() if re.search('None', k.split(' :: ')[1])]) if c_diff else 0
+        counts['substitution'] = sum([v for k, v in c_diff.items() if 'None' not in k]) if c_diff else 0
         for error_key, error_count in error_counts.items():
-            if error_key in ['insertion', 'deletion','character', 'word']:
+            if error_key in ['insertion', 'deletion', 'substitution', 'character', 'word']:
                 error_count = metrics['count'][error_key]
             else:
                 metrics['error_rate']['local'][error_key] = error_count / metrics['count'][error_key] if error_count != 0 and metrics['count'][error_key] != 0 else 0
@@ -265,7 +267,7 @@ else:
                 metrics['error_rate']['global'][error_key] = error_count / metrics['count'][
                     'word'] if error_count != 0 or \
                                     metrics['count']['word'] != 0 else 0
-            else:
+            elif error_key in ['insertion', 'deletion', 'substitution', 'character']:
                 metrics['error_rate']['global'][error_key] = error_count / metrics['count']['character'] if error_count != 0 or \
                                 metrics['count']['character'] != 0 else 0
             metrics['error_count'][error_key] = error_count
@@ -285,7 +287,7 @@ else:
             else:
                 sum_metrics['error_rate']['global'][cat] = sum_metrics['error_count'][cat] / sum_metrics['count']['character'] if (
                         sum_metrics['error_count'][cat] != 0 and sum_metrics['count']['character'] != 0) else 0
-            if cat not in ['insertion', 'deletion', 'word', 'character']:
+            if cat not in ['insertion', 'deletion', 'substitution', 'word', 'character']:
                 sum_metrics['error_rate']['local'][cat] = sum_metrics['error_count'][cat] / sum_metrics['count'][cat] if (
                             sum_metrics['error_count'][cat] != 0 and sum_metrics['count'][cat] != 0) else 0
         for cat in sum_metrics['confusions']:

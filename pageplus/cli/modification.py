@@ -1,10 +1,11 @@
 from collections import Counter
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from importlib import util
 import subprocess
 import sys
+import re
 
 from rich import print
 from rich.progress import track
@@ -115,14 +116,15 @@ else:
             print(table)
 
 @app.command()
-def reassign_ids(inputs: Annotated[List[str], typer.Argument(exists=True,
-                                                             help="Direct input of directories containing XML files.",
-                                                      callback=transform_inputs)] = None,
-        outputdir: Annotated[Optional[str], typer.Option(
-            help="Filename of the output directory. If not specified, input files will be overwritten.",
-                                                      callback=transform_output)] = None,
-        reading_order_mode='auto',
-        dry_run: Annotated[bool, typer.Option(help="If True, the function will not write any files.")] = False):
+def reassign_ids(
+    inputs: Annotated[List[str], typer.Argument(exists=True,
+                                                            help="Direct input of directories containing XML files.",
+                                                    callback=transform_inputs)] = None,
+    outputdir: Annotated[Optional[str], typer.Option(
+        help="Filename of the output directory. If not specified, input files will be overwritten.",
+                                                    callback=transform_output)] = None,
+    reading_order_mode='auto',
+    dry_run: Annotated[bool, typer.Option(help="If True, the function will not write any files.")] = False):
     """
     Reassign IDs from Regions and Textlines
     Args:
@@ -152,8 +154,7 @@ def repair(inputs: Annotated[List[str], typer.Argument(exists=True, help="Direct
         outputdir: Annotated[Optional[str], typer.Option(
             help="Filename of the output directory. If not specified, input files will be overwritten.",
                                                       callback=transform_output)] = None,
-        dry_run: Annotated[bool, typer.Option(help="If True, the function will not write any files.")] = False,
-):
+        dry_run: Annotated[bool, typer.Option(help="If True, the function will not write any files.")] = False,):
     """
     Repairs PAGE XML files, attempting to fix issues in text regions and lines.
 
@@ -175,12 +176,20 @@ def repair(inputs: Annotated[List[str], typer.Argument(exists=True, help="Direct
             try:
                 line.remove_repeated_points(tolerance=1)
                 if not line.validate_region():
-                    line.convex_hull()
+                    points = line.xml_element.find(f"{{{line.ns}}}Coords").attrib['points']
+                    if points:
+                        coords = line.convert_coordinates_str_to_tuples(points)
+                        from shapely.geometry import Polygon
+                        new_coords = Polygon(coords).buffer(distance=1)
+                        if new_coords:
+                            line.update_coordinates(new_coords, 'polygon')
+
                 if not line.validate_baseline(update=True):
                     line.update_baseline_coordinates(line._compute_baseline(position='bottom'))
 
             except Exception as e:
                 logging.error(f"{line.get_id()}: Error during repair - {e}")
+                region.xml_element.remove(line.xml_element)
 
         if region.counter(level='textlines') == 0:
             logging.info(f"{region.get_id()}: Region contains no text.")
@@ -207,6 +216,7 @@ def repair(inputs: Annotated[List[str], typer.Argument(exists=True, help="Direct
             fout = xml_file if outputdir is None else determine_output_path(xml_file, outputdir, filename)
             logging.info(f'Wrote modified xml file to output directory: {fout}')
             page.save_xml(fout)
+
 
 
 @app.command()
@@ -343,7 +353,7 @@ def extend_lines(
             callback=transform_output)] = None,
         distance: Annotated[int, typer.Option(help="Distance (in pixel) of extension.")] = 8,
         dim: Annotated[str, typer.Option(help="Dimension in which the buffer is performed")] = "all",
-        rectify: Annotated[bool, typer.Option(help="Rectify the polygons")] = True,
+        rectangularize: Annotated[bool, typer.Option(help="Rectangularize the polygons")] = True,
         cut_overlaps: Annotated[bool, typer.Option(help="Fit the extended target into the parent region.")] = True,
         dry_run: Annotated[bool, typer.Option(help="Perform a dry run without writing any files.")] = False
 ):
@@ -379,7 +389,7 @@ def extend_lines(
         for textregion in page.regions.textregions:
             for idx, line in enumerate(textregion.textlines):
                 try:
-                    line.buffer(distance=distance, direction=dim, rectangle=rectify)
+                    line.buffer(distance=distance, direction=dim, rectangle=rectangularize)
                     line.fit_into_parent(parent_coords=page.page_coords(returntype='linearring'))
                     if cut_overlaps and idx > 0:
                         process_overlapping_lines(textregion, idx, line)
@@ -695,6 +705,754 @@ def split_big_regions_vertical(
                 f'{xml_file if outputdir is None else determine_output_path(xml_file, outputdir, filename)}'
             )
 
+@app.command()
+def sort_regions(
+    inputs: Annotated[List[str], typer.Argument(
+        exists=True,
+        help="Paths/workspace to PAGE XML files.",
+        callback=transform_inputs
+    )] = None,
+    outputdir: Annotated[Optional[str], typer.Option(
+        help="Output directory (default: overwrite input).",
+        callback=transform_output
+    )] = None,
+    based_on_baselines: Annotated[bool, typer.Option(
+        help="Use mean baseline centroid instead of polygon centroid."
+    )] = False,
+    overlap_pct: Annotated[float, typer.Option(
+        min=0.0, max=100.0,
+        help="Schwelle in % für Y- und X-Überlappung (bezogen auf die kleinere Breite/Höhe)."
+    )] = 60.0,
+    dry_run: Annotated[bool, typer.Option(
+        help="Compute and log without writing files."
+    )] = False,
+):
+    """
+    Einfache Lese-Reihenfolge:
+      1) Vertikal gruppieren: Y-Überlappung >= overlap_pct (über kleinere Höhe).
+      2) Gruppen nach Y.
+      3) In jeder Gruppe Subgruppen/Spalten per X-Überlappung >= overlap_pct,
+         Subgruppen nach X, innerhalb der Subgruppen nach Y.
+      4) Flatten und in PAGE-XML übernehmen (Regionen physisch umsortieren).
+    """
+    from dataclasses import dataclass
+    from statistics import median
+    from typing import List, Tuple
+    from pathlib import Path
+
+    @dataclass
+    class R:
+        idx: int
+        id: str
+        cx: float
+        cy: float
+        xmin: float
+        ymin: float
+        xmax: float
+        ymax: float
+        w: float
+        h: float
+
+    def _centroid(region, based_on_baselines: bool):
+        return (region.get_mean_textline_centroid()
+                if based_on_baselines
+                else region.get_coordinates("polygon").centroid)
+
+    def _bbox_from_coords(coords: List[Tuple[float, float]]) -> Tuple[float, float, float, float]:
+        xs = [p[0] for p in coords]
+        ys = [p[1] for p in coords]
+        return min(xs), min(ys), max(xs), max(ys)
+
+    def _safe_id(region) -> str:
+        rid = region.xml_element.get("id")
+        return rid if rid else f"r_{id(region)}"
+
+    def _ioverlap_1d(a_min, a_max, b_min, b_max) -> float:
+        """Intersection über min-Länge (0..1)."""
+        inter = max(0.0, min(a_max, b_max) - max(a_min, b_min))
+        if inter <= 0:
+            return 0.0
+        return inter / max(1.0, min(a_max - a_min, b_max - b_min))
+
+    def _collect_regions(page, based_on_baselines: bool) -> List[R]:
+        regs: List[R] = []
+        for i, tr in enumerate(page.regions.textregions):
+            c = _centroid(tr, based_on_baselines=based_on_baselines)
+            coords = tr.get_coordinates(returntype="tuple")
+            if not coords:
+                w, h = tr.get_width_height(method="mrr")
+                regs.append(R(i, _safe_id(tr),
+                              cx=float(c.x), cy=float(c.y),
+                              xmin=c.x - w/2, ymin=c.y - h/2,
+                              xmax=c.x + w/2, ymax=c.y + h/2,
+                              w=max(1.0, w), h=max(1.0, h)))
+                continue
+            xmin, ymin, xmax, ymax = _bbox_from_coords(coords)
+            w = max(1.0, xmax - xmin)
+            h = max(1.0, ymax - ymin)
+            regs.append(R(i, _safe_id(tr), float(c.x), float(c.y), xmin, ymin, xmax, ymax, w, h))
+        return regs
+
+    def _connected_components(items: List[R], neigh) -> List[List[R]]:
+        """BFS über Paar-Nachbarschafts-Test neigh(a,b)->bool."""
+        n = len(items)
+        seen = [False]*n
+        comps: List[List[R]] = []
+        for i in range(n):
+            if seen[i]:
+                continue
+            comp_idx = [i]
+            seen[i] = True
+            q = [i]
+            while q:
+                u = q.pop()
+                a = items[u]
+                for j in range(n):
+                    if seen[j]:
+                        continue
+                    b = items[j]
+                    if neigh(a, b):
+                        seen[j] = True
+                        q.append(j)
+                        comp_idx.append(j)
+            comps.append([items[k] for k in comp_idx])
+        return comps
+
+    # --- Start ---
+    y_thresh = overlap_pct / 100.0
+    x_thresh = overlap_pct / 100.0
+
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError("No XML files found in the input paths.")
+
+    for xml_file in track(xml_files, description="Sorting regions (simple 60% overlaps)..."):
+        logging.info(f"Processing {xml_file.name}")
+        try:
+            page = Page(xml_file)
+        except Exception as e:
+            logging.error(f"Failed to open {xml_file}: {e}")
+            continue
+
+        regs = _collect_regions(page, based_on_baselines=based_on_baselines)
+        if not regs:
+            logging.info("No text regions; skipping.")
+            continue
+
+        # 1) HORIZONTALE Gruppen (Zeilenbänder) via Y-Überlappung ≥ Schwelle
+        def same_row(a: R, b: R) -> bool:
+            return _ioverlap_1d(a.ymin, a.ymax, b.ymin, b.ymax) >= y_thresh
+
+        row_groups = _connected_components(regs, same_row)
+
+        # 2) Zeilengruppen nach Y (Median der y-Zentren)
+        row_groups.sort(key=lambda g: median([r.cy for r in g]))
+        # 3) In jeder Zeilengruppe: Spalten via X-Überlappung ≥ Schwelle,
+        #    Spalten nach X, innerhalb jeder Spalte nach Y
+        full_order: List[R] = []
+        for row in row_groups:
+            def same_col(a: R, b: R) -> bool:
+                return _ioverlap_1d(a.xmin, a.xmax, b.xmin, b.xmax) >= x_thresh
+            cols = _connected_components(row, same_col)
+            cols.sort(key=lambda col: median([r.cx for r in col]))  # links→rechts
+            for col in cols:
+                col.sort(key=lambda r: r.cx)  # oben→unten
+                full_order.extend(col)
+        # 4) XML-Reorder wie gehabt …
+        for r in full_order:
+            region_el = page.regions.textregions[r.idx].xml_element
+            parent = region_el.getparent()
+            parent.remove(region_el)
+            parent.append(region_el)
+
+
+        preview = ", ".join(r.id for r in full_order[:20])
+        more = "" if len(full_order) <= 20 else f"… (+{len(full_order)-20} more)"
+        logging.info(f"Order preview: [{preview}{more}]")
+
+        if not dry_run:
+            fout = xml_file if outputdir is None else determine_output_path(xml_file, outputdir, xml_file.name)
+            page.save_xml(fout)
+            logging.info(f"Wrote: {fout}")
+        else:
+            logging.info(f"[DRY RUN] Would write {xml_file}")
+
+
+def _calculate_hull(coords: list, group_regions: list):
+    """Helper function to calculate convex hull and handle different geometry types."""
+    from shapely.geometry import MultiPoint, Polygon, LineString, Point
+    
+    if not coords:
+        return None
+        
+    hull = MultiPoint(coords).convex_hull
+    
+    # Ensure we have a proper polygon for the region
+    if isinstance(hull, Point):
+        x, y = hull.x, hull.y
+        buffer_size = 10
+        hull = Polygon([(x-buffer_size, y-buffer_size), (x+buffer_size, y-buffer_size), 
+                       (x+buffer_size, y+buffer_size), (x-buffer_size, y+buffer_size)])
+    elif isinstance(hull, LineString):
+        hull = hull.buffer(5)
+    elif not isinstance(hull, Polygon):
+        logging.warning(f"Unexpected hull type: {type(hull)}, using original region coordinates")
+        hull = group_regions[0].get_coordinates(returntype="polygon")
+        
+    return hull
+
+@app.command()
+def merge_columnaligned_regions(
+        inputs: Annotated[List[str], typer.Argument(
+            exists=True,
+            help="Paths or workspace to the PAGE XML files to be processed.",
+            callback=transform_inputs
+        )] = None,
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Filename of the output directory. If not specified, input files will be overwritten.",
+            callback=transform_output
+        )] = None,
+        tolerance: Annotated[float, typer.Option(
+            help="Tolerance for merging regions",
+            min=0.01,
+            max=1.0
+        )] = 0.1,
+        based_on_baselines: Annotated[bool, typer.Option(
+            help="If True, the function will merge regions based on their baseline centroid.",
+        )] = False,
+        convex_hull_method: Annotated[str, typer.Option(
+            help="Method to use for convex hull calculation. One of 'textlines' or 'region'.",
+        )] = 'region',
+        max_height_distance: Annotated[float, typer.Option(
+            help="Maximum vertical distance between region centroids for merging, as a percentage of page height.",
+            min=0.0,
+            max=1.0
+        )] = 0.75,
+        mid_tolerance: Annotated[float, typer.Option(
+            help="A tolerance (percentage of page width) to ignore centroids too close to the middle of the page.",
+            min=0.0,
+            max=1.0
+        )] = 0.0,
+        dry_run: Annotated[bool, typer.Option(
+            help="Perform a dry run without writing any files."
+        )] = False):
+    """
+    Merges column aligned regions based on distance thresholds.
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError('No XML files found in the input paths.')
+        
+    for xml_file in track(xml_files, description="Merging column aligned regions..."):
+        filename = xml_file.name
+        logging.info(f'Processing file: {filename}')
+
+        try:
+            page = Page(xml_file)
+        except Exception as e:
+            logging.error(f'Error processing file {filename}: {str(e)}')
+            continue
+        
+        #
+        page_width, page_height = page.page_size()
+        max_height_distance_px = max_height_distance * page_height
+        page_mid_x = page_width / 2
+        mid_tolerance_px = (mid_tolerance * page_width) / 2
+        
+        # Group text regions by centroid proximity
+        region_groups = []
+        processed_regions = set()
+        
+        for i, textregion in enumerate(page.regions.textregions):
+            if i in processed_regions:
+                continue
+                
+            if based_on_baselines:
+                textregion_centroid = textregion.get_mean_textline_centroid()
+            else:
+                textregion_centroid = textregion.get_coordinates("polygon").centroid
+
+            # Skip regions that are too close to the middle of the page
+            if page_mid_x - mid_tolerance_px <= textregion_centroid.x <= page_mid_x + mid_tolerance_px:
+                processed_regions.add(i)
+                continue
+            
+            textregion_width = textregion.get_width_height(method='mrr')[0]
+            textregion_width_variance = int(tolerance * textregion_width)
+            
+            # Find all regions that are close to this region's centroid
+            current_group = [i]
+            processed_regions.add(i)
+            
+            for j, other_region in enumerate(page.regions.textregions):
+                if j in processed_regions:
+                    continue
+
+                if based_on_baselines:
+                    other_centroid = other_region.get_mean_textline_centroid()
+                else:
+                    other_centroid = other_region.get_coordinates("polygon").centroid
+
+                # Skip regions that are too close to the middle of the page
+                if page_mid_x - mid_tolerance_px <= other_centroid.x <= page_mid_x + mid_tolerance_px:
+                    processed_regions.add(j)
+                    continue
+                
+                # Check if centroids are within the width variance and height distance
+                if (abs(textregion_centroid.x - other_centroid.x) <= textregion_width_variance and
+                    abs(textregion_centroid.y - other_centroid.y) <= max_height_distance_px):
+                    current_group.append(j)
+                    processed_regions.add(j)
+            
+            if len(current_group) > 1:  # Only process groups with multiple regions
+                region_groups.append(current_group)
+        
+        # Process each group: merge regions and create convex hull
+        # Process groups in reverse order to avoid index issues when deleting regions
+        for group_indices in sorted(region_groups, key=lambda x: max(x), reverse=True):
+            if len(group_indices) < 2:
+                continue
+                
+            logging.info(f'Merging {len(group_indices)} column-aligned regions')
+            
+            group_regions = [page.regions.textregions[i] for i in group_indices]
+            
+            try:
+                base_region = group_regions[0]
+                base_region_xml = base_region.xml_element
+                
+                # Move all textlines to the base region
+                for region in group_regions[1:]:
+                    if region.textlines:
+                        base_region.textlines.extend(region.textlines)
+                        region_xml = region.xml_element
+                        for line in region.textlines:
+                            region_xml.remove(line.xml_element)
+                            base_region_xml.append(line.xml_element)
+                    page.delete_element(region.xml_element)
+
+                # Calculate convex hull
+                coords_for_hull = []
+                if convex_hull_method == 'region':
+                    for region in group_regions:
+                        region_coords = region.get_coordinates(returntype="tuple")
+                        if region_coords:
+                            coords_for_hull.extend(region_coords)
+                else:  # 'textlines'
+                    for line in base_region.textlines:
+                        line_coords = line.get_coordinates(returntype="tuple")
+                        if line_coords:
+                            coords_for_hull.extend(line_coords)
+                
+                hull = _calculate_hull(coords_for_hull, group_regions)
+                
+                if hull:
+                    base_region.update_coordinates(hull, 'polygon')
+                    base_region.buffer(distance=5, direction='all')
+                
+                #base_region.sort_baselines(mode='single_col')
+                logging.info(f'Successfully merged {len(group_indices)} regions into one')
+                
+            except Exception as e:
+                logging.error(f'Error merging regions: {str(e)}')
+                continue
+        
+        if not dry_run:
+            fout = xml_file if outputdir is None else determine_output_path(xml_file, outputdir, filename)
+            logging.info(f'Wrote modified xml file to output directory: {fout}')
+            page.save_xml(fout)
+        else:
+            logging.info(f'[DRY RUN] Would write modified xml file to: {xml_file}')
+
+
+@app.command()
+def replace_tag(
+        inputs: Annotated[List[str], typer.Argument(exists=True,
+                                                    help="Paths or workspace to the files to be validated.",
+                                                    callback=transform_inputs)] = None,
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Filename of the output directory. Default is creating an output directory, "
+                 "called PagePlusOutput, in the input directory.", callback=transform_output)] = None,
+        old_tag: Annotated[str, typer.Option(
+            help="The tag to be replaced."
+        )] = None,
+        new_tag: Annotated[str, typer.Option(
+            help="The new tag to be used.(if set to none, the tag will be removed)"
+        )] = None,
+        level: Annotated[List[TextLevel], typer.Option(
+                help="Granularity levels to process: 'TextRegion', 'TableRegion', 'Textline', "
+                     " (default: TextRegion, Textline).")] = ("TextRegion", "Textline"),
+        textfilter: Annotated[Optional[str], typer.Option(
+            help="Regex pattern to match text content. If provided, only elements containing matching text will be processed.")] = None,
+        skip_textfilter: Annotated[bool, typer.Option(
+            help="If True, skip elements matching the textfilter. If False, only process elements matching the textfilter.")] = False,
+        dry_run: Annotated[bool, typer.Option(help="Perform a dry run without writing any files.")] = False):
+    """
+    Replaces tags in the specified levels with a new tag.
+    Optionally filters elements based on their text content using regex pattern matching.
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError('No xml files found in input directory')
+
+    # Compile regex pattern if provided
+    pattern = re.compile(textfilter) if textfilter else None
+    old_tag = old_tag if old_tag is not None else ''
+    new_tag = new_tag if new_tag is not None else ''
+    
+    for xml_file in track(sorted(xml_files), description="Replacing tags in files..."):
+        filename = xml_file.name
+        print('[green]Processing file:[/green] ' + filename)
+
+        page = Page(xml_file)
+        
+        # Process TextRegions
+        if 'TextRegion' in level:
+            for region in page.regions.textregions:
+                if pattern:
+                    text = region.get_text()
+                    matches = bool(pattern.search(text))
+                    if (skip_textfilter and matches) or (not skip_textfilter and not matches):
+                        print(f"[orange3]Skip TextRegion: {region.get_id()} - Text: {text[:50]}...[/orange3]")
+                        continue
+                if region.get_tag() == old_tag:
+                    print(f"[yellow]Replacing tag in TextRegion: {region.get_id()}[/yellow]")
+                    region.set_tag(new_tag)
+
+        # Process TableRegions
+        if 'TableRegion' in level:
+            for tableregion in page.regions.tableregions:
+                if pattern:
+                    text = tableregion.get_text()
+                    matches = bool(pattern.search(text))
+                    if (skip_textfilter and matches) or (not skip_textfilter and not matches):
+                        print(f"[orange3]Skip TableRegion: {tableregion.get_id()} - Text: {text[:50]}...[/orange3]")
+                        continue
+                if tableregion.get_tag() == old_tag:
+                    print(f"[yellow]Replacing tag in TableRegion: {tableregion.get_id()}[/yellow]")
+                    tableregion.set_tag(new_tag)
+
+        # Process Textlines
+        if 'Textline' in level:
+            for region in page.regions.textregions:
+                for line in region.textlines:
+                    if pattern:
+                        text = line.get_text()
+                        matches = bool(pattern.search(text))
+                        if (skip_textfilter and matches) or (not skip_textfilter and not matches):
+                            print(f"[orange3]Skip Textline: {line.get_id()} - Text: {text[:50]}...[/orange3]")
+                            continue
+                    if line.get_tag() == old_tag:
+                        print(f"[yellow]Replacing tag in Textline: {line.get_id()}[/yellow]")
+                        line.set_tag(new_tag)
+
+        if not dry_run:
+            fout = xml_file if outputdir is None else determine_output_path(xml_file, outputdir, filename)
+            logging.info(f'Wrote modified xml file to output directory: {fout}')
+            page.save_xml(fout)
+
+
+@app.command()
+def remove_tag(
+        inputs: Annotated[List[str], typer.Argument(exists=True,
+                                                    help="Paths or workspace to the files to be validated.",
+                                                    callback=transform_inputs)] = None,
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Filename of the output directory. Default is creating an output directory, "
+                 "called PagePlusOutput, in the input directory.", callback=transform_output)] = None,
+        tag_to_remove: Annotated[str, typer.Option(
+            help="The tag of elements to be removed."
+        )] = None,
+        level: Annotated[List[TextLevel], typer.Option(
+                help="Granularity levels to process: 'TextRegion', 'TableRegion', 'Textline', "
+                     " (default: TextRegion, Textline).")] = ("TextRegion", "Textline"),
+        textfilter: Annotated[Optional[str], typer.Option(
+            help="Regex pattern to match text content. If provided, only elements containing matching text will be processed.")] = None,
+        skip_textfilter: Annotated[bool, typer.Option(
+            help="If True, skip elements matching the textfilter. If False, only process elements matching the textfilter.")] = False,
+        dry_run: Annotated[bool, typer.Option(help="Perform a dry run without writing any files.")] = False):
+    """
+    Removes elements with specified tags at the specified levels.
+    Optionally filters elements based on their text content using regex pattern matching.
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError('No xml files found in input directory')
+
+    # Compile regex pattern if provided
+    pattern = re.compile(textfilter) if textfilter else None
+    tag_to_remove = tag_to_remove if tag_to_remove is not None else ''
+    
+    for xml_file in track(sorted(xml_files), description="Removing elements with tags from files..."):
+        filename = xml_file.name
+        print('[green]Processing file:[/green] ' + filename)
+
+        page = Page(xml_file)
+
+        # Process TextRegions
+        if 'TextRegion' in level:
+            for region in list(page.regions.textregions):
+                if pattern:
+                    text = region.get_text()
+                    matches = bool(pattern.search(text))
+                    if (skip_textfilter and matches) or (not skip_textfilter and not matches):
+                        print(f"[orange3]Skip TextRegion: {region.get_id()} - Text: {text[:50]}...[/orange3]")
+                        continue
+                if region.get_tag() == tag_to_remove:
+                    print(f"[red]Removing TextRegion: {region.get_id()} with tag '{tag_to_remove}'[/red]")
+                    page.delete_element(region.xml_element)
+
+        # Process TableRegions
+        if 'TableRegion' in level:
+            for tableregion in list(page.regions.tableregions):
+                if pattern:
+                    text = tableregion.get_text()
+                    matches = bool(pattern.search(text))
+                    if (skip_textfilter and matches) or (not skip_textfilter and not matches):
+                        print(f"[orange3]Skip TableRegion: {tableregion.get_id()} - Text: {text[:50]}...[/orange3]")
+                        continue
+                if tableregion.get_tag() == tag_to_remove:
+                    print(f"[red]Removing TableRegion: {tableregion.get_id()} with tag '{tag_to_remove}'[/red]")
+                    page.delete_element(tableregion.xml_element)
+
+        # Reload regions after deletions
+        page.load_regions()
+
+        # Process Textlines
+        if 'Textline' in level:
+            for region in page.regions.textregions:
+                for line in list(region.textlines):
+                    if pattern:
+                        text = line.get_text()
+                        matches = bool(pattern.search(text))
+                        if (skip_textfilter and matches) or (not skip_textfilter and not matches):
+                            print(f"[orange3]Skip Textline: {line.get_id()} - Text: {text[:50]}...[/orange3]")
+                            continue
+                    if line.get_tag() == tag_to_remove:
+                        print(f"[red]Removing Textline: {line.get_id()} with tag '{tag_to_remove}'[/red]")
+                        page.delete_element(line.xml_element)
+
+
+        if not dry_run:
+            fout = xml_file if outputdir is None else determine_output_path(xml_file, outputdir, filename)
+            logging.info(f'Wrote modified xml file to output directory: {fout}')
+            page.save_xml(fout)
+
+
+@app.command()
+def rectangularize(
+    inputs: Annotated[List[str], typer.Argument(exists=True,
+                                                help="Paths or workspace to the files to be validated.",
+                                                callback=transform_inputs)] = None,
+    outputdir: Annotated[Optional[str], typer.Option(
+        help="Filename of the output directory. Default is creating an output directory, "
+                "called PagePlusOutput, in the input directory.", callback=transform_output)] = None,
+    level: Annotated[List[TextLevel], typer.Option(
+            help="Granularity levels to process: 'TextRegion', 'TableRegion', 'Textline', "
+                    " (default: TextRegion, Textline).")] = ("TextRegion", "Textline"),
+    dry_run: Annotated[bool, typer.Option(help="Perform a dry run without writing any files.")] = False):
+    """
+    Rectangularizes the coordinates of textlines and regions to ensure they are properly aligned.
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError('No xml files found in input directory')
+
+    for xml_file in track(sorted(xml_files), description="Rectangularizing coordinates in files..."):
+        filename = xml_file.name
+        print('[green]Processing file:[/green] ' + filename)
+
+        page = Page(xml_file)
+        page_size = page.get_coordinates('linearring')
+        
+        # Process TextRegions
+        if 'TextRegion' in level:
+            for region in page.regions.textregions:
+                region.buffer(distance=0, direction='all', rectangle=True)
+                region.fit_into_parent(page_size)
+                print(f"[yellow]Rectangularizing TextRegion: {region.get_id()}[/yellow]")
+        # Process TableRegions
+        if 'TableRegion' in level:
+            for tableregion in page.regions.tableregions:
+                tableregion.buffer(distance=0, direction='all', rectangle=True)
+                tableregion.fit_into_parent(page_size)
+                print(f"[yellow]Rectangularizing TableRegion: {tableregion.get_id()}[/yellow]")
+                for cell in tableregion.tablecells:
+                    cell.buffer(distance=0, direction='all', rectangle=True)
+                    tableregion.fit_into_parent(tableregion.get_coordinates('linearring'))
+                    print(f"[yellow]Rectangularizing TableCell: {cell.get_id()}[/yellow]")
+
+        # Process Textlines
+        if 'Textline' in level:
+            for region in [*page.regions.textregions, *page.regions.tableregions]:
+                for line in region.textlines:
+                    line.buffer(distance=0, direction='all', rectangle=True)
+                    line.fit_into_parent()
+                    print(f"[yellow]Rectangularizing Textline: {line.get_id()}[/yellow]")
+
+        if not dry_run:
+            fout = xml_file if outputdir is None else determine_output_path(xml_file, outputdir, filename)
+            logging.info(f'Wrote modified xml file to output directory: {fout}')
+            page.save_xml(fout)
+
+
+@app.command()
+def repair_dummy_region(
+    inputs: Annotated[List[str], typer.Argument(exists=True,
+                                                help="Paths or workspace to the files to be validated.",
+                                                callback=transform_inputs)] = None,
+    outputdir: Annotated[Optional[str], typer.Option(
+        help="Filename of the output directory. Default is creating an output directory, "
+            "called PagePlusOutput, in the input directory.", callback=transform_output)] = None,
+    dry_run: Annotated[bool, typer.Option(help="Perform a dry run without writing any files.")] = False):
+    """
+    Repairs TextRegions with invalid coordinates by either:
+    1. Calculating a new convex hull from textlines if the region has textlines
+    2. Deleting the region if it has no textlines
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError('No xml files found in input directory')
+
+    for xml_file in track(sorted(xml_files), description="Repairing dummy regions in files..."):
+        filename = xml_file.name
+        print('[green]Processing file:[/green] ' + filename)
+
+        page = Page(xml_file)
+        
+        # Process TextRegions
+        for region in page.regions.textregions:
+            # Check if region has valid coordinates
+            if region.get_coordinates(returntype="polygon") is None:
+                if region.textlines:
+                    print(f"[yellow]Repairing TextRegion: {region.get_id()} - Calculating new convex hull[/yellow]")
+                    # Calculate new convex hull from textlines
+                    textline_coords = []
+                    for line in region.textlines:
+                        textline_coords.extend(line.get_coordinates(returntype="tuple"))
+                    if textline_coords:
+                        # Create convex hull from textline coordinates
+                        from shapely.geometry import MultiPoint
+                        hull = MultiPoint(textline_coords).convex_hull
+                        region.update_coordinates(hull, 'polygon')
+                        region.buffer(distance=5, direction='all')
+                else:
+                    print(f"[red]Deleting TextRegion: {region.get_id()} - No textlines found[/red]")
+                    page.delete_element(region.xml_element)
+
+        if not dry_run:
+            fout = xml_file if outputdir is None else determine_output_path(xml_file, outputdir, filename)
+            logging.info(f'Wrote modified xml file to output directory: {fout}')
+            page.save_xml(fout)
+
+@app.command()
+def top_tier_textregion(
+    inputs: Annotated[List[str], typer.Argument(exists=True,
+                                                help="Paths or workspace to the files to be validated.",
+                                                callback=transform_inputs)] = None,
+    outputdir: Annotated[Optional[str], typer.Option(
+        help="Filename of the output directory. Default is creating an output directory, "
+            "called PagePlusOutput, in the input directory.", callback=transform_output)] = None,
+    dry_run: Annotated[bool, typer.Option(help="Perform a dry run without writing any files.")] = False):
+    """
+    Creates a convex hall for all textlines and deletes single text regions
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError('No xml files found in input directory')
+
+    for xml_file in track(sorted(xml_files), description="Creating top tier textregion in files..."):
+        filename = xml_file.name
+        print('[green]Processing file:[/green] ' + filename)
+
+        page = Page(xml_file)
+        
+        # Process TextRegions
+        if len(page.regions.textregions) > 1:
+            top_tier_region = page.regions.textregions[0]
+            top_tier_region.set_tag('paragraph')
+            top_tier_region_xml = page.regions.textregions[0].xml_element
+            for region in page.regions.textregions[1:]:
+                # Check if region has valid coordinates
+                if region.textlines:
+                    top_tier_region.textlines.extend(region.textlines)
+                    region_xml = region.xml_element
+                    for line in region.textlines:
+                        region_xml.remove(line.xml_element)
+                        top_tier_region_xml.append(line.xml_element)
+                page.delete_element(region.xml_element)
+            textline_coords = []
+            for line in top_tier_region.textlines:
+                textline_coords.extend(line.get_coordinates(returntype="tuple"))
+            if textline_coords:
+                # Create convex hull from textline coordinates
+                from shapely.geometry import MultiPoint
+                hull = MultiPoint(textline_coords).convex_hull
+                top_tier_region.update_coordinates(hull, 'polygon')
+                top_tier_region.buffer(distance=5, direction='all')
+            top_tier_region.sort_baselines(mode='single_col')
+        if not dry_run:
+            fout = xml_file if outputdir is None else determine_output_path(xml_file, outputdir, filename)
+            logging.info(f'Wrote modified xml file to output directory: {fout}')
+            page.save_xml(fout)
+
+
+
+@app.command()
+def fit_into_parent(
+        inputs: Annotated[List[str], typer.Argument(exists=True,
+                                                    help="Paths or workspace to the files to be validated.",
+                                                    callback=transform_inputs)] = None,
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Filename of the output directory. Default is creating an output directory, "
+                 "called PagePlusOutput, in the input directory.", callback=transform_output)] = None,
+        level: Annotated[List[TextLevel], typer.Option(
+                help="Granularity levels to process: 'TextRegion', 'TableRegion', 'Textline', "
+                     " (default: TextRegion, Textline).")] = ("TextRegion", "Textline"),
+        dry_run: Annotated[bool, typer.Option(help="Perform a dry run without writing any files.")] = False):
+    """
+    Fits TextRegions, TableRegions, and Textlines into their parent boundaries.
+    This ensures that no element extends beyond its parent's boundaries.
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError('No xml files found in input directory')
+
+    for xml_file in track(sorted(xml_files), description="Fitting elements into parent boundaries..."):
+        filename = xml_file.name
+        print('[green]Processing file:[/green] ' + filename)
+
+        page = Page(xml_file)
+        page_size = page.get_coordinates('linearring')
+        
+        # Process TextRegions
+        if 'TextRegion' in level:
+            for region in page.regions.textregions:
+                region.fit_into_parent(page_size)
+                print(f"[yellow]Fitting TextRegion: {region.get_id()} into page[/yellow]")
+
+        # Process TableRegions
+        if 'TableRegion' in level:
+            for tableregion in page.regions.tableregions:
+                tableregion.fit_into_parent(page_size)
+                print(f"[yellow]Fitting TableRegion: {tableregion.get_id()} into page[/yellow]")
+                for cell in tableregion.tablecells:
+                    cell.fit_into_parent(tableregion.get_coordinates('linearring'))
+                    print(f"[yellow]Fitting TableCell: {cell.get_id()} into table[/yellow]")
+
+        # Process Textlines
+        if 'Textline' in level:
+            for region in [*page.regions.textregions, *page.regions.tableregions]:
+                for line in region.textlines:
+                    line.fit_into_parent()
+                    print(f"[yellow]Fitting Textline: {line.get_id()} into region[/yellow]")
+
+        if not dry_run:
+            fout = xml_file if outputdir is None else determine_output_path(xml_file, outputdir, filename)
+            logging.info(f'Wrote modified xml file to output directory: {fout}')
+            page.save_xml(fout)
+
 
 if __name__ == "__main__":
     app()
+
