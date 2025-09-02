@@ -26,6 +26,14 @@ jinja2 = "^3.1.6"
 rapidfuzz = "^3.14.0"
 attrs = "^25.3.0"
 multimethod = "^2.0"
+pikepdf = "^9.10.2"
+google-genai = "^1.32.0"
+
+# GUI-related packages
+streamlit = { version = "^1.49.1", optional = true }
+
+[tool.poetry.extras]
+gui = ["streamlit"]
 
 
 [build-system]
