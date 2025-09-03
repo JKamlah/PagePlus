@@ -1,7 +1,6 @@
 import subprocess
-from pathlib import Path
 
-from pageplus.gui.cli_bridges.base import CLIBridge, logger
+from pageplus.gui.cli_bridges.base import CLIBridge
 
 
 class SettingsBridge(CLIBridge):
@@ -37,4 +36,4 @@ class SettingsBridge(CLIBridge):
             cmd = ["pageplus", "system", "clean-workspace-dir"]
             subprocess.run(cmd, check=True)
         except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to clean workspace directory: {e}") 
+            raise RuntimeError(f"Failed to clean workspace directory: {e}")

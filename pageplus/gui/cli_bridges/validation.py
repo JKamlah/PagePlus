@@ -1,8 +1,9 @@
 from pathlib import Path
-from typing import List, Optional, Dict
+from typing import List
+
 import pandas as pd
 
-from pageplus.gui.cli_bridges.base import CLIBridge, logger, capture_logging
+from pageplus.gui.cli_bridges.base import CLIBridge, capture_logging, logger
 
 
 class ValidationBridge(CLIBridge):
@@ -25,7 +26,7 @@ class ValidationBridge(CLIBridge):
 
         current_file = None
         coords_re = re.compile(r'\[\((?:\d+, \d+)(?:\), \(\d+, \d+)*\)\]')
-        
+
         # Patterns to detect types
         message_types = [
             (re.compile(r'validating file', re.IGNORECASE), "Validating File"),
@@ -39,7 +40,7 @@ class ValidationBridge(CLIBridge):
             (re.compile(r'empty text', re.IGNORECASE), "Empty Text"),
             (re.compile(r'text is empty', re.IGNORECASE), "Empty Text"),
             (re.compile(r'no text', re.IGNORECASE), "Empty Region"),
-            (re.compile(r'region contains no text', re.IGNORECASE), "Empty Region"),  
+            (re.compile(r'region contains no text', re.IGNORECASE), "Empty Region"),
             (re.compile(r'insufficient coord', re.IGNORECASE),
              "Insufficient Coordinates"),
             (re.compile(r'self-intersection', re.IGNORECASE),

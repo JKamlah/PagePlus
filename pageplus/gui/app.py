@@ -1,3 +1,9 @@
+from pageplus.utils.logger import setup_logger, configure_external_logging
+
+logger = setup_logger()
+# Configure external logging
+configure_external_logging()
+
 from pageplus.gui.views.gemini import show_gemini
 from pageplus.gui.views.modification import show_modification
 from pageplus.gui.views.settings import show_settings
@@ -19,17 +25,10 @@ from pageplus.gui.cli_bridges import (
 )
 import streamlit as st
 from pathlib import Path
-import logging
 from typing import List
 import json
 import dotenv
 import base64
-
-from pageplus.utils.logger import setup_logger, configure_external_logging
-
-logger = setup_logger()
-# Configure external logging
-configure_external_logging()
 
 
 # Initialize settings
@@ -197,19 +196,19 @@ def show_home():
     st.header("✨ Welcome to PagePlus ✨")
     st.write("""
     This is the GUI interface for PagePlus, a PAGE-XML file multi-tool.
-
-    Use the sidebar to navigate between different sections:
-    📂 Input: Load PAGE-XML files to process
-    🔍 Analytics: Analyze the content of PAGE-XML files
-    ✅ Validation: Validate PAGE-XML files
-    🛠️ Modification: Modify processed documents
-    🖋️ OCR: Do OCR on PAGE-XML files with several OCR engines
-    🤖 LLM: Perform different tasks on PAGE-XML files with LLMs
-    🌟 Gemini: Use Gemini to process images and validate PAGE-XML output
-    📚 METS Tools: Work with METS/MODS files
-    📤 Export: Export PAGE-XML files to different formats (ALTO, PDF, Text)
-    🗂️ Workspace: Manage workspaces
-    ⚙️ Settings: Configure application settings
+    
+    Use the sidebar to navigate between different sections:  
+    📂 Input: Load PAGE-XML files to process  
+    🔍 Analytics: Analyze the content of PAGE-XML files  
+    ✅ Validation: Validate PAGE-XML files  
+    🛠️ Modification: Modify processed documents  
+    🖋️ OCR: Do OCR on PAGE-XML files with several OCR engines  
+    🤖 LLM: Perform different tasks on PAGE-XML files with LLMs  
+    🌟 Gemini: Use Gemini to process images and validate PAGE-XML output  
+    📚 METS Tools: Work with METS/MODS files  
+    📤 Export: Export PAGE-XML files to different formats (ALTO, PDF, Text)  
+    🗂️ Workspace: Manage workspaces  
+    ⚙️ Settings: Configure application settings  
     """)
 
 

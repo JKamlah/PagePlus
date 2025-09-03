@@ -1,14 +1,15 @@
 import streamlit as st
+
 from pageplus.gui.utils.settings import Settings
 
 
 def show_settings(cli_bridge):
     """Display settings page with configuration options."""
     st.title("⚙️ Settings")
-    
+
     # Initialize settings
     settings = Settings()
-    
+
     # API Keys
     st.subheader("API Keys")
     openai_key = st.text_input(
@@ -21,7 +22,7 @@ def show_settings(cli_bridge):
         value=settings.get("GEMINI_API_KEY", ""),
         type="password"
     )
-    
+
     # OCR Settings
     st.subheader("OCR Settings")
     tesseract_path = st.text_input(
@@ -32,14 +33,14 @@ def show_settings(cli_bridge):
         "Kraken Model Path",
         value=settings.get("KRAKEN_MODEL_PATH", "")
     )
-    
+
     # Output Settings
     st.subheader("Output Settings")
     output_dir = st.text_input(
         "Default Output Directory",
         value=settings.get("OUTPUT_DIRECTORY", "")
     )
-    
+
     # Save settings
     if st.button("Save Settings"):
         try:
@@ -51,7 +52,7 @@ def show_settings(cli_bridge):
                 "KRAKEN_MODEL_PATH": kraken_path,
                 "OUTPUT_DIRECTORY": output_dir
             })
-            
+
             st.success("Settings saved successfully!")
         except Exception as e:
-            st.error(f"Error saving settings: {str(e)}") 
+            st.error(f"Error saving settings: {str(e)}")

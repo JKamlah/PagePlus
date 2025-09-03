@@ -1,12 +1,11 @@
 from importlib import util
 
 import streamlit as st
-from typing import List
+
 from pageplus.gui.cli_bridges import ModificationBridge
 from pageplus.gui.utils.picker import select_directory
-from pageplus.utils.constants import TextLevel
 from pageplus.models.page import Page
-
+from pageplus.utils.constants import TextLevel
 
 
 def show_modification(bridge: ModificationBridge) -> None:
@@ -16,10 +15,10 @@ def show_modification(bridge: ModificationBridge) -> None:
         return
 
     st.title("Modification")
-    
+
     # Get available files from session state
     selected_files = [str(f) for f in st.session_state.loaded_files]
-    
+
     # Select output directory
     st.write("Output directory: The default is to overwrite the input files (recommended with backup strategy).")
     if st.button("Select Output Directory"):
@@ -39,21 +38,22 @@ def show_modification(bridge: ModificationBridge) -> None:
         if st.button("Clear Output Directory"):
             del st.session_state.modification_dir
             st.rerun()
-    
+
     # Operation tabs
-    tab_names = ["Text-Content Operations", 
-                 "Text-Layout Operations", 
-                 "Other Layout Operations", 
+    tab_names = ["Text-Content Operations",
+                 "Text-Layout Operations",
+                 "Other Layout Operations",
                  "Batch Operations"]
     tabs = st.tabs(tab_names)
-    
+
     with tabs[0]:  # Text Operations
         st.subheader("Text-Content Operations")
 
         # Spellchecking
         with st.expander("Spellchecking"):
             if (spec := util.find_spec('spellchecker')) is None:
-                st.error("Spellchecker is not installed. Please install it with `pip install spellchecker`.")
+                st.error(
+                    "Spellchecker is not installed. Please install it with `pip install spellchecker`.")
                 from pageplus.cli.modification import install_spellchecker
                 if st.button("Install Spellchecking"):
                     result = install_spellchecker()
@@ -61,7 +61,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                         st.success(result["output"])
                     else:
                         st.error(result["output"])
-            else:   
+            else:
                 language = st.selectbox(
                     "Language",
                     ["en", "de", "fr"],
@@ -95,9 +95,10 @@ def show_modification(bridge: ModificationBridge) -> None:
                         value=50,
                         key="spellcheck_word_freq"
                     )
-                report = st.checkbox("Generate report", key="spellcheck_report")
+                report = st.checkbox(
+                    "Generate report", key="spellcheck_report")
                 dry_run = st.checkbox("Dry run", key="spellcheck_dry_run")
-            
+
                 if st.button("Run Spellchecking"):
                     result = bridge.spellchecking(
                         files=selected_files,
@@ -109,13 +110,12 @@ def show_modification(bridge: ModificationBridge) -> None:
                         workspace_word_frequency=word_freq if workspace_dict else 50,
                         report=report,
                         dry_run=dry_run,
-                        outputdir=st.session_state.get('modification_dir')
-                    )
+                        outputdir=st.session_state.get('modification_dir'))
                     if result["success"]:
                         st.success(result["output"])
                     else:
                         st.error(result["output"])
-        
+
         # Delete Text
         with st.expander("Delete Text (content)"):
             levels = st.multiselect(
@@ -127,7 +127,7 @@ def show_modification(bridge: ModificationBridge) -> None:
             if st.button("Delete Text (content)"):
                 result = bridge.delete_text(
                     files=selected_files,
-                    levels=[TextLevel(l) for l in levels],
+                    levels=[TextLevel(level) for level in levels],
                     outputdir=st.session_state.get('modification_dir')
                 )
                 if result["success"]:
@@ -138,9 +138,9 @@ def show_modification(bridge: ModificationBridge) -> None:
     with tabs[1]:  # Text Operations
         st.subheader("Text-Layout Operations")
 
-                # Replace Tags
+        # Replace Tags
         with st.expander("Replace Tags"):
-            #old_tag = st.text_input("Old Tag", key="replace_tag_old" 
+            # old_tag = st.text_input("Old Tag", key="replace_tag_old"
             # Initialize session state on first run
             if "replace_tag_options" not in st.session_state:
                 st.session_state.replace_tag_options = []
@@ -149,7 +149,8 @@ def show_modification(bridge: ModificationBridge) -> None:
             # Button to update options
             if st.button("Update old tags"):
                 from pathlib import Path
-                st.session_state.replace_tag_options = sorted(set(tag for tags in [Page(Path(f)).get_tags([TextLevel(l) for l in st.session_state.get("replace_tag_level", [])]) for f in selected_files] for tag in tags))
+                st.session_state.replace_tag_options = sorted(set(tag for tags in [Page(Path(f)).get_tags([TextLevel(
+                    level) for level in st.session_state.get("replace_tag_level", [])]) for f in selected_files] for tag in tags))
                 st.session_state.replace_tag_old = []  # Reset selection safely
 
             # Show the multiselect without using `default=`
@@ -168,15 +169,13 @@ def show_modification(bridge: ModificationBridge) -> None:
             textfilter = st.text_input(
                 "Text Filter (Regex)",
                 help="Optional regex pattern to match text content. If provided, only elements containing matching text will be processed.",
-                key="replace_tag_textfilter"
-            )
+                key="replace_tag_textfilter")
             skip_textfilter = st.checkbox(
                 "Skip Matching Text",
                 help="If checked, skip elements matching the text filter. If unchecked, only process elements matching the text filter.",
-                key="replace_tag_skip_textfilter"
-            )
+                key="replace_tag_skip_textfilter")
             dry_run = st.checkbox("Dry run", key="replace_tag_dry_run")
-         
+
             if st.button("Replace Tags"):
                 old_tags = old_tags if old_tags else [None]
                 for old_tag in old_tags:
@@ -184,14 +183,16 @@ def show_modification(bridge: ModificationBridge) -> None:
                         files=selected_files,
                         old_tag=old_tag,
                         new_tag=new_tag,
-                        level=[TextLevel(l) for l in levels],
+                        level=[TextLevel(level) for level in levels],
                         textfilter=textfilter if textfilter else None,
                         skip_textfilter=skip_textfilter,
                         dry_run=dry_run,
                         outputdir=st.session_state.get('modification_dir')
                     )
                     if result["success"]:
-                        st.success(result["output"]+f': {old_tag} -> {new_tag}')
+                        st.success(
+                            result["output"] +
+                            f': {old_tag} -> {new_tag}')
                     else:
                         st.error(result["output"])
 
@@ -202,11 +203,12 @@ def show_modification(bridge: ModificationBridge) -> None:
                 st.session_state.remove_tag_options = []
             if "remove_tag_to_remove" not in st.session_state:
                 st.session_state.remove_tag_to_remove = []
-                
+
             # Button to update options
             if st.button("Update tags to remove"):
                 from pathlib import Path
-                st.session_state.remove_tag_options = sorted(set(tag for tags in [Page(Path(f)).get_tags([TextLevel(l) for l in st.session_state.get("remove_tag_level", [])]) for f in selected_files] for tag in tags))
+                st.session_state.remove_tag_options = sorted(set(tag for tags in [Page(Path(f)).get_tags([TextLevel(
+                    level) for level in st.session_state.get("remove_tag_level", [])]) for f in selected_files] for tag in tags))
                 st.session_state.remove_tag_to_remove = []  # Reset selection safely
 
             # Show the multiselect
@@ -224,29 +226,29 @@ def show_modification(bridge: ModificationBridge) -> None:
             textfilter = st.text_input(
                 "Text Filter (Regex)",
                 help="Optional regex pattern to match text content. If provided, only elements containing matching text will be processed.",
-                key="remove_tag_textfilter"
-            )
+                key="remove_tag_textfilter")
             skip_textfilter = st.checkbox(
                 "Skip Matching Text",
                 help="If checked, skip elements matching the text filter. If unchecked, only process elements matching the text filter.",
-                key="remove_tag_skip_textfilter"
-            )
+                key="remove_tag_skip_textfilter")
             dry_run = st.checkbox("Dry run", key="remove_tag_dry_run")
-         
+
             if st.button("Remove Tags"):
                 tags_to_remove = tags_to_remove if tags_to_remove else [None]
                 for tag_to_remove in tags_to_remove:
                     result = bridge.remove_tag(
                         files=selected_files,
                         tag_to_remove=tag_to_remove,
-                        level=[TextLevel(l) for l in levels],
+                        level=[TextLevel(level) for level in levels],
                         textfilter=textfilter if textfilter else None,
                         skip_textfilter=skip_textfilter,
                         dry_run=dry_run,
                         outputdir=st.session_state.get('modification_dir')
                     )
                     if result["success"]:
-                        st.success(result["output"]+f': Removed elements with tag "{tag_to_remove}"')
+                        st.success(
+                            result["output"] +
+                            f': Removed elements with tag "{tag_to_remove}"')
                     else:
                         st.error(result["output"])
 
@@ -260,7 +262,7 @@ def show_modification(bridge: ModificationBridge) -> None:
             )
             dry_run = st.checkbox("Dry run", key="remove_empty_dry_run")
             if st.button("Remove Empty"):
-                level = [TextLevel(l) for l in level]
+                level = [TextLevel(level) for level in level]
                 result = bridge.remove_empty(
                     files=selected_files,
                     level=level,
@@ -271,7 +273,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                     st.success(result["output"])
                 else:
                     st.error(result["output"])
-        
+
         # Delete Textlines
         with st.expander("Delete Textlines (with content)"):
             if st.button("Delete Textlines"):
@@ -283,7 +285,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                     st.success(result["output"])
                 else:
                     st.error(result["output"])
-        
+
                 # Translate Lines
         with st.expander("Translate Lines"):
             xoff = st.number_input(
@@ -309,7 +311,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                     st.success(result["output"])
                 else:
                     st.error(result["output"])
-        
+
         # Extend Lines
         with st.expander("Extend Lines"):
             distance = st.number_input(
@@ -323,7 +325,8 @@ def show_modification(bridge: ModificationBridge) -> None:
                 ["all", "x", "y"],
                 key="extend_lines_dim"
             )
-            rectangularize = st.checkbox("Rectangularize", key="extend_lines_rectify")
+            rectangularize = st.checkbox(
+                "Rectangularize", key="extend_lines_rectify")
             cut_overlaps = st.checkbox(
                 "Cut overlaps",
                 key="extend_lines_cut_overlaps"
@@ -344,11 +347,11 @@ def show_modification(bridge: ModificationBridge) -> None:
                 else:
                     st.error(result["output"])
 
-        
         # Rectangularize Coordinates
         with st.expander("Rectangularize"):
-            st.write("""Rectangularizes the coordinates of textlines and regions.""")
-            
+            st.write(
+                """Rectangularizes the coordinates of textlines and regions.""")
+
             levels = st.multiselect(
                 "Level",
                 [TextLevel.TextRegion.name, TextLevel.Textline.name, TextLevel.TableRegion.name],
@@ -356,11 +359,11 @@ def show_modification(bridge: ModificationBridge) -> None:
                 key="rectangularize_level"
             )
             dry_run = st.checkbox("Dry run", key="rectangularize_dry_run")
-            
+
             if st.button("Rectangularize Coordinates"):
                 result = bridge.rectangularize(
                     files=selected_files,
-                    level=[TextLevel(l) for l in levels],
+                    level=[TextLevel(level) for level in levels],
                     dry_run=dry_run,
                     outputdir=st.session_state.get('modification_dir')
                 )
@@ -368,7 +371,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                     st.success(result["output"])
                 else:
                     st.error(result["output"])
-        
+
         # Pseudoline Polygon
         with st.expander("Pseudoline Polygon"):
             if st.button("Pseudoline Polygon"):
@@ -380,7 +383,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                     st.success(result["output"])
                 else:
                     st.error(result["output"])
-        
+
         # Sort
         with st.expander("Sort"):
             if st.button("Sort"):
@@ -392,7 +395,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                     st.success(result["output"])
                 else:
                     st.error(result["output"])
-        
+
         # Sort and Merge
         with st.expander("Sort and Merge"):
             merge_lines_gap_x = st.number_input(
@@ -453,7 +456,7 @@ def show_modification(bridge: ModificationBridge) -> None:
             Fits TextRegions, TableRegions, and Textlines into their parent boundaries.
             This ensures that no element extends beyond its parent's boundaries.
             """)
-            
+
             levels = st.multiselect(
                 "Level",
                 [TextLevel.TextRegion.name, TextLevel.Textline.name, TextLevel.TableRegion.name],
@@ -461,11 +464,11 @@ def show_modification(bridge: ModificationBridge) -> None:
                 key="fit_into_parent_level"
             )
             dry_run = st.checkbox("Dry run", key="fit_into_parent_dry_run")
-            
+
             if st.button("Fit into Parent"):
                 result = bridge.fit_into_parent(
                     files=selected_files,
-                    level=[TextLevel(l) for l in levels],
+                    level=[TextLevel(level) for level in levels],
                     dry_run=dry_run,
                     outputdir=st.session_state.get('modification_dir')
                 )
@@ -480,9 +483,9 @@ def show_modification(bridge: ModificationBridge) -> None:
             Creates a convex hull for all textlines and deletes single text regions.
             This merges multiple TextRegions into one top-tier region with a convex hull boundary.
             """)
-            
+
             dry_run = st.checkbox("Dry run", key="top_tier_textregion_dry_run")
-            
+
             if st.button("Create Top Tier TextRegion"):
                 result = bridge.top_tier_textregion(
                     files=selected_files,
@@ -500,21 +503,21 @@ def show_modification(bridge: ModificationBridge) -> None:
             Merges column-aligned text regions based on distance thresholds.
             Groups regions whose centroids are within the width variance tolerance and merges them into a single region with a convex hull boundary.
             """)
-            
+
             based_on_baselines = st.checkbox(
                 "Based on Baselines",
                 value=False,
                 help="If checked, merge regions based on their mean textline baseline centroid. If unchecked, use the geometric centroid of the region's polygon.",
-                key="merge_columnaligned_baselines"
-            )
+                key="merge_columnaligned_baselines")
 
             convex_hull_method = st.selectbox(
                 "Convex Hull Method",
-                options=['region', 'textlines'],
+                options=[
+                    'region',
+                    'textlines'],
                 index=0,
-                help="Method to use for convex hull calculation. 'region' uses the outer coordinates of all merged regions. 'textlines' uses the coordinates of all textlines within the merged regions.",
-                key="merge_columnaligned_hull_method"
-            )
+                help="Method to use for convex hull calculation. 'region' uses regions coordinates. 'textlines' uses the coordinates of all textlines within the merged regions.",
+                key="merge_columnaligned_hull_method")
 
             max_height_distance = st.slider(
                 "Max Height Distance (%)",
@@ -523,8 +526,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                 value=0.75,
                 step=0.01,
                 help="Maximum vertical distance between region centroids for merging, as a percentage of page height.",
-                key="merge_columnaligned_max_height"
-            )
+                key="merge_columnaligned_max_height")
 
             mid_tolerance = st.slider(
                 "Mid Tolerance (%)",
@@ -533,8 +535,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                 value=0.0,
                 step=0.01,
                 help="A tolerance (percentage of page width) to ignore centroids too close to the middle of the page.",
-                key="merge_columnaligned_mid_tolerance"
-            )
+                key="merge_columnaligned_mid_tolerance")
 
             tolerance = st.slider(
                 "Tolerance",
@@ -545,9 +546,9 @@ def show_modification(bridge: ModificationBridge) -> None:
                 help="Tolerance for merging regions (0.01 = 1%, 1.0 = 100%)",
                 key="merge_columnaligned_tolerance"
             )
-            
+
             dry_run = st.checkbox("Dry run", key="merge_columnaligned_dry_run")
-            
+
             if st.button("Merge Column-Aligned Regions"):
                 result = bridge.merge_columnaligned_regions(
                     files=selected_files,
@@ -566,15 +567,15 @@ def show_modification(bridge: ModificationBridge) -> None:
 
         # Sort Regions
         with st.expander("Sort Regions"):
-            st.write("Sorts text regions based on a simple reading order using overlap analysis.")
-            
+            st.write(
+                "Sorts text regions based on a simple reading order using overlap analysis.")
+
             based_on_baselines = st.checkbox(
                 "Use mean baseline centroid",
                 value=False,
                 help="If checked, sorting will be based on the mean centroid of textline baselines instead of the region's geometric centroid.",
-                key="sort_regions_baselines"
-            )
-            
+                key="sort_regions_baselines")
+
             overlap_pct = st.slider(
                 "Overlap Percentage",
                 min_value=0.0,
@@ -582,11 +583,10 @@ def show_modification(bridge: ModificationBridge) -> None:
                 value=60.0,
                 step=1.0,
                 help="Threshold in percent for Y- and X-overlap, based on the smaller width/height of the two regions being compared.",
-                key="sort_regions_overlap_pct"
-            )
-            
+                key="sort_regions_overlap_pct")
+
             dry_run = st.checkbox("Dry run", key="sort_regions_dry_run")
-            
+
             if st.button("Sort Regions"):
                 result = bridge.sort_regions(
                     files=selected_files,
@@ -602,7 +602,7 @@ def show_modification(bridge: ModificationBridge) -> None:
 
     with tabs[2]:  # Layout Operations
         st.subheader("Layout Operations")
-        
+
         # Reassign IDs
         with st.expander("Reassign IDs"):
             mode = st.selectbox(
@@ -621,8 +621,8 @@ def show_modification(bridge: ModificationBridge) -> None:
                 if result["success"]:
                     st.success(result["output"])
                 else:
-                    st.error(result["output"])   
-        
+                    st.error(result["output"])
+
         # Repair
         with st.expander("Repair"):
             dry_run = st.checkbox("Dry run", key="repair_dry_run")
@@ -636,7 +636,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                     st.success(result["output"])
                 else:
                     st.error(result["output"])
-        
+
         # Repair Dummy Regions
         with st.expander("Repair Dummy Regions"):
             st.write("""
@@ -644,9 +644,9 @@ def show_modification(bridge: ModificationBridge) -> None:
             1. Calculating a new convex hull from textlines if the region has textlines
             2. Deleting the region if it has no textlines
             """)
-            
+
             dry_run = st.checkbox("Dry run", key="repair_dummy_dry_run")
-            
+
             if st.button("Repair Dummy Regions"):
                 result = bridge.repair_dummy_region(
                     files=selected_files,

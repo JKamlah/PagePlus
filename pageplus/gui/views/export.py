@@ -1,17 +1,16 @@
-import streamlit as st
 from pathlib import Path
-from typing import List, Optional
-from pageplus.gui.utils.picker import (
-    select_directory, select_files, get_loaded_workspace_dir
-)
+
+import streamlit as st
 
 from pageplus.cli.export import ReadingOrderMode
+from pageplus.gui.utils.picker import (get_loaded_workspace_dir,
+                                       select_directory, select_files)
 
 
 def show_export(bridge):
     """Display export page."""
     st.title("📤 Export")
-    
+
     # Check if files are loaded
     if not st.session_state.loaded_files:
         st.warning("Please load files first.")
@@ -26,7 +25,8 @@ def show_export(bridge):
     )
 
     # Select output directory
-    st.write("Output directory: The default is to create a new folder in the input directory.")
+    st.write(
+        "Output directory: The default is to create a new folder in the input directory.")
     if st.button("Select Output Directory"):
         selected_paths = select_directory()
         if selected_paths:
@@ -74,7 +74,7 @@ def show_export(bridge):
                 ["Directory", "Files"],
                 horizontal=True
             )
-            
+
             if input_type == "Directory":
                 st.write("Select Image Extensions to Search")
                 selected_extensions = st.multiselect(
@@ -82,8 +82,8 @@ def show_export(bridge):
                     options=['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'],
                     default=['.jpg', '.jpeg', '.png', '.tiff', '.tif']
                 )
-                if st.button("Select Image Directory", 
-                           key="select_pdf_image_dir_button"):
+                if st.button("Select Image Directory",
+                             key="select_pdf_image_dir_button"):
                     selected_dir = select_directory(
                         initial_dir=get_loaded_workspace_dir()
                     )
@@ -113,12 +113,12 @@ def show_export(bridge):
                                 "Please select at least one image extension."
                             )
             else:  # Files
-                if st.button("Select Image Files", 
-                           key="select_pdf_image_files_button"):
+                if st.button("Select Image Files",
+                             key="select_pdf_image_files_button"):
                     selected_files = select_files(
                         initial_dir=get_loaded_workspace_dir(),
                         filetypes=[
-                            ("All image files", 
+                            ("All image files",
                              "*.jpg *.jpeg *.png *.bmp *.tiff *.tif"),
                             ("JPEG files", "*.jpg *.jpeg"),
                             ("PNG files", "*.png"),
@@ -138,9 +138,10 @@ def show_export(bridge):
             if 'pdf_input' in st.session_state:
                 pdf_input = st.session_state.pdf_input
                 st.info(f"Selected: {pdf_input['type']} - "
-                       f"{len(pdf_input['files'])} files")
+                        f"{len(pdf_input['files'])} files")
 
-            dpi = st.number_input("DPI", min_value=72, max_value=1200, value=None)
+            dpi = st.number_input(
+                "DPI", min_value=72, max_value=1200, value=None)
             draw_options = ["baseline", "border", "textline", "textregion"]
             draw = st.multiselect(
                 "Draw Elements",
@@ -179,14 +180,16 @@ def show_export(bridge):
                 if 'pdf_input' not in st.session_state:
                     st.error("Please select image files or directory first.")
                     return
-                
+
                 pdf_input = st.session_state.pdf_input
+                # TODO: Check if this is correct
                 if pdf_input['type'] == 'directory':
                     image_folder = pdf_input['path']
                 else:
-                    # For files, we need to extract the directory from the first file
+                    # For files, we need to extract the directory from the
+                    # first file
                     image_folder = str(Path(pdf_input['files'][0]).parent)
-                
+
                 kwargs.update({
                     "images": pdf_input['files'],
                     "max_resolution": None if dpi == 0 else dpi,
@@ -196,12 +199,9 @@ def show_export(bridge):
 
             # Perform export
             exported_files = bridge.export_files(
-                    files=st.session_state.loaded_files,
-                    format=export_format,
-                    output_dir=Path(st.session_state.export_dir) if st.session_state.export_dir else None,
-                    **kwargs
-                )
-            st.success(f"Files exported successfully!")
+                files=st.session_state.loaded_files, format=export_format, output_dir=Path(
+                    st.session_state.export_dir) if st.session_state.export_dir else None, **kwargs)
+            st.success("Files exported successfully!")
 
         except Exception as e:
             st.error(f"Error during export: {str(e)}")
@@ -210,11 +210,11 @@ def show_export(bridge):
 def show_dsv_export(cli_bridge):
     """Display DSV export options and results."""
     st.subheader("DSV Export")
-    
+
     # DSV options
     delimiter = st.selectbox("Delimiter", ["Tab", "Comma", "Semicolon"])
     dehyphenate = st.checkbox("Dehyphenate", value=False)
-    
+
     if st.button("Export to DSV"):
         with st.spinner("Exporting to DSV..."):
             try:
@@ -234,7 +234,7 @@ def show_dsv_export(cli_bridge):
 def show_alto_export(cli_bridge):
     """Display ALTO export options and results."""
     st.subheader("ALTO Export")
-    
+
     if st.button("Export to ALTO"):
         with st.spinner("Exporting to ALTO..."):
             try:
@@ -252,15 +252,15 @@ def show_alto_export(cli_bridge):
 def show_fulltext_export(cli_bridge):
     """Display Fulltext export options and results."""
     st.subheader("Fulltext Export")
-    
+
     # Fulltext options
     dehyphenate = st.checkbox("Dehyphenate", value=False)
     ro = st.checkbox("Reading Order", value=False)
-    ro_mode = st.selectbox(
-        "Reading Order Mode",
-        [ReadingOrderMode.auto.name, ReadingOrderMode.document.name, ReadingOrderMode.rog.name]
-    )
-    
+    ro_mode = st.selectbox("Reading Order Mode",
+                           [ReadingOrderMode.auto.name,
+                            ReadingOrderMode.document.name,
+                            ReadingOrderMode.rog.name])
+
     if st.button("Export to Fulltext"):
         with st.spinner("Exporting to Fulltext..."):
             try:
@@ -270,8 +270,7 @@ def show_fulltext_export(cli_bridge):
                     format="fulltext",
                     dehyphenate=dehyphenate,
                     ro=ro,
-                    ro_mode=ro_mode
-                )
+                    ro_mode=ro_mode)
                 st.success("Export completed!")
                 st.write(f"Exported files: {results}")
             except Exception as e:
@@ -281,7 +280,7 @@ def show_fulltext_export(cli_bridge):
 def show_pdf_export(cli_bridge):
     """Display PDF export options and results."""
     st.subheader("PDF Export")
-    
+
     # PDF options
     image_folder = st.text_input(
         "Image Folder",
@@ -289,7 +288,7 @@ def show_pdf_export(cli_bridge):
         label_visibility="visible"
     )
     dpi = st.number_input("DPI", value=400, min_value=72, max_value=1200)
-    
+
     if st.button("Export to PDF"):
         with st.spinner("Exporting to PDF..."):
             try:
@@ -302,4 +301,4 @@ def show_pdf_export(cli_bridge):
                 st.success("Export completed!")
                 st.write(f"Exported files: {results}")
             except Exception as e:
-                st.error(f"Error during export: {str(e)}") 
+                st.error(f"Error during export: {str(e)}")

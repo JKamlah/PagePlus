@@ -1,14 +1,14 @@
 """Page XML file loading utilities."""
 from pathlib import Path
 from typing import List
-import streamlit as st
-from dotenv import find_dotenv, set_key
 
-from pageplus.utils.fs import collect_xml_files
-from pageplus.io.logger import logging
+import streamlit as st
+
 from pageplus.gui.utils.picker import select_directory, select_files
-from pageplus.utils.workspace import Workspace
+from pageplus.io.logger import logging
 from pageplus.utils.constants import Environments
+from pageplus.utils.fs import collect_xml_files
+from pageplus.utils.workspace import Workspace
 
 
 class LoadFilesPage:
@@ -63,17 +63,17 @@ class LoadFilesPage:
 
         # Workspace section
         st.subheader("Workspace")
-        
+
         # Initialize workspace manager
         workspace = Workspace(Environments.PAGEPLUS)
-        workspaces = workspace.names()        
-        
+        workspaces = workspace.names()
+
         # Workspace dropdown
         selected_workspace = st.selectbox(
             "Select Workspace",
             workspaces,
             index=None,
-        )    
+        )
 
         col1, col2, col3 = st.columns(3)
 
@@ -91,7 +91,8 @@ class LoadFilesPage:
         # Select directory
         with col2:
             if st.button("Add Directory", key="add_ws_dir"):
-                selected_paths = self.pick_directory(initial_dir=Path(workspace.path(selected_workspace)))
+                selected_paths = self.pick_directory(
+                    initial_dir=Path(workspace.path(selected_workspace)))
                 if selected_paths:
                     self.load_xml_files(
                         [Path(selected_paths)],
@@ -103,7 +104,8 @@ class LoadFilesPage:
         # Select individual files
         with col3:
             if st.button("Add Files", key="add_ws_files"):
-                selected_paths = self.pick_files(initial_dir=Path(workspace.path(selected_workspace)))
+                selected_paths = self.pick_files(
+                    initial_dir=Path(workspace.path(selected_workspace)))
                 if selected_paths:
                     self.load_xml_files(
                         [Path(p) for p in selected_paths],
@@ -120,7 +122,7 @@ class LoadFilesPage:
 
         if st.session_state.loaded_files:
             display_data = [
-                {"File": p.name, "Path": str(p)} 
+                {"File": p.name, "Path": str(p)}
                 for p in st.session_state.loaded_files
             ]
             st.dataframe(
@@ -132,10 +134,9 @@ class LoadFilesPage:
             )
         else:
             st.info("No PAGE XML files loaded yet.")
-        
-        
+
     def load_xml_files(
-        self, 
+        self,
         paths_to_process: List[Path],
         from_directory: bool
     ):
@@ -157,14 +158,14 @@ class LoadFilesPage:
                     found_files = collect_xml_files(paths_to_process)
                 else:
                     found_files = [
-                        f for f in paths_to_process 
+                        f for f in paths_to_process
                         if f.is_file() and f.suffix.lower() == ".xml"
                     ]
 
                 existing_paths_str = {
                     str(f) for f in st.session_state.loaded_files
                 }
-                
+
                 for f in found_files:
                     if str(f) not in existing_paths_str:
                         st.session_state.loaded_files.append(f)
@@ -189,11 +190,11 @@ class LoadFilesPage:
 
         except Exception as e:
             logging.error(
-                f"Error loading files: {str(e)}", 
+                f"Error loading files: {str(e)}",
                 exc_info=True
             )
             st.error(f"An error occurred while loading files: {str(e)}")
 
     def get_loaded_files(self) -> List[Path]:
         """Get the list of loaded XML files."""
-        return st.session_state.get("loaded_files", []) 
+        return st.session_state.get("loaded_files", [])

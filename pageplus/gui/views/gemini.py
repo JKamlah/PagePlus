@@ -1,18 +1,20 @@
 import json
-import streamlit as st
-from pathlib import Path
-from pageplus.gui.cli_bridges.gemini import GeminiBridge
-from pageplus.gui.utils.picker import select_directory, select_files
-from pageplus.gui.utils.settings import Settings
-from pageplus.gui.utils.output_transform import rich_table_to_dataframe
-from pageplus.gui.utils.picker import get_loaded_workspace_dir
-import sys
-from io import StringIO
-import threading
 import queue
-import time
 import re
+import sys
+import threading
+import time
+from io import StringIO
+from pathlib import Path
+
 import pandas as pd
+import streamlit as st
+
+from pageplus.gui.cli_bridges.gemini import GeminiBridge
+from pageplus.gui.utils.output_transform import rich_table_to_dataframe
+from pageplus.gui.utils.picker import (get_loaded_workspace_dir,
+                                       select_directory, select_files)
+from pageplus.gui.utils.settings import Settings
 
 
 def strip_ansi_codes(text_to_clean):
@@ -23,6 +25,7 @@ def strip_ansi_codes(text_to_clean):
 
 class QueueOutput:
     """Custom stdout that puts output in a queue and buffer."""
+
     def __init__(self, q, buf):
         self.queue = q
         self.buffer = buf
@@ -39,14 +42,17 @@ class QueueOutput:
         # This flush is called by Python's print or explicitly.
         # Ensure any remaining content in _current_line_buffer is processed.
         self.flush_line()
-    
+
     def flush_line(self):
-        # Get the content of the current line, clean it, and reset the line buffer
+        # Get the content of the current line, clean it, and reset the line
+        # buffer
         line_content = self._current_line_buffer.getvalue()
         if line_content:  # Only process if there's something
-            cleaned_text = strip_ansi_codes(line_content) 
-            self.buffer.write(cleaned_text)  # Append to the main persistent buffer
-            self.queue.put(cleaned_text)  # Put the cleaned chunk onto the queue
+            cleaned_text = strip_ansi_codes(line_content)
+            # Append to the main persistent buffer
+            self.buffer.write(cleaned_text)
+            # Put the cleaned chunk onto the queue
+            self.queue.put(cleaned_text)
             self._current_line_buffer = StringIO()  # Reset for the next line/chunk
 
 
@@ -57,22 +63,26 @@ def update_terminal_display(output_queue, output_buffer, terminal_container):
     while not output_queue.empty():
         try:
             # We don't strictly need the item from queue if buffer is source of truth
-            # but getting it clears the queue, signaling an update was processed.
+            # but getting it clears the queue, signaling an update was
+            # processed.
             output_queue.get_nowait()
             updated_once_in_cycle = True
         except queue.Empty:
             break  # Should not happen if not output_queue.empty() but good practice
-    
+
     # Only update the text_area if there was new output processed
     if updated_once_in_cycle:
 
         current_output_for_display = output_buffer.getvalue()
         if current_output_for_display.startswith("Last item processed:"):
-            _, current_output_for_display = current_output_for_display.lsplit('\n')
+            _, current_output_for_display = current_output_for_display.lsplit(
+                '\n')
         if 'Progress state: ' in current_output_for_display:
-            _, counter = current_output_for_display.rsplit('Progress state: ', 1)
+            _, counter = current_output_for_display.rsplit(
+                'Progress state: ', 1)
             if counter:
-                current_output_for_display = "Last item processed: " + counter.split(' ', 1)[0] + "\n"+current_output_for_display
+                current_output_for_display = "Last item processed: " + \
+                    counter.split(' ', 1)[0] + "\n" + current_output_for_display
 
         # ANSI codes should have been stripped before adding to buffer
         key = f"terminal_output_progress_{time.time()}"
@@ -88,7 +98,7 @@ def update_terminal_display(output_queue, output_buffer, terminal_container):
 def calculate_token_costs(aggregated_usage_data, settings):
     """Calculate token costs and generate a cost report."""
     cost_report_lines = ["\n--- Token Usage & Cost ---"]
-    
+
     if not aggregated_usage_data:
         cost_report_lines.append("Token usage data not available.")
         return "\n".join(cost_report_lines)
@@ -99,11 +109,12 @@ def calculate_token_costs(aggregated_usage_data, settings):
 
     cost_report_lines.append(f"Total Prompt Tokens: {prompt_tokens}")
     cost_report_lines.append(f"Total Candidates Tokens: {candidate_tokens}")
-    cost_report_lines.append(f"Overall Total Tokens (from API): {total_tokens}")
+    cost_report_lines.append(
+        f"Overall Total Tokens (from API): {total_tokens}")
 
     input_token_cost_str = settings.get("INPUT_TOKEN_COSTS", "")
     output_token_cost_str = settings.get("OUTPUT_TOKEN_COSTS", "")
-    
+
     input_cost_per_million = None
     output_cost_per_million = None
     costs_calculable = True
@@ -112,17 +123,19 @@ def calculate_token_costs(aggregated_usage_data, settings):
         try:
             input_cost_per_million = float(input_token_cost_str)
         except ValueError:
-            cost_report_lines.append("Input Token Cost: Invalid setting, cannot calculate.")
+            cost_report_lines.append(
+                "Input Token Cost: Invalid setting, cannot calculate.")
             costs_calculable = False
     else:
         cost_report_lines.append("Input Token Cost: Not set.")
         costs_calculable = False
-    
+
     if output_token_cost_str and output_token_cost_str.strip():
         try:
             output_cost_per_million = float(output_token_cost_str)
         except ValueError:
-            cost_report_lines.append("Output Token Cost: Invalid setting, cannot calculate.")
+            cost_report_lines.append(
+                "Output Token Cost: Invalid setting, cannot calculate.")
             costs_calculable = False
     else:
         cost_report_lines.append("Output Token Cost: Not set.")
@@ -130,12 +143,19 @@ def calculate_token_costs(aggregated_usage_data, settings):
 
     if costs_calculable and input_cost_per_million is not None and output_cost_per_million is not None:
         prompt_cost = (prompt_tokens / 1_000_000) * input_cost_per_million
-        candidate_cost = (candidate_tokens / 1_000_000) * output_cost_per_million
+        candidate_cost = (candidate_tokens / 1_000_000) * \
+            output_cost_per_million
         total_calculated_cost = prompt_cost + candidate_cost
-        
-        cost_report_lines.append(f"Estimated Cost for Prompt Tokens: ${prompt_cost:.6f}")
-        cost_report_lines.append(f"Estimated Cost for Candidates Tokens: ${candidate_cost:.6f}")
-        cost_report_lines.append(f"Estimated Combined Total Cost: ${total_calculated_cost:.6f}")
+
+        cost_report_lines.append(
+            f"Estimated Cost for Prompt Tokens: ${
+                prompt_cost:.6f}")
+        cost_report_lines.append(
+            f"Estimated Cost for Candidates Tokens: ${
+                candidate_cost:.6f}")
+        cost_report_lines.append(
+            f"Estimated Combined Total Cost: ${
+                total_calculated_cost:.6f}")
     elif costs_calculable:  # Should not happen if logic is correct, but as a fallback
         cost_report_lines.append(
             "One or both token costs are missing/invalid, detailed costs not calculated."
@@ -155,7 +175,7 @@ def process_result(
     """Process the result and update the terminal display."""
     final_key = f"terminal_output_final_{time.time()}"
     final_output_value = output_buffer.getvalue()  # Get all captured stdout
-    
+
     cost_report_str = calculate_token_costs(
         result.get("aggregated_usage") if result else None,
         settings
@@ -163,10 +183,10 @@ def process_result(
 
     if result and result.get("success"):
         final_message = (
-            f"{final_output_value}\n"
-            f"{process_type} completed successfully.\n{result.get('output', '')}"
-            f"{cost_report_str}"
-        )
+            f"{final_output_value}\n" f"{process_type} completed successfully.\n{
+                result.get(
+                    'output',
+                    '')}" f"{cost_report_str}")
         terminal_text += terminal_container.text_area(
             "Process Terminal",
             value=final_message,
@@ -177,7 +197,7 @@ def process_result(
         st.success(result.get('output', f'{process_type} completed.'))
     else:
         error_detail = (
-            result.get('output', 'Unknown error.') if result 
+            result.get('output', 'Unknown error.') if result
             else f'{process_type} failed without a specific message.'
         )
         final_message = (
@@ -214,25 +234,26 @@ def save_prompt_templates(templates: dict) -> None:
 def show_gemini(bridge: GeminiBridge) -> None:
     """Show Gemini view."""
     st.title("Gemini")
-    
+
     # Initialize session state variables
     if not st.session_state.loaded_files:
         st.warning("Please load files first.")
         return
 
-    loaded_files = [str(files.absolute()) for files in st.session_state.loaded_files]
+    loaded_files = [str(files.absolute())
+                    for files in st.session_state.loaded_files]
     # Initialize settings
     settings = Settings()
-    
+
     # Operation tabs
     tab_names = ["Settings", "Prompt Editor", "I/O"]
     if 'modification_input' in st.session_state:
         tab_names.extend(["OCR", "ReOCR"])
     tabs = st.tabs(tab_names)
-    
+
     with tabs[0]:  # Settings
         st.subheader("Settings")
-        
+
         # API Key
         with st.expander("API Key"):
             api_key = st.text_input(
@@ -246,14 +267,14 @@ def show_gemini(bridge: GeminiBridge) -> None:
                     st.success(result["output"])
                 else:
                     st.error(result["output"])
-            
+
             if st.button("Check API Key", key="check_api_key_button"):
                 result = bridge.check_valid_key()
                 if result["success"]:
                     st.success(result["output"])
                 else:
                     st.error(result["output"])
-        
+
         # Models
         with st.expander("Models", expanded=True):
             if st.button("Show Available Models", key="show_models_button"):
@@ -264,25 +285,27 @@ def show_gemini(bridge: GeminiBridge) -> None:
                     st.success(result["output"])
                 else:
                     st.error(result["output"])
-            
+
             model = st.text_input(
                 "Model Name",
                 value=settings.get("GEMINI_MODEL", "")
             )
-            if st.button("Show Model Details", key="show_model_details_button"):
+            if st.button(
+                "Show Model Details",
+                    key="show_model_details_button"):
                 result = bridge.show_modeldetails(model)
                 if result["success"]:
                     st.success(result["output"])
                 else:
                     st.error(result["output"])
-            
+
             if st.button("Check Model", key="check_model_button"):
                 result = bridge.check_model(model)
                 if result["success"]:
                     st.success(result["output"])
                 else:
                     st.error(result["output"])
-            
+
             if st.button("Set Model", key="set_model_button"):
                 settings.set("GEMINI_MODEL", model)
                 result = bridge.set_model(model)
@@ -290,7 +313,7 @@ def show_gemini(bridge: GeminiBridge) -> None:
                     st.success(result["output"])
                 else:
                     st.error(result["output"])
-        
+
         with st.expander("Token Settings", expanded=True):
             # Thinking Budget
             thinking_budget = st.number_input(
@@ -299,11 +322,13 @@ def show_gemini(bridge: GeminiBridge) -> None:
                 value=int(settings.get("THINKING_BUDGET", "0")),
                 help="Set to 0 to disable thinking. Higher values allow more detailed analysis."
             )
-            if st.button("Set Thinking Budget", key="set_thinking_budget_button"):
+            if st.button(
+                "Set Thinking Budget",
+                    key="set_thinking_budget_button"):
                 settings.set("THINKING_BUDGET", thinking_budget)
                 st.success(f"Thinking budget set to: {thinking_budget} tokens")
 
-            st.markdown("---") # Separator
+            st.markdown("---")  # Separator
 
             # Input Token Cost
             input_token_cost_str = settings.get("INPUT_TOKEN_COSTS", "")
@@ -313,24 +338,27 @@ def show_gemini(bridge: GeminiBridge) -> None:
                 placeholder="e.g., 0.5 (leave empty if not set)",
                 key="gemini_input_token_cost_input"
             )
-            if st.button("Set Input Token Cost", key="set_input_token_cost_button"):
+            if st.button(
+                "Set Input Token Cost",
+                    key="set_input_token_cost_button"):
                 if not new_input_token_cost_str.strip():
                     settings.set("INPUT_TOKEN_COSTS", "")
                     st.success("Input token cost cleared (set to None).")
                 else:
                     try:
-                        float(new_input_token_cost_str) # Validate
-                        settings.set("INPUT_TOKEN_COSTS", new_input_token_cost_str)
+                        float(new_input_token_cost_str)  # Validate
+                        settings.set(
+                            "INPUT_TOKEN_COSTS",
+                            new_input_token_cost_str)
                         st.success(
-                            f"Input token cost (per 1M tokens) set to: {new_input_token_cost_str}"
-                        )
+                            f"Input token cost (per 1M tokens) set to: {new_input_token_cost_str}")
                     except ValueError:
                         st.error(
                             "Invalid input token cost. Please enter a number "
                             "(e.g., 0.5) or leave empty."
                         )
-            
-            st.markdown("---") # Separator
+
+            st.markdown("---")  # Separator
 
             # Output Token Cost
             output_token_cost_str = settings.get("OUTPUT_TOKEN_COSTS", "")
@@ -340,37 +368,38 @@ def show_gemini(bridge: GeminiBridge) -> None:
                 placeholder="e.g., 1.5 (leave empty if not set)",
                 key="gemini_output_token_cost_input"
             )
-            if st.button("Set Output Token Cost", key="set_output_token_cost_button"):
+            if st.button(
+                "Set Output Token Cost",
+                    key="set_output_token_cost_button"):
                 if not new_output_token_cost_str.strip():
                     settings.set("OUTPUT_TOKEN_COSTS", "")
                     st.success("Output token cost cleared (set to None).")
                 else:
                     try:
-                        float(new_output_token_cost_str) # Validate
-                        settings.set("OUTPUT_TOKEN_COSTS", new_output_token_cost_str)
+                        float(new_output_token_cost_str)  # Validate
+                        settings.set(
+                            "OUTPUT_TOKEN_COSTS",
+                            new_output_token_cost_str)
                         st.success(
-                            f"Output token cost (per 1M tokens) set to: {new_output_token_cost_str}"
-                        )
+                            f"Output token cost (per 1M tokens) set to: {new_output_token_cost_str}")
                     except ValueError:
                         st.error(
                             "Invalid output token cost. Please enter a number "
                             "(e.g., 1.5) or leave empty."
                         )
-            
-           
-    
+
     with tabs[1]:  # Prompt Editor
         st.subheader("Prompt Editor")
-        
+
         # Load templates
         templates = load_prompt_templates()
-        
+
         # Prompt type selection
         prompt_type = st.radio("Prompt Type", ["system", "user"])
-        
+
         # Template selection and editing
         col1, col2 = st.columns([1, 2])
-        
+
         with col1:
             # List existing templates
             st.write("Existing Templates")
@@ -380,7 +409,7 @@ def show_gemini(bridge: GeminiBridge) -> None:
                 ["New Template"] + template_names,
                 key=f"template_select_{prompt_type}"
             )
-            
+
             # Template name input
             if selected_template == "New Template":
                 template_name = st.text_input(
@@ -389,14 +418,14 @@ def show_gemini(bridge: GeminiBridge) -> None:
                 )
             else:
                 template_name = selected_template
-            
+
             # Delete template button
             if selected_template != "New Template":
                 if st.button("Delete Template", key=f"delete_{prompt_type}"):
                     del templates[prompt_type][selected_template]
                     save_prompt_templates(templates)
                     st.rerun()
-        
+
         with col2:
             # Template content editor
             if selected_template == "New Template":
@@ -412,14 +441,14 @@ def show_gemini(bridge: GeminiBridge) -> None:
                     height=300,
                     key=f"template_content_{prompt_type}"
                 )
-            
+
             # Save template button
             if template_name and template_content:
                 if st.button("Save Template", key=f"save_{prompt_type}"):
                     templates[prompt_type][template_name] = template_content
                     save_prompt_templates(templates)
                     st.success("Template saved successfully!")
-    
+
     with tabs[2]:  # I/O
         # Input selection
         input_type = st.radio(
@@ -427,7 +456,7 @@ def show_gemini(bridge: GeminiBridge) -> None:
             ["Directory", "Files"],
             horizontal=True
         )
-        
+
         if input_type == "Directory":
             st.write("Select Image Extensions to Search")
             selected_extensions = st.multiselect(
@@ -435,8 +464,11 @@ def show_gemini(bridge: GeminiBridge) -> None:
                 options=['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'],
                 default=['.jpg', '.jpeg', '.png', '.tiff', '.tif']
             )
-            if st.button("Select Image Directory", key="select_image_dir_button"):
-                selected_dir = select_directory(initial_dir=get_loaded_workspace_dir())
+            if st.button(
+                "Select Image Directory",
+                    key="select_image_dir_button"):
+                selected_dir = select_directory(
+                    initial_dir=get_loaded_workspace_dir())
                 if selected_dir:
                     if selected_extensions:
                         selected_files = [
@@ -463,16 +495,22 @@ def show_gemini(bridge: GeminiBridge) -> None:
                             "Please select at least one image extension."
                         )
         else:  # Files
-            if st.button("Select Image Files", key="select_image_files_button"):
-                selected_files = select_files(initial_dir=get_loaded_workspace_dir(),
+            if st.button(
+                "Select Image Files",
+                    key="select_image_files_button"):
+                selected_files = select_files(
+                    initial_dir=get_loaded_workspace_dir(),
                     filetypes=[
-                        ("All image files", "*.jpg *.jpeg *.png *.bmp *.tiff *.tif"),
-                        ("JPEG files", "*.jpg *.jpeg"),
-                        ("PNG files", "*.png"),
-                        ("BMP files", "*.bmp"),
-                        ("TIFF files", "*.tiff *.tif")
-                    ]
-                )
+                        ("All image files",
+                         "*.jpg *.jpeg *.png *.bmp *.tiff *.tif"),
+                        ("JPEG files",
+                         "*.jpg *.jpeg"),
+                        ("PNG files",
+                         "*.png"),
+                        ("BMP files",
+                         "*.bmp"),
+                        ("TIFF files",
+                         "*.tiff *.tif")])
                 if selected_files:
                     st.session_state.modification_input = {
                         "type": "files",
@@ -486,10 +524,16 @@ def show_gemini(bridge: GeminiBridge) -> None:
             st.subheader("Selected Files")
             if st.session_state.modification_input["type"] == "directory":
                 # For directory input, show directory path and file count
-                st.write(f"Directory: {st.session_state.modification_input['path']}")
-                st.write(f"Extensions: {', '.join(st.session_state.modification_input['extensions'])}")
-                st.write(f"Total files: {len(st.session_state.modification_input['files'])}")
-                
+                st.write(
+                    f"Directory: {
+                        st.session_state.modification_input['path']}")
+                st.write(
+                    f"Extensions: {
+                        ', '.join(
+                            st.session_state.modification_input['extensions'])}")
+                st.write(
+                    f"Total files: {len(st.session_state.modification_input['files'])}")
+
                 # Create a dataframe with file information
                 files_df = pd.DataFrame([
                     {
@@ -513,16 +557,17 @@ def show_gemini(bridge: GeminiBridge) -> None:
                     for f in st.session_state.modification_input['files']
                 ])
                 st.dataframe(files_df, use_container_width=True)
-            
+
             selected_files_for_ocr = st.session_state.modification_input["files"]
-            
+
             # Select output directory
             st.subheader("Output Directory")
             st.write(
                 "Output directory: The default is to overwrite the input files "
-                "(recommended with backup strategy)."
-            )
-            if st.button("Select Output Directory", key="select_output_dir_button"):
+                "(recommended with backup strategy).")
+            if st.button(
+                "Select Output Directory",
+                    key="select_output_dir_button"):
                 selected_paths = select_directory()
                 if selected_paths:
                     st.session_state.modification_dir = selected_paths
@@ -536,7 +581,9 @@ def show_gemini(bridge: GeminiBridge) -> None:
                     disabled=True,
                     label_visibility="visible"
                 )
-                if st.button("Clear Output Directory", key="clear_output_dir_button"):
+                if st.button(
+                    "Clear Output Directory",
+                        key="clear_output_dir_button"):
                     del st.session_state.modification_dir
                     st.rerun()
 
@@ -548,7 +595,7 @@ def show_gemini(bridge: GeminiBridge) -> None:
                 with st.expander("Multithread OCR Settings", expanded=True):
                     # Load templates
                     templates = load_prompt_templates()
-                    
+
                     # System prompt selection
                     st.write("System Prompt")
                     system_prompts_multi = list(templates["system"].keys())
@@ -562,12 +609,13 @@ def show_gemini(bridge: GeminiBridge) -> None:
                         if selected_system_multi != "Default":
                             st.text_area(
                                 "Selected System Prompt",
-                                value=templates["system"].get(selected_system_multi, ""),
+                                value=templates["system"].get(
+                                    selected_system_multi,
+                                    ""),
                                 disabled=True,
                                 height=100,
-                                key="multithread_selected_system_prompt_display"
-                            )
-                    
+                                key="multithread_selected_system_prompt_display")
+
                     jobs_multi = st.number_input(
                         "Number of Jobs",
                         min_value=1,
@@ -580,9 +628,11 @@ def show_gemini(bridge: GeminiBridge) -> None:
                         value=150,
                         key="ocring_calls_per_minute"
                     )
-                    dry_run_multi = st.checkbox("Dry run", key="ocring_dry_run")
-                    overwrite_multi = st.checkbox("Overwrite", key="ocring_overwrite", value=True)
-                    
+                    dry_run_multi = st.checkbox(
+                        "Dry run", key="ocring_dry_run")
+                    overwrite_multi = st.checkbox(
+                        "Overwrite", key="ocring_overwrite", value=True)
+
                     # Terminal display area
                     terminal_container = st.empty()
                     terminal_text = terminal_container.text_area(
@@ -592,14 +642,15 @@ def show_gemini(bridge: GeminiBridge) -> None:
                         disabled=True,
                         key="terminal_output_display_initial"
                     )
-                    
-                    if st.button("Run multithreaded OCR", key="run_multithreaded_ocr_button"):
+
+                    if st.button(
+                        "Run multithreaded OCR",
+                            key="run_multithreaded_ocr_button"):
                         system_prompt_multi_selected = None
                         if selected_system_multi != "Default":
                             system_prompt_multi_selected = templates["system"].get(
-                                selected_system_multi, ""
-                            )
-                        
+                                selected_system_multi, "")
+
                         # Clear terminal
                         current_model_output = bridge.show_model().get('output', 'N/A')
                         terminal_text += terminal_container.text_area(
@@ -609,16 +660,17 @@ def show_gemini(bridge: GeminiBridge) -> None:
                             disabled=True,
                             key="terminal_output_clear"
                         )
-                        
+
                         # Create a queue for output
                         output_queue = queue.Queue()
                         # Create a buffer to store all output
                         output_buffer = StringIO()
-                        
+
                         # Run OCR with real-time output capture
                         def run_ocr_process():
                             old_stdout = sys.stdout
-                            sys.stdout = QueueOutput(output_queue, output_buffer)
+                            sys.stdout = QueueOutput(
+                                output_queue, output_buffer)
                             # Since usage data per file seems unavailable from ocr_multithread,
                             # we'll focus on capturing the string outputs.
                             aggregated_usage = {  # Initialize but expect it to remain empty
@@ -630,7 +682,8 @@ def show_gemini(bridge: GeminiBridge) -> None:
                             main_output_message = ""
 
                             try:
-                                # Assuming bridge.ocr_multithread now returns a list of strings
+                                # Assuming bridge.ocr_multithread now returns a
+                                # list of strings
                                 st.write(f"Overwrite: {overwrite_multi}")
                                 individual_results_messages = bridge.ocr_multithread(
                                     files=selected_files_for_ocr,
@@ -642,49 +695,49 @@ def show_gemini(bridge: GeminiBridge) -> None:
                                     overwrite=overwrite_multi,
                                     thinking_budget=thinking_budget
                                 )
-                                
+
                                 # The bridge.ocr_multithread might return a single dictionary for the whole
-                                # batch if it can provide a summary and global usage.
-                                if isinstance(individual_results_messages, dict) and "usage" in individual_results_messages:
-                                    overall_success = individual_results_messages.get("success", True)
+                                # batch if it can provide a summary and global
+                                # usage.
+                                if isinstance(
+                                        individual_results_messages,
+                                        dict) and "usage" in individual_results_messages:
+                                    overall_success = individual_results_messages.get(
+                                        "success", True)
                                     main_output_message = individual_results_messages.get(
-                                        "output", "Multithreaded process completed."
-                                    )
-                                    usage_data_list = individual_results_messages.get('usage')
-                                    if usage_data_list and isinstance(usage_data_list, list):
+                                        "output", "Multithreaded process completed.")
+                                    usage_data_list = individual_results_messages.get(
+                                        'usage')
+                                    if usage_data_list and isinstance(
+                                            usage_data_list, list):
                                         for usage_meta in usage_data_list:
-                                            if hasattr(usage_meta, 'prompt_token_count'):
+                                            if hasattr(
+                                                    usage_meta, 'prompt_token_count'):
                                                 aggregated_usage["prompt_tokens"] += getattr(
-                                                    usage_meta, 'prompt_token_count', 0
-                                                )
+                                                    usage_meta, 'prompt_token_count', 0)
                                                 aggregated_usage["candidates_tokens"] += getattr(
-                                                    usage_meta, 'candidates_token_count', 0
-                                                )
+                                                    usage_meta, 'candidates_token_count', 0)
                                                 aggregated_usage["total_tokens"] += getattr(
-                                                    usage_meta, 'total_token_count', 0
-                                                )
+                                                    usage_meta, 'total_token_count', 0)
                                             elif isinstance(usage_meta, dict):
                                                 aggregated_usage["prompt_tokens"] += usage_meta.get(
-                                                    'prompt_token_count', 0
-                                                )
+                                                    'prompt_token_count', 0)
                                                 aggregated_usage["candidates_tokens"] += usage_meta.get(
-                                                    'candidates_token_count', 0
-                                                )
+                                                    'candidates_token_count', 0)
                                                 aggregated_usage["total_tokens"] += usage_meta.get(
-                                                    'total_token_count', 0
-                                                )
+                                                    'total_token_count', 0)
                                 elif isinstance(individual_results_messages, list):
                                     main_output_message = (
-                                        f"Multithreaded OCR process initiated for "
-                                        f"{len(selected_files_for_ocr)} files. Output below."
-                                    )
+                                        f"Multithreaded OCR process initiated for " f"{
+                                            len(selected_files_for_ocr)} files. Output below.")
                                 else:
                                     main_output_message = (
                                         "Multithreaded OCR process returned an unexpected data type."
                                     )
                                     overall_success = False
 
-                                # Ensure all pending stdout is flushed before returning from the thread
+                                # Ensure all pending stdout is flushed before
+                                # returning from the thread
                                 sys.stdout.flush()
 
                                 return {
@@ -693,8 +746,10 @@ def show_gemini(bridge: GeminiBridge) -> None:
                                     "aggregated_usage": aggregated_usage
                                 }
                             except Exception as e:
-                                error_msg = f"Error during OCR processing: {str(e)}"
-                                # This print should go to the redirected stdout (QueueOutput)
+                                error_msg = f"Error during OCR processing: {
+                                    str(e)}"
+                                # This print should go to the redirected stdout
+                                # (QueueOutput)
                                 print(error_msg)
                                 sys.stdout.flush()  # Ensure error message is flushed
                                 return {
@@ -704,22 +759,24 @@ def show_gemini(bridge: GeminiBridge) -> None:
                                 }
                             finally:
                                 sys.stdout = old_stdout
-                        
+
                         result_container = {"result": None}
-                        
+
                         def run_ocr_and_store_result():
                             result_container["result"] = run_ocr_process()
-                        
-                        ocr_thread = threading.Thread(target=run_ocr_and_store_result)
+
+                        ocr_thread = threading.Thread(
+                            target=run_ocr_and_store_result)
                         ocr_thread.start()
-                        
+
                         while ocr_thread.is_alive():
-                            update_terminal_display(output_queue, output_buffer, terminal_container)
+                            update_terminal_display(
+                                output_queue, output_buffer, terminal_container)
                             time.sleep(0.1)
-                        
+
                         ocr_thread.join()
                         result = result_container["result"]
-                        
+
                         process_result(
                             result,
                             output_buffer,
@@ -734,12 +791,12 @@ def show_gemini(bridge: GeminiBridge) -> None:
                         data=terminal_text,
                         file_name="ocr_terminal_output.txt",
                         mime="text/plain")
-                    
+
                 # OCR Settings
                 with st.expander("OCR Settings"):
                     # Load templates
                     templates = load_prompt_templates()
-                    
+
                     # System prompt selection
                     st.write("System Prompt")
                     system_prompts_ocr = list(templates["system"].keys())
@@ -767,7 +824,7 @@ def show_gemini(bridge: GeminiBridge) -> None:
                         key="ocr_calls_per_minute"
                     )
                     dry_run_ocr = st.checkbox("Dry run", key="ocr_dry_run")
-                    
+
                     if st.button("Run OCR", key="run_ocr_button"):
                         system_prompt = None
                         if selected_system_prompt_ocr != "Default":
@@ -789,12 +846,12 @@ def show_gemini(bridge: GeminiBridge) -> None:
         if len(tab_names) > 4:  # Only show ReOCR tab if it exists
             with tabs[4]:  # ReOCR
                 st.subheader("ReOCR")
-                
+
                 # ReOCR-Multithread Settings
                 with st.expander("Multithread ReOCR Settings", expanded=True):
                     # Load templates
                     templates = load_prompt_templates()
-                    
+
                     # System prompt selection
                     st.write("System Prompt")
                     system_prompts_multi = list(templates["system"].keys())
@@ -808,12 +865,13 @@ def show_gemini(bridge: GeminiBridge) -> None:
                         if selected_system_multi != "Default":
                             st.text_area(
                                 "Selected System Prompt",
-                                value=templates["system"].get(selected_system_multi, ""),
+                                value=templates["system"].get(
+                                    selected_system_multi,
+                                    ""),
                                 disabled=True,
                                 height=100,
-                                key="reocr_multithread_selected_system_prompt_display"
-                            )
-                    
+                                key="reocr_multithread_selected_system_prompt_display")
+
                     jobs_multi = st.number_input(
                         "Number of Jobs",
                         min_value=1,
@@ -826,17 +884,19 @@ def show_gemini(bridge: GeminiBridge) -> None:
                         value=150,
                         key="reocring_calls_per_minute"
                     )
-                    dry_run_multi = st.checkbox("Dry run", key="reocring_dry_run")
-                    overwrite_multi = st.checkbox("Overwrite", key="reocring_overwrite", value=True)
-                    
+                    dry_run_multi = st.checkbox(
+                        "Dry run", key="reocring_dry_run")
+                    overwrite_multi = st.checkbox(
+                        "Overwrite", key="reocring_overwrite", value=True)
+
                     # Additional checks
-                    #additional_checks = st.multiselect(
+                    # additional_checks = st.multiselect(
                     #    "Additional Checks",
                     #    options=["type", "style", "region", "reading_order"],
                     #    default=["type", "style"],
                     #     key="reocr_additional_checks"
-                    #)
-                    
+                    # )
+
                     # Terminal display area
                     terminal_container = st.empty()
                     terminal_text = terminal_container.text_area(
@@ -846,14 +906,15 @@ def show_gemini(bridge: GeminiBridge) -> None:
                         disabled=True,
                         key="reocr_terminal_output_display_initial"
                     )
-                    
-                    if st.button("Run multithreaded ReOCR", key="run_multithreaded_reocr_button"):
+
+                    if st.button(
+                        "Run multithreaded ReOCR",
+                            key="run_multithreaded_reocr_button"):
                         system_prompt_multi_selected = None
                         if selected_system_multi != "Default":
                             system_prompt_multi_selected = templates["system"].get(
-                                selected_system_multi, ""
-                            )
-                        
+                                selected_system_multi, "")
+
                         # Clear terminal
                         current_model_output = bridge.show_model().get('output', 'N/A')
                         terminal_text += terminal_container.text_area(
@@ -863,16 +924,17 @@ def show_gemini(bridge: GeminiBridge) -> None:
                             disabled=True,
                             key="reocr_terminal_output_clear"
                         )
-                        
+
                         # Create a queue for output
                         output_queue = queue.Queue()
                         # Create a buffer to store all output
                         output_buffer = StringIO()
-                        
+
                         # Run ReOCR with real-time output capture
                         def run_reocr_process():
                             old_stdout = sys.stdout
-                            sys.stdout = QueueOutput(output_queue, output_buffer)
+                            sys.stdout = QueueOutput(
+                                output_queue, output_buffer)
                             # Since usage data per file seems unavailable from reocr_multithread,
                             # we'll focus on capturing the string outputs.
                             aggregated_usage = {  # Initialize but expect it to remain empty
@@ -900,44 +962,44 @@ def show_gemini(bridge: GeminiBridge) -> None:
                                     dry_run=dry_run_multi,
                                     overwrite=overwrite_multi
                                 )
-                                
+
                                 # The bridge.reocr_multithread might return a single dictionary for the whole
-                                # batch if it can provide a summary and global usage.
-                                if isinstance(result, dict) and "usage" in result:
-                                    overall_success = result.get("success", True)
+                                # batch if it can provide a summary and global
+                                # usage.
+                                if isinstance(
+                                        result, dict) and "usage" in result:
+                                    overall_success = result.get(
+                                        "success", True)
                                     main_output_message = result.get(
                                         "output", "Multithreaded process completed."
                                     )
                                     usage_data_list = result.get('usage')
-                                    if usage_data_list and isinstance(usage_data_list, list):
+                                    if usage_data_list and isinstance(
+                                            usage_data_list, list):
                                         for usage_meta in usage_data_list:
-                                            if hasattr(usage_meta, 'prompt_token_count'):
+                                            if hasattr(
+                                                    usage_meta, 'prompt_token_count'):
                                                 aggregated_usage["prompt_tokens"] += getattr(
-                                                    usage_meta, 'prompt_token_count', 0
-                                                )
+                                                    usage_meta, 'prompt_token_count', 0)
                                                 aggregated_usage["candidates_tokens"] += getattr(
-                                                    usage_meta, 'candidates_token_count', 0
-                                                )
+                                                    usage_meta, 'candidates_token_count', 0)
                                                 aggregated_usage["total_tokens"] += getattr(
-                                                    usage_meta, 'total_token_count', 0
-                                                )
+                                                    usage_meta, 'total_token_count', 0)
                                             elif isinstance(usage_meta, dict):
                                                 aggregated_usage["prompt_tokens"] += usage_meta.get(
-                                                    'prompt_token_count', 0
-                                                )
+                                                    'prompt_token_count', 0)
                                                 aggregated_usage["candidates_tokens"] += usage_meta.get(
-                                                    'candidates_token_count', 0
-                                                )
+                                                    'candidates_token_count', 0)
                                                 aggregated_usage["total_tokens"] += usage_meta.get(
-                                                    'total_token_count', 0
-                                                )
+                                                    'total_token_count', 0)
                                 else:
                                     main_output_message = (
                                         "Multithreaded ReOCR process returned an unexpected data type."
                                     )
                                     overall_success = False
 
-                                # Ensure all pending stdout is flushed before returning from the thread
+                                # Ensure all pending stdout is flushed before
+                                # returning from the thread
                                 sys.stdout.flush()
 
                                 return {
@@ -946,8 +1008,10 @@ def show_gemini(bridge: GeminiBridge) -> None:
                                     "aggregated_usage": aggregated_usage
                                 }
                             except Exception as e:
-                                error_msg = f"Error during ReOCR processing: {str(e)}"
-                                # This print should go to the redirected stdout (QueueOutput)
+                                error_msg = f"Error during ReOCR processing: {
+                                    str(e)}"
+                                # This print should go to the redirected stdout
+                                # (QueueOutput)
                                 print(error_msg)
                                 sys.stdout.flush()  # Ensure error message is flushed
                                 return {
@@ -957,22 +1021,24 @@ def show_gemini(bridge: GeminiBridge) -> None:
                                 }
                             finally:
                                 sys.stdout = old_stdout
-                        
+
                         result_container = {"result": None}
-                        
+
                         def run_reocr_and_store_result():
                             result_container["result"] = run_reocr_process()
-                        
-                        reocr_thread = threading.Thread(target=run_reocr_and_store_result)
+
+                        reocr_thread = threading.Thread(
+                            target=run_reocr_and_store_result)
                         reocr_thread.start()
-                        
+
                         while reocr_thread.is_alive():
-                            update_terminal_display(output_queue, output_buffer, terminal_container)
+                            update_terminal_display(
+                                output_queue, output_buffer, terminal_container)
                             time.sleep(0.1)
-                        
+
                         reocr_thread.join()
                         result = result_container["result"]
-                        
+
                         process_result(
                             result,
                             output_buffer,

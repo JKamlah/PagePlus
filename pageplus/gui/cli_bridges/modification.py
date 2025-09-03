@@ -1,33 +1,25 @@
-from typing import List, Optional, Dict, Any
 from importlib import util
+from typing import Any, Dict, List, Optional
 
+from pageplus.cli.modification import (delete_text, delete_textlines,
+                                       extend_lines, fit_into_parent,
+                                       merge_columnaligned_regions,
+                                       pseudolinepolygon, reassign_ids,
+                                       rectangularize, remove_empty,
+                                       remove_tag, repair, repair_dummy_region,
+                                       replace_tag, sort, sort_and_merge,
+                                       sort_regions, top_tier_textregion,
+                                       translate_lines)
 from pageplus.gui.cli_bridges.base import CLIBridge
-from pageplus.cli.modification import (
-    delete_text,
-    delete_textlines,
-    remove_empty,
-    reassign_ids,
-    repair,
-    translate_lines,
-    extend_lines,
-    pseudolinepolygon,
-    sort,
-    sort_and_merge,
-    replace_tag,
-    remove_tag,
-    rectangularize,
-    repair_dummy_region,
-    fit_into_parent,
-    top_tier_textregion,
-    merge_columnaligned_regions,
-    sort_regions
-)
+
 
 class ModificationBridge(CLIBridge):
     """Bridge for modification operations."""
-    
+
     if (spec := util.find_spec('spellchecker')) is not None:
-        from pageplus.cli.modification import spellchecking
+        from pageplus.cli.modification import \
+            spellchecking as spellchecking_cli
+
         def spellchecking(
             self,
             files: List[str],
@@ -42,7 +34,7 @@ class ModificationBridge(CLIBridge):
         ) -> Dict[str, Any]:
             """Run spellchecking on files."""
             try:
-                spellchecking(
+                spellchecking_cli(
                     inputs=files,
                     language=language,
                     distance=distance,
@@ -59,7 +51,7 @@ class ModificationBridge(CLIBridge):
                 }
             except Exception as e:
                 return {"success": False, "output": str(e)}
-    
+
     def delete_text(
         self,
         files: List[str],
@@ -79,7 +71,7 @@ class ModificationBridge(CLIBridge):
             }
         except Exception as e:
             return {"success": False, "output": str(e)}
-    
+
     def delete_textlines(
         self,
         files: List[str],
@@ -97,7 +89,7 @@ class ModificationBridge(CLIBridge):
             }
         except Exception as e:
             return {"success": False, "output": str(e)}
-    
+
     def remove_empty(
         self,
         files: List[str],
@@ -119,7 +111,7 @@ class ModificationBridge(CLIBridge):
             }
         except Exception as e:
             return {"success": False, "output": str(e)}
-    
+
     def reassign_ids(
         self,
         files: List[str],
@@ -141,7 +133,7 @@ class ModificationBridge(CLIBridge):
             }
         except Exception as e:
             return {"success": False, "output": str(e)}
-    
+
     def repair(
         self,
         files: List[str],
@@ -161,7 +153,7 @@ class ModificationBridge(CLIBridge):
             }
         except Exception as e:
             return {"success": False, "output": str(e)}
-    
+
     def translate_lines(
         self,
         files: List[str],
@@ -185,7 +177,7 @@ class ModificationBridge(CLIBridge):
             }
         except Exception as e:
             return {"success": False, "output": str(e)}
-    
+
     def extend_lines(
         self,
         files: List[str],
@@ -213,7 +205,7 @@ class ModificationBridge(CLIBridge):
             }
         except Exception as e:
             return {"success": False, "output": str(e)}
-    
+
     def pseudolinepolygon(
         self,
         files: List[str],
@@ -231,7 +223,7 @@ class ModificationBridge(CLIBridge):
             }
         except Exception as e:
             return {"success": False, "output": str(e)}
-    
+
     def sort(
         self,
         files: List[str],
@@ -271,7 +263,7 @@ class ModificationBridge(CLIBridge):
             }
         except Exception as e:
             return {"success": False, "output": str(e)}
-    
+
     def split_big_regions_vertical(
         self,
         files: List[str],
@@ -296,39 +288,39 @@ class ModificationBridge(CLIBridge):
             }
         except Exception as e:
             return {"success": False, "output": str(e)}
-    
+
     # Metadata Operations
     def update_metadata(self, files: List[str], key: str, value: str) -> None:
         """Update metadata in selected files."""
         for file in files:
             # TODO: Implement metadata update using CLI functions
             pass
-    
+
     def remove_metadata(self, files: List[str], key: str) -> None:
         """Remove metadata from selected files."""
         for file in files:
             # TODO: Implement metadata removal using CLI functions
             pass
-    
+
     def add_metadata(self, files: List[str], key: str, value: str) -> None:
         """Add metadata to selected files."""
         for file in files:
             # TODO: Implement metadata addition using CLI functions
             pass
-    
+
     # Batch Operations
     def batch_rename(self, files: List[str], pattern: str) -> None:
         """Rename files according to pattern."""
         for i, file in enumerate(files):
             # TODO: Implement batch renaming using CLI functions
             pass
-    
+
     def batch_convert(self, files: List[str], target_format: str) -> None:
         """Convert files to target format."""
         for file in files:
             # TODO: Implement batch conversion using CLI functions
             pass
-    
+
     def batch_process(self, files: List[str], process_type: str) -> None:
         """Process files according to type."""
         for file in files:
@@ -410,8 +402,7 @@ class ModificationBridge(CLIBridge):
             )
             return {
                 "success": True,
-                "output": "Coordinate rectangularization completed successfully"
-            }
+                "output": "Coordinate rectangularization completed successfully"}
         except Exception as e:
             return {"success": False, "output": str(e)}
 

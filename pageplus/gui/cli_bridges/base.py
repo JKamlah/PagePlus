@@ -1,9 +1,9 @@
-import io
 import contextlib
+import io
 import logging
-from pathlib import Path
 import tempfile
-from typing import List, Optional
+from pathlib import Path
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -42,4 +42,4 @@ class CLIBridge:
 
     def __init__(self, output_dir: Optional[Path] = None):
         self.output_dir = output_dir or Path(tempfile.mkdtemp())
-        self.output_dir.mkdir(parents=True, exist_ok=True) 
+        self.output_dir.mkdir(parents=True, exist_ok=True)

@@ -1,8 +1,9 @@
-import io
 import contextlib
+import io
 import logging
 
 logger = logging.getLogger(__name__)
+
 
 def capture_output(func, *args, **kwargs):
     """Capture stdout from a function call."""
@@ -10,6 +11,7 @@ def capture_output(func, *args, **kwargs):
     with contextlib.redirect_stdout(buffer):
         func(*args, **kwargs)
     return buffer.getvalue()
+
 
 def capture_logging(func, *args, **kwargs):
     """Capture both stdout and logging output from a function call."""
@@ -30,4 +32,3 @@ def capture_logging(func, *args, **kwargs):
             logger.removeHandler(handler)
 
     return buffer.getvalue()
-

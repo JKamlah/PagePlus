@@ -1,28 +1,31 @@
-import streamlit as st
-from streamlit.components.v1 import html
-from pageplus.utils.workspace import Workspace
-from pageplus.utils.constants import Environments
-from dotenv import find_dotenv, set_key
-from pageplus.gui.utils.picker import select_directory
 import logging
 
+import streamlit as st
+
+from pageplus.gui.utils.picker import select_directory
+from pageplus.utils.constants import Environments
+from pageplus.utils.workspace import Workspace
+
 # Silence watchdog debug messages
-logging.getLogger('watchdog.observers.inotify_buffer').setLevel(logging.WARNING)
+logging.getLogger('watchdog.observers.inotify_buffer').setLevel(
+    logging.WARNING)
+
 
 def show_workspace(cli_bridge):
     """Display workspace management page."""
     st.title("🗂️ Workspace Management")
-    
+
     # Get available workspaces and loaded workspace
     try:
         ws = Workspace(Environments.PAGEPLUS)
         workspace_names = ws.names()
-        loaded_workspace = ws.loaded() if ws.loaded() and ws.loaded() in workspace_names else None
+        loaded_workspace = ws.loaded() if ws.loaded(
+        ) and ws.loaded() in workspace_names else None
     except Exception as e:
         st.error(f"Error getting workspaces: {str(e)}")
         workspace_names = []
         loaded_workspace = None
-    
+
     # Show current workspaces
     st.subheader("Current Workspaces")
     if workspace_names:
@@ -36,22 +39,23 @@ def show_workspace(cli_bridge):
             options=workspace_options,
             index=None if not loaded_workspace else workspace_names.index(loaded_workspace)
         )
-        
+
         col1, col2 = st.columns(2)
         with col1:
             if selected_workspace:
                 # Remove green dot from selected workspace name for processing
                 selected_workspace = selected_workspace.replace("🟢 ", "")
-                
+
                 # Load workspace button
                 if st.button("Load Selected Workspace"):
                     try:
                         cli_bridge.load_workspace(selected_workspace)
-                        st.success(f"Workspace '{selected_workspace}' loaded successfully!")
+                        st.success(
+                            f"Workspace '{selected_workspace}' loaded successfully!")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error loading workspace: {str(e)}")
-        
+
         with col2:
             if loaded_workspace:
                 if st.button("Reset Loaded Workspace"):
@@ -71,7 +75,7 @@ def show_workspace(cli_bridge):
             st.rerun()
         except Exception as e:
             st.error(f"Error updating workspaces: {str(e)}")
-    
+
     # Backup/Restore
     st.subheader("Backup and Restore")
     backup_folder = st.text_input(
@@ -88,7 +92,7 @@ def show_workspace(cli_bridge):
                 st.rerun()
             except Exception as e:
                 st.error(f"Error backing up XML files: {str(e)}")
-    
+
     with col2:
         if st.button("Restore XML Files"):
             try:
@@ -97,7 +101,7 @@ def show_workspace(cli_bridge):
                 st.rerun()
             except Exception as e:
                 st.error(f"Error restoring XML files: {str(e)}")
-    
+
     # Delete workspace
     st.subheader("Delete Workspace")
     if workspace_names:
@@ -107,12 +111,13 @@ def show_workspace(cli_bridge):
             if st.button("Delete Selected Workspace"):
                 try:
                     cli_bridge.delete_workspace(selected_workspace)
-                    st.success(f"Workspace '{selected_workspace}' deleted successfully!")
+                    st.success(
+                        f"Workspace '{selected_workspace}' deleted successfully!")
                     cli_bridge.update_workspaces()
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error deleting workspace: {str(e)}")
-    
+
     # Copy workspace
     st.subheader("Copy Workspace")
     col1, col2 = st.columns(2)
@@ -126,7 +131,7 @@ def show_workspace(cli_bridge):
             "New Workspace Name (optional)",
             label_visibility="visible"
         )
-    
+
     if workspace_names:
         if selected_workspace:
             # Remove green dot from workspace name for processing
@@ -151,7 +156,7 @@ def show_workspace(cli_bridge):
             st.session_state.workspace_dir = selected_paths
         elif selected_paths is not None:
             st.info("Directory selection cancelled.")
-    
+
     if 'workspace_dir' in st.session_state:
         st.text_input(
             "Selected Directory",
@@ -165,11 +170,12 @@ def show_workspace(cli_bridge):
         placeholder="Enter workspace name",
         label_visibility="visible"
     )
-    
+
     if st.button("Add Workspace"):
         if workspace_name and 'workspace_dir' in st.session_state:
             try:
-                cli_bridge.load_local_document(st.session_state.workspace_dir, workspace_name, False)
+                cli_bridge.load_local_document(
+                    st.session_state.workspace_dir, workspace_name, False)
                 st.success(f"Workspace '{workspace_name}' added successfully!")
                 st.rerun()
             except Exception as e:

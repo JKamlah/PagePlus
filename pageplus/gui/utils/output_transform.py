@@ -1,6 +1,6 @@
 import re
+
 import pandas as pd
-from typing import List, Dict, Any
 from rich.table import Table
 
 
