@@ -601,7 +601,7 @@ else:
                         '.pdf')}'.")
             merged_pdf.save(f'{xml_files[0].parent.joinpath(output_filename + '.pdf')}',
                             compress_streams=True,
-                            recompress_flate=True,
+                            recompress_flat=True,
                             object_stream_mode=ObjectStreamMode.generate,  # <--- use the ENUM, not a string!
                             linearize=False,
                             normalize_content=False,

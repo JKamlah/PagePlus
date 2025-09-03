@@ -156,7 +156,7 @@ else:
                 "Please write out our findings numbered in the following manner:\n"
                 "Example"
                 "<|input|>"
-                "{'lines': [{'id': 'rx1lx1', 'original': '1n this line arre sume errrors and ends witb a split-'}, "
+                "{'lines': [{'id': 'rx1lx1', 'original': '1n this line are sume errors and ends witb a split-'}, "
                 "{'id': 'rx1lx2', 'original': 'ted w0rd.'}, "
                 "{'id': 'rx1lx3', 'original': 'I do not mer-'}, "
                 "{'id': 'rx1lx4', 'original': 'ge words.'}]}"

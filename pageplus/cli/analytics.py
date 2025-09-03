@@ -125,7 +125,7 @@ def confidences(inputs: Annotated[List[str],
             array(list(page_confs.values())))
         all_confs[str(xml_file)]['mean'] = nanmean(
             array(list(page_confs.values())))
-        all_confs[str(xml_file)]['state'] = 'inital'
+        all_confs[str(xml_file)]['state'] = 'initial'
 
     all_median = nanmedian([confs['median'] for confs in all_confs.values()])
     Q1 = nanmedian(([confs['median']

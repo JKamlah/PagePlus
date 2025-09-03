@@ -139,7 +139,7 @@ class TextRegion(Region):
                     logging.info(
                         f"RO-Lineheight: In textregion {self.get_id()} the lines {self.textlines[sorting_lines[sl_idx][0]].get_id()} ({self.textlines[sorting_lines[sl_idx][0]].get_text()}) and {self.textlines[sorting_lines[sl_idx + sl_next][0]].get_id()} ({self.textlines[sorting_lines[sl_idx + sl_next][0]].get_text()}) at the same height")
                     # Check if the second line is behind the first
-                    # (x-coordindate)
+                    # (x-coordinate)
                     if sorting_lines[sl_idx +
                                      sl_next][1].bounds[0] < sorting_lines[sl_idx][2].bounds[0]:
                         logging.info(

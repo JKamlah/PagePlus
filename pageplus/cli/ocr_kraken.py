@@ -56,8 +56,8 @@ if spec := util.find_spec('kraken') is None:
     @app.command()
     def install_with_link_to_env(env_path: Path) -> None:
         """
-        To reduce ressource consumption, link the bigger kraken (by Benjamin Kiessling)
-        package (nvidia, torch, triton) from an exisiting environment!
+        To reduce resource consumption, link the bigger kraken (by Benjamin Kiessling)
+        package (nvidia, torch, triton) from an existing environment!
         (not recommended, own risk that package can be unwilling be upgraded or if other env is delete,
         this will not work anymore)
         """
@@ -92,8 +92,8 @@ else:
         @app.command()
         def install_with_link_to_env(env_path: Path) -> None:
             """
-            To reduce ressource consumption, link the bigger kraken (by Benjamin Kiessling)
-            package (nvidia, torch, triton) from an exisiting environment!
+            To reduce resource consumption, link the bigger kraken (by Benjamin Kiessling)
+            package (nvidia, torch, triton) from an existing environment!
             (not recommended, own risk that package can be unwilling be upgraded or if other env is delete,
             this will not work anymore)
             """
@@ -274,7 +274,7 @@ else:
                         )
                         for pred in it:
                             ocr_text = pred.prediction
-                            # TODO: Is there a need to impelement poly and confidence?
+                            # TODO: Is there a need to implement poly and confidence?
                             # graphs = [{
                             #    'c': letter,
                             #    'poly': poly,

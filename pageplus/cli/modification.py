@@ -805,7 +805,7 @@ def sort_regions(
 ):
     """
     Einfache Lese-Reihenfolge:
-      1) Vertikal gruppieren: Y-Überlappung >= overlap_pct (über kleinere Höhe).
+      1) Vertical gruppieren: Y-Überlappung >= overlap_pct (über kleinere Höhe).
       2) Gruppen nach Y.
       3) In jeder Gruppe Subgruppen/Spalten per X-Überlappung >= overlap_pct,
          Subgruppen nach X, innerhalb der Subgruppen nach Y.
@@ -919,7 +919,7 @@ def sort_regions(
             logging.info("No text regions; skipping.")
             continue
 
-        # 1) HORIZONTALE Gruppen (Zeilenbänder) via Y-Überlappung ≥ Schwelle
+        # 1) HORIZONTAL Gruppen (Zeilenbänder) via Y-Überlappung ≥ Schwelle
         def same_row(a: R, b: R) -> bool:
             return _ioverlap_1d(a.ymin, a.ymax, b.ymin, b.ymax) >= y_thresh
 
