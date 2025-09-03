@@ -1,103 +1,131 @@
-![Logo](./assets/PagePlus_Logo.png)
-
 # PagePlus
 
-PagePlus is a Python-based command-line tool for processing and analyzing PAGE XML files, which are commonly used in document layout analysis. 
-This tool provides a variety of functions to modify and extract data from these files, providing an efficient way to handle text and region-based information in document images.
+![Logo](./assets/PagePlus_Logo.png)
 
-## PagePlus Features
+PagePlus is a Python-based tool for processing and analyzing PAGE XML files, which are commonly used in document layout analysis. This tool provides a variety of functions to modify and extract data from these files, providing an efficient way to handle text and region-based information in document images. It offers both a command-line interface (CLI) for batch processing and a graphical user interface (GUI) for interactive use.
 
-PagePlus includes several commands to perform operations such as
+## Features
 
-**Analytics**: Gathers detailed statistics about the contents of PAGE XML files, including counts of text regions, table regions, lines of text, words, and glyphs. This feature is essential for understanding the scope and size of processed documents.
+PagePlus includes several commands to perform operations such as:
 
-**Validation**: Ensures the integrity of text regions and lines in PAGE XML files, checking for and reporting any inconsistencies or errors.
+-   **Analytics**: Gathers detailed statistics about the contents of PAGE XML files, including counts of text regions, table regions, lines of text, words, and glyphs.
+-   **Validation**: Ensures the integrity of text regions and lines in PAGE XML files, checking for and reporting any inconsistencies or errors.
+-   **Modification**: A rich set of functions to repair, refactor, and modify PAGE XML files, including region manipulation, text line adjustments, and coordinate fixes.
+-   **Export**: Extracts data from PAGE XML to various formats like plain text, PDF, ALTO XML, and delimiter-separated values (CSV/TSV).
+-   **OCR Integration**: Tools for working with OCR engines like Kraken and Tesseract.
+-   **LLM Integration / Gemnini**: Features leveraging large language models like Gemini for advanced document processing tasks.
+-   **Workspace Management**: Utilities for managing project workspaces.
 
-**Repair**: Includes a set of repair functions that can fix common problems in PAGE XML files. This functionality is essential for improving the usability of processed files.
-
-**Extend regions, lines and baselines**: Buffers regions, lines and baselines.
-
-**Translating regions, lines and baselines**: Translates regions, lines and baselines by an offset.
-
-**Textline sorting and merging/splitting**: Sorts and merges text rows in PAGE XML files based on specified horizontal and vertical gap thresholds.
-
-**Baseline and Textline modification**: Processes text lines to extend baselines, fit textline polygons into parent regions, and calculate pseudo textline polygons.
-
-**Region and word-level text deletion**: Provides the ability to delete text at various hierarchical levels within PAGE XML files.
-
-**Fulltext extraction**: Extracts all text from PAGE XML files, optionally delimiting lines, and saves the output as plain text files.
-    
-**DSV (Delimiter-Separated Value) extraction**: Creates delimiter-separated files (such as CSV or TSV) from PAGE XML files, including details such as line IDs, text content, region numbers, baseline coordinates, and dimensions.
-    
 ## Installation
 
-To install PagePlus, you will need Python and poetry installed on your system. Clone the repository or download the source code and run the following command in the root directory:
+To install PagePlus, you will need Python 3.11+ and [Poetry](https://python-poetry.org/) installed on your system. 
+
+1.  Clone the repository or download the source code:
+    ```sh
+    git clone https://github.com/your-username/pageplus.git
+    cd pageplus
+    ```
+
+2.  Install the required dependencies using Poetry (for --extras gui to enable the gui):
+    ```sh
+    poetry install 
+    poetry install --extras gui
+    ```
+
+3.  Activate the virtual environment created by Poetry:
+    ```sh
+    poetry shell
+    ```
+
+## GUI Usage
+
+PagePlus comes with a user-friendly graphical interface built with Streamlit.
+
+### Starting the GUI
+
+To start the GUI, run the following command from the root directory of the project:
 
 ```sh
-poetry install
+streamlit run pageplus/gui/app.py
 ```
 
-## Usage
+This will open the PagePlus GUI in your web browser, where you can interactively load, process, and analyze your PAGE XML files.
 
-PagePlus can be executed from the command line. Here are some examples of how to use its features:
+## CLI Usage
 
-#### Start poetry shell
+PagePlus can be executed from the command line for batch processing and scripting.
+
+### General Syntax
+
+The general syntax for using PagePlus CLI is:
 
 ```sh
-poetry shell
+pageplus [MODULE] [COMMAND] [ARGUMENTS] [OPTIONS]
 ```
 
-#### Analytics:
-
-```sh
-pageplus analytics statistics /path/to/xml/files
-```
-#### Validation:
-
-```sh
-pageplus validation validate-all /path/to/xml/files
-```
-
-#### Repair:
-
-```sh
-pageplus modification repair /path/to/xml/files
-```
-
-#### Extend lines:
-
-```sh
-pageplus modification extend-lines /path/to/xml/files
-```
-
-#### Pseudolinepolygon:
-
-```sh
-pageplus modification pseudolinepolygon /path/to/xml/files
-```
-
-#### Delete Text content on specific level (Region, Line, Word):
-
-```sh
-pageplus modification delete_text /path/to/xml/files
-```
-
-#### Fulltext extraction:
-
-```sh
-pageplus export fulltext /path/to/xml/files --outputdir /path/to/output
-```
-#### Delimiter-Separated Value Extraction:
-
-```sh
-pageplus export dsv  /path/to/xml/files --delimiter ',' --outputdir /path/to/output
-```
-## Configuration
-Most of the commands in PagePlus offer configurable options such as Outputdir for specifying the output directory, and other parameters for customizing the file processing. Use the --help flag with any command to see all available options:
+Use the `--help` flag with any command to see all available options:
 
 ```sh
 pageplus --help
+pageplus modification --help
+pageplus modification sort-regions --help
 ```
 
+### Available Commands
+
+Here is a list of available commands, grouped by module:
+
+#### `analytics`
+-   `statistics`: Gathers statistics about PAGE XML files.
+-   `confidences`: Calculates and reports the mean confidence of pages.
+-   `compare`: Compares a ground truth document with an OCR version.
+-   `tags`: Analyzes and reports on the usage of tags within the XML files.
+
+#### `dinglehopper`
+-   Provides OCR evaluation metrics and comparison tools.
+
+#### `escriptorium` / `transkribus`
+-   Commands for interacting with transcription platforms.
+
+#### `export`
+-   `alto`: Converts PAGE XML to ALTO XML format.
+-   `dsv`: Exports data to delimiter-separated value files (e.g., CSV).
+-   `fulltext`: Extracts and saves the full text content.
+-   `page-pdf`: Creates a PDF representation of the PAGE XML.
+-   ... and more.
+
+#### `gemini` / `litellm`
+-   Integrations with large language models for advanced processing.
+
+#### `ingest`
+-   Commands for importing and processing various file formats.
+
+#### `kraken` / `tesseract`
+-   Commands for performing OCR with Kraken and Tesseract.
+
+#### `mets`
+-   Tools for working with METS files.
+
+#### `modification`
+-   `sort-regions`: Sorts regions based on reading order.
+-   `repair`: Fixes common issues in PAGE XML files.
+-   `extend-lines`: Extends text lines and baselines.
+-   `reassign-ids`: Reassigns IDs to regions and text lines.
+-   `delete-text`: Deletes text content at specified levels.
+-   ... and many more modification functions.
+
+#### `projects`
+-   Commands for managing PagePlus projects.
+
+#### `system`
+-   System-related commands and utilities.
+
+#### `validation`
+-   `validate`: Validates the structure and content of PAGE XML files.
+
+#### `workspace`
+-   Commands for managing workspaces.
+
 ## Contributing
-Contributions to PagePlus are welcome! If you find a bug or have a feature request, please open an issue.
+
+Contributions to PagePlus are welcome! If you find a bug or have a feature request, please open an issue on the project's GitHub repository.
