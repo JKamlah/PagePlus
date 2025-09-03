@@ -1,20 +1,21 @@
 import cProfile
-import pstats
+import getpass
 import io
+import json
+import pstats
+import re
+from collections import defaultdict
+from datetime import datetime
 from functools import wraps
 from pathlib import Path
-from datetime import datetime
-from collections import defaultdict
-import json
-import getpass
-import re
 
 from rich import print
 
+
 class ProfileFnRet:
     def __init__(self, params: bool = True, results: bool = True):
-        self.name : str|None = None
-        self.dir:  str|Path|None = None
+        self.name: str | None = None
+        self.dir: str | Path | None = None
         self.stats: dict = {}
         self.params: dict = {}
         self.results: list = []
@@ -47,11 +48,13 @@ def profile(funcname: str):
                 }
                 profilelog["stats"].update(ret.stats)
                 if re.search('ocr', funcname):
-                    profilelog["stats"]["time-per-page"] = round(ps.total_tt/ret.stats['pages'], 2)
-                    profilelog["stats"]["time-per-line"] = round(ps.total_tt / ret.stats['lines'], 2)
+                    profilelog["stats"]["time-per-page"] = round(
+                        ps.total_tt / ret.stats['pages'], 2)
+                    profilelog["stats"]["time-per-line"] = round(
+                        ps.total_tt / ret.stats['lines'], 2)
                 if ret.params:
                     profilelog["params"] = ret.params
-                if  len(ret.results) > 0:
+                if len(ret.results) > 0:
                     profilelog["results"] = ret.results
                 if len(ret.analytics) > 0:
                     profilelog["analytics"] = ret.analytics
@@ -67,7 +70,12 @@ def profile(funcname: str):
                 else:
                     data = defaultdict(dict)
                 data.setdefault(funcname, {})[ret.name] = profilelog
-                fpath.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+                fpath.write_text(
+                    json.dumps(
+                        data,
+                        indent=2,
+                        ensure_ascii=False),
+                    encoding="utf-8")
                 print(f"Wrote profile logs to: {fpath}")
             else:
                 result = func(*args, **kwargs)

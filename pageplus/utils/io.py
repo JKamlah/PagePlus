@@ -5,15 +5,17 @@ from datetime import datetime
 from html import escape
 from math import ceil
 from pathlib import Path
-from typing import List, Tuple, Optional, Dict, Any
+from typing import Any, Dict, List, Optional, Tuple
 
 import langcodes
-from PIL import Image
 from lxml import etree as ET
+from PIL import Image
 from shapely.geometry import MultiPoint
+
 
 def setxml(el, name, val):
     el.set(name, str(val))
+
 
 def xywh_from_points(points_str):
     """
@@ -35,6 +37,7 @@ def xywh_from_points(points_str):
     maxx, maxy = max(xs), max(ys)
     return {'x': minx, 'y': miny, 'w': maxx - minx, 'h': maxy - miny}
 
+
 def set_alto_xywh_from_coords(reg_alto, reg_page, classes=None):
     if classes is None:
         classes = ['HEIGHT', 'WIDTH', 'HPOS', 'VPOS']
@@ -48,6 +51,7 @@ def set_alto_xywh_from_coords(reg_alto, reg_page, classes=None):
         if k_alto in classes:
             setxml(reg_alto, k_alto, str(xywh[k_xywh]))
 
+
 def set_alto_shape_from_coords(reg_alto, reg_page):
     # Create a Shape element with a Polygon using the points from PAGE.
     coords = reg_page.get_coordinates(returntype='string')
@@ -55,17 +59,24 @@ def set_alto_shape_from_coords(reg_alto, reg_page):
     polygon = ET.SubElement(shape, 'Polygon')
     setxml(polygon, 'POINTS', coords)
 
+
 def set_alto_id_from_page_id(reg_alto, reg_page, suffix=''):
     # Assumes the PAGE element has an attribute "id" (or "ID")
-    setxml(reg_alto, 'ID', reg_page.get_id()+suffix)
+    setxml(reg_alto, 'ID', reg_page.get_id() + suffix)
 
-def set_alto_lang_from_page_lang(reg_alto, reg_page, attribute_name='LANG', langcode=True):
+
+def set_alto_lang_from_page_lang(
+        reg_alto,
+        reg_page,
+        attribute_name='LANG',
+        langcode=True):
     # Try several attribute names for language.
     lang = reg_page.get_language()
     if lang:
         if langcode:
             lang = langcodes.find(lang).to_alpha3()
         setxml(reg_alto, attribute_name, lang)
+
 
 def get_nth_textequiv(reg_page, textequiv_index, textequiv_fallback_strategy):
     """
@@ -74,7 +85,9 @@ def get_nth_textequiv(reg_page, textequiv_index, textequiv_fallback_strategy):
     textequivs = reg_page.findall(".//TextEquiv")
     if not textequivs:
         if textequiv_fallback_strategy == 'raise':
-            raise ValueError("PAGE element '%s' has no TextEquivs" % (reg_page.get("id") or ""))
+            raise ValueError(
+                "PAGE element '%s' has no TextEquivs" %
+                (reg_page.get("id") or ""))
         return ''
     for te in textequivs:
         if te.get("index") and int(te.get("index")) == textequiv_index:
@@ -82,13 +95,16 @@ def get_nth_textequiv(reg_page, textequiv_index, textequiv_fallback_strategy):
             if unicode_el is not None:
                 return unicode_el.text or ""
     if textequiv_fallback_strategy == 'raise':
-        raise ValueError("PAGE element '%s' has no TextEquiv index %d" % (reg_page.get("id") or "", textequiv_index))
+        raise ValueError(
+            "PAGE element '%s' has no TextEquiv index %d" %
+            (reg_page.get("id") or "", textequiv_index))
     elif textequiv_fallback_strategy == 'first':
         unicode_el = textequivs[0].find("Unicode")
         return unicode_el.text if unicode_el is not None else ""
     else:  # 'last'
         unicode_el = textequivs[-1].find("Unicode")
         return unicode_el.text if unicode_el is not None else ""
+
 
 def contains(el, bbox):
     """
@@ -109,6 +125,7 @@ def contains(el, bbox):
     if maxy1 > maxy2:
         return False
     return True
+
 
 # Mapping of PAGE region types to ALTO block types.
 REGION_PAGE_TO_ALTO = {
@@ -134,8 +151,9 @@ HYPHEN_CHARS = ['-', '⸗', '=', '¬', '­']
 
 # Assume these helper functions exist elsewhere or define them:
 # (You might need to adjust imports based on your project structure)
-# from your_module import transform_inputs, collect_xml_files # Adjust as needed
-def load_gemini2d_json(json_path: [str|Path]) -> List[dict]:
+# from your_module import transform_inputs, collect_xml_files # Adjust as
+# needed
+def load_gemini2d_json(json_path: [str | Path]) -> List[dict]:
     data = None
     try:
         with open(json_path, 'r', encoding='utf-8') as f:
@@ -143,17 +161,22 @@ def load_gemini2d_json(json_path: [str|Path]) -> List[dict]:
             # Check if data is a list, adapt if it's a single object
             if not isinstance(data, list):
                 logging.warning(
-                    f"JSON data in {json_path.name} is not a list. Assuming list structure from values if possible, or processing top-level keys.")
-                # Attempt to handle common structures, adjust as needed for your specific JSON format
-                if isinstance(data, dict) and all(
-                        isinstance(v, dict) and 'box_2d' in v and ('text' in v or 'text_content' in v) for v in
-                        data.values()):  # Adjusted text key check
+                    f"JSON data in {
+                        json_path.name} is not a list. Assuming list structure from values if possible, or processing top-level keys.")
+                # Attempt to handle common structures, adjust as needed for
+                # your specific JSON format
+                if isinstance(
+                    data, dict) and all(
+                    isinstance(
+                        v, dict) and 'box_2d' in v and (
+                        'text' in v or 'text_content' in v) for v in data.values()):  # Adjusted text key check
                     data = list(data.values())
                 elif isinstance(data, dict) and 'box_2d' in data and (
                         'text' in data or 'text_content' in data):  # Adjusted text key check
                     data = [data]
                 else:
-                    logging.error(f"Cannot process non-list JSON structure in {json_path.name}")
+                    logging.error(
+                        f"Cannot process non-list JSON structure in {json_path.name}")
     except FileNotFoundError:
         logging.error(f"Error: JSON file not found at '{json_path}'")
     except json.JSONDecodeError:
@@ -163,11 +186,15 @@ def load_gemini2d_json(json_path: [str|Path]) -> List[dict]:
     return data
 
 # --- Generate PAGE XML Content (remains the same) ---
+
+
 def gemini2d_to_page(data: json, image: Path, settings: dict = None) -> str:
     try:
         with Image.open(image) as img:
             img_width, img_height = img.size
-            logging.info(f"Image dimensions for {image.name}: Width={img_width}, Height={img_height}")
+            logging.info(
+                f"Image dimensions for {
+                    image.name}: Width={img_width}, Height={img_height}")
     except FileNotFoundError:
         logging.error(f"Error: Image file not found at '{image}'")
     except Exception as e:
@@ -177,33 +204,53 @@ def gemini2d_to_page(data: json, image: Path, settings: dict = None) -> str:
 
     page_xml_lines = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
                       '<PcGts xmlns="http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15 http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15/pagecontent.xsd">',
-                      f'    <Metadata>', f'        <Creator>PagePlus</Creator>',
+                      '    <Metadata>', '        <Creator>PagePlus</Creator>',
                       f'        <Created>{datetime.now().isoformat()}</Created>',
-                      f'        <Comments>Generated from Gemini-2d-JSON</Comments>', f'    </Metadata>',
+                      '        <Comments>Generated from Gemini-2d-JSON</Comments>', '    </Metadata>',
                       f'    <Page imageFilename="{image.name}" imageWidth="{img_width}" imageHeight="{img_height}">']
 
     for ridx, region_data in enumerate(data):
-        region_id = f"r{ridx+1}"
-        region_coords = f"{' '.join([f"{int(x)},{int(y)}" for x, y in region_data['region_polygon']]).strip()}"
+        region_id = f"r{ridx + 1}"
+        region_coords = f"{' '.join([f"{int(x)},{int(y)}" for x,
+                                    y in region_data['region_polygon']]).strip()}"
         page_xml_lines.append(f'        <TextRegion id="{region_id}">')
-        page_xml_lines.append(f'            <Coords points="{region_coords}"/>')
+        page_xml_lines.append(
+            f'            <Coords points="{region_coords}"/>')
 
         for idx, line_data in enumerate(region_data['lines']):
             # PAGE XML Coords: top-left, top-right, bottom-right, bottom-left
-            page_xml_lines.append(f'            <TextLine id="{region_id}_l{idx+1}" custom=" structure {{type:{line_data['line_structure_type']}}}">')
-            page_xml_lines.append(f'                <Coords points="{' '.join([f"{int(x)},{int(y)}" for x, y in line_data['line_polygon']]).strip()}"/>')
-            page_xml_lines.append(f'                <Baseline points="{' '.join([f"{int(x)},{int(y)}" for x, y in line_data['line_baseline']]).strip()}"/>')
-            page_xml_lines.append(f'                <TextEquiv>')
-            page_xml_lines.append(f'                    <Unicode>{escape(line_data['line_text'])}</Unicode>')
-            page_xml_lines.append(f'                </TextEquiv>')
-            page_xml_lines.append(f'            </TextLine>')
-        page_xml_lines.append(f'        </TextRegion>')
-    page_xml_lines.append(f'    </Page>')
-    page_xml_lines.append(f'</PcGts>')
+            page_xml_lines.append(
+                f'            <TextLine id="{region_id}_l{
+                    idx +
+                    1}" custom=" structure {{type:{
+                    line_data['line_structure_type']}}}">')
+            page_xml_lines.append(
+                f'                <Coords points="{
+                    ' '.join(
+                        [
+                            f"{
+                                int(x)},{
+                                int(y)}" for x, y in line_data['line_polygon']]).strip()}"/>')
+            page_xml_lines.append(
+                f'                <Baseline points="{
+                    ' '.join(
+                        [
+                            f"{
+                                int(x)},{
+                                int(y)}" for x, y in line_data['line_baseline']]).strip()}"/>')
+            page_xml_lines.append('                <TextEquiv>')
+            page_xml_lines.append(
+                f'                    <Unicode>{
+                    escape(
+                        line_data['line_text'])}</Unicode>')
+            page_xml_lines.append('                </TextEquiv>')
+            page_xml_lines.append('            </TextLine>')
+        page_xml_lines.append('        </TextRegion>')
+    page_xml_lines.append('    </Page>')
+    page_xml_lines.append('</PcGts>')
 
     final_xml_content = "\n".join(page_xml_lines)
     return final_xml_content
-
 
 
 def gemini2d_preprocess(
@@ -251,7 +298,11 @@ def gemini2d_preprocess(
         try:
             relative_bbox = entry.get(bbox_key)
 
-            text = entry.get(primary_text_key, "") or entry.get(secondary_text_key, "")
+            text = entry.get(
+                primary_text_key,
+                "") or entry.get(
+                secondary_text_key,
+                "")
             if not text:
                 for key, value in entry.items():
                     if "text" in key.lower() and value:
@@ -260,10 +311,15 @@ def gemini2d_preprocess(
                 else:
                     text = ""
 
-            structure_type = entry.get(structure_type_key, "paragraph") or entry.get(secondary_structure_type_key, "paragraph")
+            structure_type = entry.get(
+                structure_type_key,
+                "paragraph") or entry.get(
+                secondary_structure_type_key,
+                "paragraph")
 
             if not relative_bbox or len(relative_bbox) != 4:
-                logging.warning(f"Skipping entry {i} due to missing or invalid bbox: {relative_bbox}")
+                logging.warning(
+                    f"Skipping entry {i} due to missing or invalid bbox: {relative_bbox}")
                 continue
 
             ymin_rel, xmin_rel, ymax_rel, xmax_rel = relative_bbox
@@ -276,7 +332,8 @@ def gemini2d_preprocess(
             box_height = ymax_abs - ymin_abs
 
             if box_height < 0:
-                logging.warning(f"Skipping entry {i} due to negative box height: {relative_bbox}")
+                logging.warning(
+                    f"Skipping entry {i} due to negative box height: {relative_bbox}")
                 continue
 
             lines = str(text).split('\n')
@@ -286,7 +343,9 @@ def gemini2d_preprocess(
             region_index = entry.get('region', 0)
 
             if len(lines) == 1:
-                if entry.get('direction', 'horizontal') == 'vertical' or (box_width < box_height and len(text) > 3):
+                if entry.get(
+                        'direction', 'horizontal') == 'vertical' or (
+                        box_width < box_height and len(text) > 3):
                     x_center = (xmin_abs + xmax_abs) // 2
                     polygon = [(xmin_abs, ymin_abs), (xmax_abs, ymin_abs),
                                (xmax_abs, ymax_abs), (xmin_abs, ymax_abs)]
@@ -308,7 +367,9 @@ def gemini2d_preprocess(
                 })
 
             else:
-                if entry.get('direction', 'horizontal') == 'vertical' or (box_width < box_height and len(lines) < 3):
+                if entry.get(
+                        'direction', 'horizontal') == 'vertical' or (
+                        box_width < box_height and len(lines) < 3):
                     line_box_width = box_width / len(lines)
 
                     for line_part, line_text in enumerate(lines):
@@ -373,7 +434,8 @@ def gemini2d_preprocess(
                 if not hull.is_empty:
                     region_polygon = list(hull.exterior.coords)
             except Exception as e:
-                logging.warning(f"Failed to compute convex hull for region {region_index}: {e}")
+                logging.warning(
+                    f"Failed to compute convex hull for region {region_index}: {e}")
 
         region_output.append({
             'region': region_index,
@@ -382,6 +444,3 @@ def gemini2d_preprocess(
         })
 
     return img_dimensions, region_output
-
-
-

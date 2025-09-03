@@ -3,11 +3,14 @@ from __future__ import annotations
 import re
 from enum import Enum
 
-from typing_extensions import Type, Iterable
+from typing_extensions import Iterable, Type
 
 
-def strings_to_enum(name: str, strings: list[str] | Iterable[str]) -> Type[Enum]:
-    # Create a dictionary with member names and their values both set to the strings from the list
+def strings_to_enum(
+        name: str,
+        strings: list[str] | Iterable[str]) -> Type[Enum]:
+    # Create a dictionary with member names and their values both set to the
+    # strings from the list
     members = {string: string for string in strings}
     # Dynamically create the enum using the Enum constructor
     return Enum(name, members)
@@ -17,6 +20,7 @@ def convert_value(val):
     if val.isdigit():
         return int(val)
     return val
+
 
 def custom_to_dict(s):
     pattern = r'(\w+)\s*\{([^}]*)\}'
@@ -32,11 +36,13 @@ def custom_to_dict(s):
                     k, v = pair.split(':', 1)
                     inner_dict[k.strip()] = convert_value(v.strip())
                 else:
-                    # If no key is provided, use the value as both key and value
+                    # If no key is provided, use the value as both key and
+                    # value
                     inner_dict[pair] = convert_value(pair)
         result[key] = inner_dict
 
     return result
+
 
 def dict_to_custom(d):
     result = []

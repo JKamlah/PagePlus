@@ -3,19 +3,20 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from typing import Type
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Type
 
 import typer
-from dotenv import load_dotenv, find_dotenv, get_key, dotenv_values, set_key, unset_key
+from dotenv import (dotenv_values, find_dotenv, get_key, load_dotenv, set_key,
+                    unset_key)
 from rich import print
 from rich.table import Table
 from typing_extensions import Annotated
 
-from pageplus.utils.constants import PagePlus, Environments
-from pageplus.utils.envs import str_to_env, filter_envs
+from pageplus.utils.constants import Environments, PagePlus
+from pageplus.utils.envs import filter_envs, str_to_env
 from pageplus.utils.fs import collect_xml_files
 
 
@@ -38,14 +39,17 @@ class Workspace:
         Callback function to validate the workspace option against the dynamic list,
         ensuring case-insensitive comparison.
         """
-        value = get_key(find_dotenv(), self.prefix_loaded_ws).replace(self.prefix_ws, '') \
-            if value is None else value
+        value = get_key(
+            find_dotenv(),
+            self.prefix_loaded_ws).replace(
+            self.prefix_ws,
+            '') if value is None else value
         dynamic_options = self.names()
         env_value = str_to_env(value)
         if env_value not in dynamic_options:
-            raise typer.BadParameter(f"Invalid option: {value}. Please choose from {dynamic_options}.")
+            raise typer.BadParameter(
+                f"Invalid option: {value}. Please choose from {dynamic_options}.")
         return env_value
-
 
     @staticmethod
     def dir(ws_dir: str = PagePlus.SYSTEM.as_prefix_workspace_dir()) -> Path:
@@ -55,7 +59,9 @@ class Workspace:
         """
         dotfile = find_dotenv()
         ws_dir = get_key(dotfile, ws_dir)
-        return Path(ws_dir) if (ws_dir and ws_dir != 'tmp') else Path(tempfile.gettempdir())
+        return Path(ws_dir) if (
+            ws_dir and ws_dir != 'tmp') else Path(
+            tempfile.gettempdir())
 
     @staticmethod
     def prefix_dir(prefix: str = Environments.PAGEPLUS.value) -> str:
@@ -65,32 +71,36 @@ class Workspace:
         """
         return prefix + datetime.now().strftime('_%Y-%m-%d_')
 
-
     def show(self):
         table = Table(title=f"[green]{self.env} workspaces[/green]")
-        table.add_column(f"{self.env} workspace", justify="right", style="cyan", no_wrap=True)
+        table.add_column(f"{self.env} workspace",
+                         justify="right", style="cyan", no_wrap=True)
         table.add_column("Workspace folder")
         [table.add_row('[green bold]Loaded workspace[/green bold]',
                        f"[cyan]{key.replace(self.prefix_ws, '')}[/cyan]")
          for (val, key) in filter_envs(self.prefix_loaded_ws).items()]
         [table.add_row(val.replace(self.prefix_ws, ''), key) for (val, key)
          in filter_envs(self.prefix_ws).items()]
-        print(table)     
+        print(table)
 
     def names(self):
         """
         Return workspace names directly, assuming these are valid
         Conversion to lowercase for case-insensitive handling is done in the callback
         """
-        return [key.replace(self.prefix_ws, '') for key in filter_envs(self.prefix_ws).keys()]
-    
+        return [key.replace(self.prefix_ws, '')
+                for key in filter_envs(self.prefix_ws).keys()]
+
     def loaded(self):
         """
         Get name of the oaded workspace
         Returns:
         """
-        return [val.replace(self.prefix_ws, '') for val in filter_envs(self.prefix_loaded_ws).values()][0]
-
+        return [
+            val.replace(
+                self.prefix_ws,
+                '') for val in filter_envs(
+                self.prefix_loaded_ws).values()][0]
 
     def path(self, workspace: str) -> None:
         """
@@ -98,7 +108,6 @@ class Workspace:
         Returns:
         """
         return get_key(find_dotenv(), self.prefix_ws + workspace)
-
 
     def load(self, workspace: str) -> None:
         """
@@ -110,12 +119,11 @@ class Workspace:
         if workspace == '':
             set_key(dotfile, self.prefix_loaded_ws, workspace)
         else:
-            workspace = self.prefix_ws+str_to_env(workspace)
+            workspace = self.prefix_ws + str_to_env(workspace)
             if get_key(dotfile, workspace):
                 set_key(dotfile, self.prefix_loaded_ws, workspace)
             else:
                 print(f"[red]Warning: {workspace} workspace not found![/red]")
-
 
     def update(self) -> None:
         """
@@ -126,14 +134,19 @@ class Workspace:
         dotenv_path = find_dotenv()
         for (var, key) in filter_envs(self.prefix_ws).items():
             if not Path(key).exists():
-                print(f"Workspace {var.replace(self.prefix_ws, '')} does not exist anymore and will be deleted!")
+                print(
+                    f"Workspace {
+                        var.replace(
+                            self.prefix_ws,
+                            '')} does not exist anymore and will be deleted!")
                 unset_key(dotenv_path, var)
         for (var, key) in filter_envs(self.prefix_loaded_ws).items():
-            workspace = self.prefix_ws+get_key(dotenv_path, self.prefix_loaded_ws)
+            workspace = self.prefix_ws + \
+                get_key(dotenv_path, self.prefix_loaded_ws)
             if not get_key(dotenv_path, workspace):
-                print(f"Loaded workspace does not exist anymore and will set to empty!")
+                print(
+                    "Loaded workspace does not exist anymore and will set to empty!")
                 set_key(find_dotenv(), var, '')
-
 
     def delete(self, workspace: str) -> None:
         """
@@ -149,10 +162,17 @@ class Workspace:
         unset_key(dotenv_path, workspace)
         if get_key(dotenv_path, self.prefix_loaded_ws) == workspace:
             set_key(dotenv_path, self.prefix_loaded_ws, '')
-        print(f"Workspace {workspace.replace(self.prefix_ws, '')} was deleted!")
+        print(
+            f"Workspace {
+                workspace.replace(
+                    self.prefix_ws,
+                    '')} was deleted!")
 
-
-    def copy(self, destination_path: Path , workspace: str, new_workspace: str)-> None:
+    def copy(
+            self,
+            destination_path: Path,
+            workspace: str,
+            new_workspace: str) -> None:
         """
         Copy pages of from a workspace path to another location
         Returns:
@@ -160,8 +180,11 @@ class Workspace:
         """
         load_dotenv()
         envs = dotenv_values()
-        workspace = envs.get(self.prefix_loaded_ws, '').replace(self.prefix_ws, '') \
-            if not workspace else str_to_env(workspace)
+        workspace = envs.get(
+            self.prefix_loaded_ws,
+            '').replace(
+            self.prefix_ws,
+            '') if not workspace else str_to_env(workspace)
         if workspace == '':
             print("Please provide a valid workspace or load workspace.")
             return
@@ -171,9 +194,13 @@ class Workspace:
             shutil.copy(wsfolder, destination_path)
             if new_workspace != "":
                 new_workspace = str_to_env(new_workspace)
-                set_key(find_dotenv(), self.prefix_ws+new_workspace, str(Path(destination_path).absolute()))
+                set_key(find_dotenv(), self.prefix_ws +
+                        new_workspace, str(Path(destination_path).absolute()))
 
-    def backup(self, backup_folder: Path = Path('Backup') , workspace: str = None)-> None:
+    def backup(
+            self,
+            backup_folder: Path = Path('Backup'),
+            workspace: str = None) -> None:
         """
         Create a backup of the xml files
         Returns:
@@ -181,8 +208,11 @@ class Workspace:
         """
         load_dotenv()
         envs = dotenv_values()
-        workspace = envs.get(self.prefix_loaded_ws, '').replace(self.prefix_ws, '') \
-            if not workspace else str_to_env(workspace)
+        workspace = envs.get(
+            self.prefix_loaded_ws,
+            '').replace(
+            self.prefix_ws,
+            '') if not workspace else str_to_env(workspace)
         if workspace == '':
             print("Please provide a valid workspace or load workspace.")
             return
@@ -193,9 +223,14 @@ class Workspace:
             xml_files = collect_xml_files(map(Path, [workspace]))
             for file in xml_files:
                 shutil.copy(file, backup_path.joinpath(file.name))
-            print(f"Backup created: [bold green]{len(xml_files)} XML-files[bold green]")
+            print(
+                f"Backup created: [bold green]{
+                    len(xml_files)} XML-files[bold green]")
 
-    def restore(self, backup_folder: Path = Path('Backup') , workspace: str = None)-> None:
+    def restore(
+            self,
+            backup_folder: Path = Path('Backup'),
+            workspace: str = None) -> None:
         """
         Restore a backup of the xml files
         Returns:
@@ -203,8 +238,11 @@ class Workspace:
         """
         load_dotenv()
         envs = dotenv_values()
-        workspace = envs.get(self.prefix_loaded_ws, '').replace(self.prefix_ws, '') \
-            if not workspace else str_to_env(workspace)
+        workspace = envs.get(
+            self.prefix_loaded_ws,
+            '').replace(
+            self.prefix_ws,
+            '') if not workspace else str_to_env(workspace)
         if workspace == '':
             print("Please provide a valid workspace or load workspace.")
             return
@@ -214,19 +252,25 @@ class Workspace:
             xml_files = collect_xml_files(map(Path, [backup_path]))
             for file in xml_files:
                 shutil.copy(file, wsfolder)
-            print(f"Restored: [bold green]{len(xml_files)} XML-files[bold green]")
+            print(
+                f"Restored: [bold green]{
+                    len(xml_files)} XML-files[bold green]")
 
-
-    def open(self, workspace: Annotated[
-        str, typer.Argument(str, help=f"Workspace name pointing to an existing path",
-                            callback=validate)] = None) -> None:
+    def open(self,
+             workspace: Annotated[str,
+                                  typer.Argument(str,
+                                                 help="Workspace name pointing to an existing path",
+                                                 callback=validate)] = None) -> None:
         """
         Open a workspace folder in the file explorer, works for Windows, macOS, and Linux.
         """
         load_dotenv()
         envs = dotenv_values()
-        workspace = envs.get(self.prefix_loaded_ws, '').replace(self.prefix_ws, '') \
-            if not workspace else str_to_env(workspace)
+        workspace = envs.get(
+            self.prefix_loaded_ws,
+            '').replace(
+            self.prefix_ws,
+            '') if not workspace else str_to_env(workspace)
         if workspace == '':
             print("Please provide a valid workspace or load workspace.")
             return
@@ -243,6 +287,5 @@ class Workspace:
         else:
             # Linux and other Unix-like OS
             subprocess.run(["xdg-open", wsfolder])
-        print(f"Opened workspace [bold green]{workspace}[/bold green]: {wsfolder.absolute()}")
-
-
+        print(
+            f"Opened workspace [bold green]{workspace}[/bold green]: {wsfolder.absolute()}")

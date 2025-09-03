@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 
 import typer
-from dotenv import find_dotenv, get_key, dotenv_values, set_key
+from dotenv import dotenv_values, find_dotenv, get_key, set_key
 from rich import print
 from rich.table import Table
 from typing_extensions import Annotated
@@ -30,7 +30,7 @@ class API:
         Returns:
         None
         """
-        return (self.provider+'_').lstrip('_')
+        return (self.provider + '_').lstrip('_')
 
     @property
     def provider(self) -> str:
@@ -39,20 +39,30 @@ class API:
         Returns:
         None
         """
-        providername = get_key(find_dotenv(), self.environment.name.upper() + "_PROVIDER")
+        providername = get_key(
+            find_dotenv(),
+            self.environment.name.upper() +
+            "_PROVIDER")
         return providername if providername else ''
 
     @provider.setter
-    def provider(self, providername: Annotated[Provider, typer.Argument(help="Provider and service name")],
-                 service: Annotated[str, typer.Argument(help="Service")] = "DEFAULT") -> None:
+    def provider(self,
+                 providername: Annotated[Provider,
+                                         typer.Argument(help="Provider and service name")],
+                 service: Annotated[str,
+                                    typer.Argument(help="Service")] = "DEFAULT") -> None:
         """
         Set provider
         Returns:
         None
         """
         try:
-            provider = providername.name.upper()+'__'+service.upper()
-            set_key(find_dotenv(), self.environment.name.upper() + "_PROVIDER", provider)
+            provider = providername.name.upper() + '__' + service.upper()
+            set_key(
+                find_dotenv(),
+                self.environment.name.upper() +
+                "_PROVIDER",
+                provider)
             print("[green]The provider updated successfully.[green]")
         except Exception as e:
             print(f"[red]Failed to update the provider: {e}[red]")
@@ -64,10 +74,15 @@ class API:
         Returns:
         None
         """
-        return get_key(find_dotenv(), self.prefix + self.prefix_provider() + "BASE_URL")
+        return get_key(
+            find_dotenv(),
+            self.prefix +
+            self.prefix_provider() +
+            "BASE_URL")
 
     @base_url.setter
-    def base_url(self, url: Annotated[str, typer.Argument(help="URL to eScriptorium")]) -> None:
+    def base_url(self, url: Annotated[str, typer.Argument(
+            help="URL to eScriptorium")]) -> None:
         """
         Write the URL of the environment instance (e.g. https://www.escriptorium.fr) to the .env file
         Returns:
@@ -75,7 +90,12 @@ class API:
         """
         try:
             dotfile = find_dotenv()
-            set_key(dotfile, self.prefix + self.prefix_provider() + "BASE_URL", url)
+            set_key(
+                dotfile,
+                self.prefix +
+                self.prefix_provider() +
+                "BASE_URL",
+                url)
             print("[green]The url updated successfully.[green]")
         except Exception as e:
             print(f"[red]Failed to update the url: {e}[red]")
@@ -88,8 +108,12 @@ class API:
         None
         """
         dotfile = find_dotenv()
-        name = get_key(dotfile, f"{self.prefix + self.prefix_provider()}USERNAME")
-        password = get_key(dotfile, f"{self.prefix + self.prefix_provider()}PASSWORD")
+        name = get_key(
+            dotfile, f"{
+                self.prefix + self.prefix_provider()}USERNAME")
+        password = get_key(
+            dotfile, f"{
+                self.prefix + self.prefix_provider()}PASSWORD")
         return name, password
 
     @credentials.setter
@@ -101,8 +125,12 @@ class API:
         """
         try:
             dotfile = find_dotenv()
-            set_key(dotfile, f"{self.prefix + self.prefix_provider()}USERNAME", credentials[0])
-            set_key(dotfile, f"{self.prefix + self.prefix_provider()}PASSWORD", credentials[1])
+            set_key(dotfile,
+                    f"{self.prefix + self.prefix_provider()}USERNAME",
+                    credentials[0])
+            set_key(dotfile,
+                    f"{self.prefix + self.prefix_provider()}PASSWORD",
+                    credentials[1])
             print("[green]Credentials updated successfully.[green]")
         except Exception as e:
             print(f"[red]Failed to update credentials: {e}[red]")
@@ -116,7 +144,11 @@ class API:
         str
         """
         dotfile = find_dotenv()
-        return get_key(dotfile, self.prefix + self.prefix_provider() + "API_BASE")
+        return get_key(
+            dotfile,
+            self.prefix +
+            self.prefix_provider() +
+            "API_BASE")
 
     @api_base_url.setter
     def api_base_url(self, url: str) -> None:
@@ -127,7 +159,12 @@ class API:
         None
         """
         dotfile = find_dotenv()
-        set_key(dotfile, self.prefix + self.prefix_provider() + "API_BASE", url)
+        set_key(
+            dotfile,
+            self.prefix +
+            self.prefix_provider() +
+            "API_BASE",
+            url)
         print("[green]Base URL for the API was updated successfully.[green]")
 
     @property
@@ -138,7 +175,11 @@ class API:
         str
         """
         dotfile = find_dotenv()
-        return get_key(dotfile, self.prefix + self.prefix_provider() + "API_KEY")
+        return get_key(
+            dotfile,
+            self.prefix +
+            self.prefix_provider() +
+            "API_KEY")
 
     @api_key.setter
     def api_key(self, key: str) -> None:
@@ -157,13 +198,17 @@ class API:
             [envs.get(self.prefix + self.prefix_provider() + 'URL', None),
              envs.get(self.prefix + self.prefix_provider() + 'USERNAME', None),
              envs.get(self.prefix + self.prefix_provider() + 'PASSWORD', None)])
-        check_api = all([envs.get(self.prefix + self.prefix_provider() + 'API_KEY', None),
-                         any([envs.get(self.prefix + self.prefix_provider() + 'URL', None),
-                              envs.get(self.prefix + self.prefix_provider() + 'API_URL', None)])])
+        check_api = all([envs.get(self.prefix +
+                                  self.prefix_provider() +
+                                  'API_KEY', None), any([envs.get(self.prefix +
+                                                                  self.prefix_provider() +
+                                                                  'URL', None), envs.get(self.prefix +
+                                                                                         self.prefix_provider() +
+                                                                                         'API_URL', None)])])
         if not check and not check_api:
             print(
-                f"[red bold]Missing login information:[/red bold] [red]Ensure that the URL, username, and password or "
-                f"API URL and key are correctly configured.[/red]")
+                "[red bold]Missing login information:[/red bold] [red]Ensure that the URL, username, and password or "
+                "API URL and key are correctly configured.[/red]")
             return False
         return True
 
@@ -174,7 +219,11 @@ class API:
         None
         """
         table = Table(title=f"[green]{self.env} settings[/green]")
-        table.add_column("Setting", justify="right", style="cyan", no_wrap=True)
+        table.add_column(
+            "Setting",
+            justify="right",
+            style="cyan",
+            no_wrap=True)
         table.add_column("Value")
         [table.add_row(var.replace(self.prefix + self.prefix_provider(), ''), key) if
          var != self.prefix + self.prefix_provider() + "PASSWORD" else

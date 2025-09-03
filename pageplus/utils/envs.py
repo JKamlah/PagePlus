@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import List
 
-from dotenv import load_dotenv, dotenv_values
+from dotenv import dotenv_values, load_dotenv
 
 
 def filter_envs(pattern: str) -> dict:
@@ -15,7 +15,8 @@ def filter_envs(pattern: str) -> dict:
     """
     load_dotenv()
     envs = dotenv_values()
-    return dict(sorted([(var, key) for (var, key) in envs.items() if var.startswith(pattern)], key=lambda x: x[0]))
+    return dict(sorted([(var, key) for (var, key) in envs.items()
+                if var.startswith(pattern)], key=lambda x: x[0]))
 
 
 def str_to_env(string: str, substring=True) -> str:
@@ -50,9 +51,11 @@ def str_to_env(string: str, substring=True) -> str:
     valid_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_"
     string = ''.join(c if c in valid_chars else '_' for c in string).upper()
 
-    # Ensure the string does not start with a digit (handled above) and is not empty
+    # Ensure the string does not start with a digit (handled above) and is not
+    # empty
     if not string or string[0].isdigit():
-        raise ValueError("The resulting environment variable name is invalid or empty.")
+        raise ValueError(
+            "The resulting environment variable name is invalid or empty.")
 
     return string
 
@@ -75,5 +78,5 @@ def get_env_paths(env_key) -> List[Path]:
     env_val = os.getenv(env_key)
     print(env_val)
     print([Path(str_val) for str_val in env_val.split(':')])
-    return [Path(str_val) for str_val in env_val.split(':') if Path(str_val).exists()] \
-        if env_val is not None else []
+    return [Path(str_val) for str_val in env_val.split(':') if Path(
+        str_val).exists()] if env_val is not None else []

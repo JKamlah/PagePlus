@@ -24,9 +24,16 @@ def get_image(image_path):
 
     # Extract file extension and determine format
     ext = os.path.splitext(image_path)[1].lower().replace(".", "")
-    format_mapping = {"jpg": "JPEG", "jpeg": "JPEG", "png": "PNG", "bmp": "BMP", "gif": "GIF", "tiff": "TIFF",
-                      "webp": "WEBP"}
-    image_format = format_mapping.get(ext, "PNG")  # Default to PNG if format is unknown
+    format_mapping = {
+        "jpg": "JPEG",
+        "jpeg": "JPEG",
+        "png": "PNG",
+        "bmp": "BMP",
+        "gif": "GIF",
+        "tiff": "TIFF",
+        "webp": "WEBP"}
+    # Default to PNG if format is unknown
+    image_format = format_mapping.get(ext, "PNG")
     return image, image_format
 
 
@@ -61,7 +68,8 @@ def crop_image_by_polygon(image: Image, polygon: Polygon,
     # Buffer the polygon
     buffered_polygon = polygon.buffer(buffer)
 
-    # Check if the buffered polygon's bounding box fits within the image dimensions
+    # Check if the buffered polygon's bounding box fits within the image
+    # dimensions
     buf_minx, buf_miny, buf_maxx, buf_maxy = map(int, buffered_polygon.bounds)
     if buf_minx >= 0 and buf_miny >= 0 and buf_maxx <= image.width and buf_maxy <= image.height:
         polygon = buffered_polygon
@@ -74,9 +82,11 @@ def crop_image_by_polygon(image: Image, polygon: Polygon,
     cropped_image = image.crop(bbox)
 
     if transparent_background:
-        # Calculate the offset (minx, miny) for adjusting the polygon coordinates
+        # Calculate the offset (minx, miny) for adjusting the polygon
+        # coordinates
         minx, miny, _, _ = bbox
-        adjusted_coords = [(x - minx, y - miny) for x, y in polygon.exterior.coords]
+        adjusted_coords = [(x - minx, y - miny)
+                           for x, y in polygon.exterior.coords]
 
         # Create a mask image with the same size as the cropped image
         mask = Image.new("L", cropped_image.size, 0)
@@ -89,24 +99,27 @@ def crop_image_by_polygon(image: Image, polygon: Polygon,
         # Create an output image (snippet) with a transparent background
         snippet = Image.new("RGBA", cropped_image.size, (0, 0, 0, 0))
 
-        # Composite the cropped image using the mask so that only the polygon area is visible
+        # Composite the cropped image using the mask so that only the polygon
+        # area is visible
         snippet = Image.composite(cropped_image, snippet, mask)
 
         # Determine the final canvas size:
         snippet_width, snippet_height = snippet.size
         if square_canvas:
-            final_size = max(int(snippet_width+(patch_size*2)), int(snippet_height+patch_size*2))
+            final_size = max(int(snippet_width + (patch_size * 2)),
+                             int(snippet_height + patch_size * 2))
             final_size += final_size % patch_size
             final_width, final_height = final_size, final_size
         else:
-            final_width = int(snippet_width+patch_size)
+            final_width = int(snippet_width + patch_size)
             final_width += final_width % patch_size
-            final_height = int(snippet_height+patch_size)
+            final_height = int(snippet_height + patch_size)
             final_height += final_height % patch_size
 
         if (snippet_width, snippet_height) != (final_width, final_height):
             # Create a new transparent image with the final required size
-            new_snippet = Image.new("RGBA", (final_width, final_height), (0, 0, 0, 0))
+            new_snippet = Image.new(
+                "RGBA", (final_width, final_height), (0, 0, 0, 0))
 
             # Calculate the position to paste the original snippet (center it)
             left = (final_width - snippet_width) // 2
@@ -118,7 +131,10 @@ def crop_image_by_polygon(image: Image, polygon: Polygon,
         snippet = cropped_image
     if save_snippet:
         snippet_dir.mkdir(parents=True, exist_ok=True)
-        snippet.save(snippet_dir.joinpath(f"{snippet_name}.png"), icc_profile=None) # Optional: save the mask to
+        snippet.save(
+            snippet_dir.joinpath(
+                f"{snippet_name}.png"),
+            icc_profile=None)  # Optional: save the mask to
     return snippet, bbox
 
 
@@ -134,6 +150,7 @@ def image_to_base64(image):
     buffered = BytesIO()
     image.save(buffered, format='PNG')
     img_bytes = buffered.getvalue()
-    img_base64 = base64.b64encode(img_bytes).decode('utf-8')  # Encode to Base64
+    img_base64 = base64.b64encode(img_bytes).decode(
+        'utf-8')  # Encode to Base64
 
     return img_base64

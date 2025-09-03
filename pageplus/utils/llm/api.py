@@ -27,12 +27,13 @@ if (spec := util.find_spec('litellm')) is not None:
             """
             Checks if api key is valid
             """
-            print('[green]Valid API key[green]') if litellm.check_valid_key(self.model, self.api_key) \
-                else print('[red]Not a valid API key[red]')
+            print('[green]Valid API key[green]') if litellm.check_valid_key(
+                self.model, self.api_key) else print('[red]Not a valid API key[red]')
 
         @property
         def model_with_prefix(self):
-            return '' if self.model == '' else (self.llmprovider.name.lower()+'/'+self.model)
+            return '' if self.model == '' else (
+                self.llmprovider.name.lower() + '/' + self.model)
 
         @property
         def model(self, prefix=False) -> str:
@@ -41,15 +42,20 @@ if (spec := util.find_spec('litellm')) is not None:
             Returns:
             None
             """
-            modelname = get_key(find_dotenv(), self.environment.as_prefix()+self.prefix_provider()+'MODEL')
+            modelname = get_key(
+                find_dotenv(),
+                self.environment.as_prefix() +
+                self.prefix_provider() +
+                'MODEL')
             modelname = modelname if modelname else ''
             if prefix and modelname != '':
                 modelname = self.llmprovider.name.lower()
             return modelname if modelname else ''
 
-
         @model.setter
-        def model(self, modelname: Annotated[str, typer.Argument(help="Provider")]) -> None:
+        def model(self,
+                  modelname: Annotated[str,
+                                       typer.Argument(help="Provider")]) -> None:
             """
             Get current model
             Returns:
@@ -57,11 +63,18 @@ if (spec := util.find_spec('litellm')) is not None:
             """
             try:
                 assert self.check_model(modelname)
-                set_key(find_dotenv(), self.environment.as_prefix()+self.prefix_provider()+'MODEL', modelname)
-                print(f"[green]Model updated successfully to:[/green] {self.model}")
+                set_key(
+                    find_dotenv(),
+                    self.environment.as_prefix() +
+                    self.prefix_provider() +
+                    'MODEL',
+                    modelname)
+                print(
+                    f"[green]Model updated successfully to:[/green] {self.model}")
             except Exception as e:
-                print(f"[red]Failed to update the current model:[/red] {self.model}")
-
+                print(f"ERROR: {e}")
+                print(
+                    f"[red]Failed to update the current model:[/red] {self.model}")
 
         def check_model(self, modelname: str) -> bool:
             """
@@ -69,18 +82,25 @@ if (spec := util.find_spec('litellm')) is not None:
             Returns:
             None
             """
-            response = requests.get(f"{self.api_base_url}/models", headers={"Authorization": f"Bearer {self.api_key}"})
+            response = requests.get(
+                f"{self.api_base_url}/models", headers={"Authorization": f"Bearer {self.api_key}"})
             response.raise_for_status()
             response = response.json()
             modellist = [model['id'] for model in response['data']]
             if modellist is None:
-                print(f"[ModelCheck] [orange]No model selection available for provider {self.llmprovider.value}.[/orange]")
+                print(
+                    f"[ModelCheck] [orange]No model selection available for provider {
+                        self.llmprovider.value}.[/orange]")
                 return True
             elif modelname in modellist:
-                print(f"[ModelCheck] [green]Model exists in provider {self.llmprovider.value} model selection.[/green]")
+                print(
+                    f"[ModelCheck] [green]Model exists in provider {
+                        self.llmprovider.value} model selection.[/green]")
                 return True
             else:
-                print(f"[ModelCheck] [red]Model is not in selection options for {self.llmprovider.value}.[/red]")
+                print(
+                    f"[ModelCheck] [red]Model is not in selection options for {
+                        self.llmprovider.value}.[/red]")
                 return False
 
         def show_models(self):
@@ -89,20 +109,29 @@ if (spec := util.find_spec('litellm')) is not None:
             Returns:
             None
             """
-            response = requests.get(f"{self.api_base_url}/models", headers={"Authorization": f"Bearer {self.api_key}"})
+            response = requests.get(
+                f"{self.api_base_url}/models", headers={"Authorization": f"Bearer {self.api_key}"})
             response.raise_for_status()
-            response =  response.json()
+            response = response.json()
             modellist = response['data']
             if modellist:
-                print(f"[green]Available models for provider {self.provider.replace('__',' - ')}[/green]")
-                table = Table(title=f"[green]Models overview[/green]")
-                table.add_column(f"Provider", justify="right", style="cyan", no_wrap=True)
+                print(
+                    f"[green]Available models for provider {
+                        self.provider.replace(
+                            '__', ' - ')}[/green]")
+                table = Table(title="[green]Models overview[/green]")
+                table.add_column(
+                    "Provider",
+                    justify="right",
+                    style="cyan",
+                    no_wrap=True)
                 table.add_column("Model")
-                table.add_row(self.provider.replace('__',' - '),
+                table.add_row(self.provider.replace('__', ' - '),
                               '\n'.join([model['id'] for model in modellist]))
                 print(table)
 
-if (spec := util.find_spec('google')) is not None and (spec := util.find_spec('google.genai')) is not None:
+if (spec := util.find_spec('google')) is not None and (
+        spec := util.find_spec('google.genai')) is not None:
     from google import genai
     from google.genai.errors import ClientError
 
@@ -147,7 +176,7 @@ if (spec := util.find_spec('google')) is not None and (spec := util.find_spec('g
 
         @property
         def project(self):
-            return None#self.project
+            return None  # self.project
 
         def check_valid_key(self):
             """
@@ -155,9 +184,10 @@ if (spec := util.find_spec('google')) is not None and (spec := util.find_spec('g
             """
             try:
                 genai.Client(api_key=self.api_key)
-                print(f"[green]Valid API key[green]")
+                print("[green]Valid API key[green]")
                 return True
             except Exception as e:
+                print(f"ERROR: {e}")
                 print('[red]Not a valid API key[red]')
                 return False
 
@@ -168,15 +198,20 @@ if (spec := util.find_spec('google')) is not None and (spec := util.find_spec('g
             Returns:
             None
             """
-            modelname = get_key(find_dotenv(), self.environment.as_prefix()+self.prefix_provider()+'MODEL')
+            modelname = get_key(
+                find_dotenv(),
+                self.environment.as_prefix() +
+                self.prefix_provider() +
+                'MODEL')
             modelname = modelname if modelname else ''
             if prefix and modelname != '':
                 modelname = self.llmprovider.name.lower()
             return modelname if modelname else ''
 
-
         @model.setter
-        def model(self, modelname: Annotated[str, typer.Argument(help="Provider")]) -> None:
+        def model(self,
+                  modelname: Annotated[str,
+                                       typer.Argument(help="Provider")]) -> None:
             """
             Get current model
             Returns:
@@ -184,11 +219,18 @@ if (spec := util.find_spec('google')) is not None and (spec := util.find_spec('g
             """
             try:
                 assert self.check_model(modelname)
-                set_key(find_dotenv(), self.environment.as_prefix()+self.prefix_provider()+'MODEL', modelname)
-                print(f"[green]Model updated successfully to:[/green] {self.model}")
+                set_key(
+                    find_dotenv(),
+                    self.environment.as_prefix() +
+                    self.prefix_provider() +
+                    'MODEL',
+                    modelname)
+                print(
+                    f"[green]Model updated successfully to:[/green] {self.model}")
             except Exception as e:
-                print(f"[red]Failed to update the current model:[/red] {self.model}")
-
+                print(f"ERROR: {e}")
+                print(
+                    f"[red]Failed to update the current model:[/red] {self.model}")
 
         def check_model(self, model: str) -> bool:
             """
@@ -205,7 +247,6 @@ if (spec := util.find_spec('google')) is not None and (spec := util.find_spec('g
                 print(f"[ModelCheck] [red]{model} does not exists.[/red]")
                 return False
 
-
         def show_models(self):
             """
             Print modelloptions for the current provider
@@ -214,8 +255,8 @@ if (spec := util.find_spec('google')) is not None and (spec := util.find_spec('g
             """
             modellist = self.client().models.list()
             if modellist:
-                print(f"[green]Available models for Gemini[/green]")
-                table = Table(title=f"[green]Models overview[/green]")
+                print("[green]Available models for Gemini[/green]")
+                table = Table(title="[green]Models overview[/green]")
                 table.add_column("Model")
                 for model in modellist:
                     table.add_row(model.name)
@@ -234,5 +275,3 @@ if (spec := util.find_spec('google')) is not None and (spec := util.find_spec('g
             except ClientError as e:
                 print(f"{e.message}")
                 pass
-
-

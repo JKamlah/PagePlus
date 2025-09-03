@@ -1,15 +1,15 @@
 import re
 from io import BytesIO
 from pathlib import Path
-from typing import Optional, List
+from typing import List, Optional
 
 import requests
 import typer
 from lxml import etree
 from lxml.etree import Element, tostring
 
-from pageplus.utils.exceptions import NotValidMetsException, MetsError
 from pageplus.utils.constants import MIME_IMAGE_EXTENSIONS
+from pageplus.utils.exceptions import MetsError, NotValidMetsException
 
 # Define METS namespaces.
 NSMAP = {
@@ -61,9 +61,13 @@ def repair_namespace(mets: str):
         inner_content = match.group(2)
 
         # Collect all prefixes used in the block
-        used_prefixes = set(re.findall(r'</?([a-zA-Z_][\w\-]*):[a-zA-Z_][\w\-]*', inner_content))
+        used_prefixes = set(
+            re.findall(
+                r'</?([a-zA-Z_][\w\-]*):[a-zA-Z_][\w\-]*',
+                inner_content))
 
-        # Check if xsi or xlink is used in attributes (like xsi:type or xlink:href)
+        # Check if xsi or xlink is used in attributes (like xsi:type or
+        # xlink:href)
         if re.search(r'\bxsi:', inner_content):
             used_prefixes.add("xsi")
         if re.search(r'\bmods:', inner_content):
@@ -71,9 +75,11 @@ def repair_namespace(mets: str):
         if re.search(r'\bxlink:', inner_content):
             used_prefixes.add("xlink")
 
-
         # Parse existing xmlns declarations
-        existing_decls = dict(re.findall(r'xmlns:([a-zA-Z0-9_]+)="([^"]+)"', original_opening_tag))
+        existing_decls = dict(
+            re.findall(
+                r'xmlns:([a-zA-Z0-9_]+)="([^"]+)"',
+                original_opening_tag))
         # Add missing declarations
         for prefix in used_prefixes:
             if prefix not in existing_decls:
@@ -86,13 +92,11 @@ def repair_namespace(mets: str):
 
         # Add xsi:schemaLocation if xsi is used
         if "xsi" in existing_decls:
-            new_tag += (
-                ' xsi:schemaLocation="'
-                'info:lc/xmlns/premis-v2 http://www.loc.gov/standards/premis/v2/premis-v2-0.xsd '
-                'http://www.loc.gov/mods/v3 http://www.loc.gov/standards/mods/mods.xsd '
-                'http://www.loc.gov/METS/ http://www.loc.gov/standards/mets/mets.xsd '
-                'http://www.loc.gov/mix/v10 http://www.loc.gov/standards/mix/mix10/mix10.xsd"'
-            )
+            new_tag += (' xsi:schemaLocation="'
+                        'info:lc/xmlns/premis-v2 http://www.loc.gov/standards/premis/v2/premis-v2-0.xsd '
+                        'http://www.loc.gov/mods/v3 http://www.loc.gov/standards/mods/mods.xsd '
+                        'http://www.loc.gov/METS/ http://www.loc.gov/standards/mets/mets.xsd '
+                        'http://www.loc.gov/mix/v10 http://www.loc.gov/standards/mix/mix10/mix10.xsd"')
 
         new_tag += ">"
         return f"{new_tag}{inner_content}</mets:mets>"
@@ -147,7 +151,13 @@ class MetsElement:
     loose: bool = False
     verbose: bool = False
 
-    def __init__(self, *, attributes: dict = None, content: str = None, loose: bool = True, verbose: bool = False):
+    def __init__(
+            self,
+            *,
+            attributes: dict = None,
+            content: str = None,
+            loose: bool = True,
+            verbose: bool = False):
         self.loose = loose
         self.verbose = verbose
         self.attributes = self.allowed_attributes.copy()
@@ -157,16 +167,25 @@ class MetsElement:
                     self.attributes[key] = value
                 else:
                     if not loose:
-                        MetsError(f"WARNING: Attribute '{key}' is not allowed in element '{self.tag}'.")
+                        MetsError(
+                            f"WARNING: Attribute '{key}' is not allowed in element '{
+                                self.tag}'.")
                     if self.verbose:
-                        print(f"WARNING: Attribute '{key}' is not allowed in element '{self.tag}'.")
+                        print(
+                            f"WARNING: Attribute '{key}' is not allowed in element '{
+                                self.tag}'.")
                     self.attributes[key] = value
 
         if content is not None:
             if not self.allows_content and not loose:
-                raise MetsError(f"Element '{self.tag}' does not allow content.")
+                raise MetsError(
+                    f"Element '{
+                        self.tag}' does not allow content.")
             if not self.allows_content and self.verbose:
-                print(MetsError(f"WARNING: Element '{self.tag}' does not allow content."))
+                print(
+                    MetsError(
+                        f"WARNING: Element '{
+                            self.tag}' does not allow content."))
             self.content = content
         else:
             self.content = None
@@ -179,11 +198,17 @@ class MetsElement:
         else:
             if self.loose:
                 if self.verbose:
-                    print(MetsError(f"WARNING: Child element '{child.tag}' not allowed in parent '{self.tag}'."))
+                    print(
+                        MetsError(
+                            f"WARNING: Child element '{
+                                child.tag}' not allowed in parent '{
+                                self.tag}'."))
                 self.children.append(child)
             else:
-                raise MetsError(f"WARNING: Child element '{child.tag}' not allowed in parent '{self.tag}'.")
-
+                raise MetsError(
+                    f"WARNING: Child element '{
+                        child.tag}' not allowed in parent '{
+                        self.tag}'.")
 
     def remove_child(self, child: "MetsElement"):
         """Remove a child element."""
@@ -197,15 +222,21 @@ class MetsElement:
         """Generate the complete XML document as bytes (including XML declaration)."""
         nsmap = nsmap or NSMAP
         root = build_xml_tree(self, nsmap)
-        return b'<?xml version="1.0" encoding="UTF-8"?>\n' + tostring(root, encoding='UTF-8', pretty_print=True)
+        return b'<?xml version="1.0" encoding="UTF-8"?>\n' + \
+            tostring(root, encoding='UTF-8', pretty_print=True)
 
 
 # --- METS - MODS Element Classes --- #
 
 METS_MODS_DISPATCH = {}
+
+
 def dispatch():
-    def wrapper(cls): METS_MODS_DISPATCH[cls.tag] = cls; return cls
+    def wrapper(cls):
+        METS_MODS_DISPATCH[cls.tag] = cls
+        return cls
     return wrapper
+
 
 @dispatch()
 class Mets(MetsElement):
@@ -217,7 +248,15 @@ class Mets(MetsElement):
         "PROFILE": None,
         XSI + "schemaLocation": None
     }
-    allowed_children = ["metsHdr", "dmdSec", "amdSec", "fileSec", "structMap", "behaviorSec", "structLink", "mets"]
+    allowed_children = [
+        "metsHdr",
+        "dmdSec",
+        "amdSec",
+        "fileSec",
+        "structMap",
+        "behaviorSec",
+        "structLink",
+        "mets"]
 
     def save(self, filename: str, nsmap=None):
         """Save the generated XML document to a file."""
@@ -235,16 +274,23 @@ class Mets(MetsElement):
             found.extend(self.recursive_find(child, tag))
         return found
 
-    def recursive_find_first(self, element, tag: str, attr_key: str = None, attr_value: str = None) -> Optional:
+    def recursive_find_first(
+            self,
+            element,
+            tag: str,
+            attr_key: str = None,
+            attr_value: str = None) -> Optional:
         """
         Recursively find the first element with the given tag. If attr_key and attr_value are
         provided, the element is returned only if its attribute matches the given value.
         """
         if element.tag == tag:
-            if attr_key is None or element.attributes.get(attr_key) == attr_value:
+            if attr_key is None or element.attributes.get(
+                    attr_key) == attr_value:
                 return element
         for child in element.children:
-            result = self.recursive_find_first(child, tag, attr_key, attr_value)
+            result = self.recursive_find_first(
+                child, tag, attr_key, attr_value)
             if result is not None:
                 return result
         return None
@@ -272,6 +318,7 @@ class Mets(MetsElement):
 
         return use_tags
 
+
 @dispatch()
 class MetsHdr(MetsElement):
     tag = "metsHdr"
@@ -287,16 +334,25 @@ class MetsHdr(MetsElement):
 @dispatch()
 class Agent(MetsElement):
     tag = "agent"
-    allowed_attributes = {"ROLE": None, "TYPE": None, "OTHERTYPE": None, "OTHERROLE": None}
+    allowed_attributes = {
+        "ROLE": None,
+        "TYPE": None,
+        "OTHERTYPE": None,
+        "OTHERROLE": None}
     allowed_children = ["name", "note"]
+
 
 @dispatch()
 class Name(MetsElement):
     tag = "name"
-    allowed_attributes = {"type": None, "authority": None, "authorityURI": None,
-                          "valueURI": None}
+    allowed_attributes = {
+        "type": None,
+        "authority": None,
+        "authorityURI": None,
+        "valueURI": None}
     allowed_children = ["namePart", "role", "displayForm"]
     allows_content = True
+
 
 @dispatch()
 class Note(MetsElement):
@@ -304,11 +360,13 @@ class Note(MetsElement):
     allowed_attributes = {"type": None}
     allows_content = True
 
+
 @dispatch()
 class AltRecordID(MetsElement):
     tag = "altRecordID"
     allowed_attributes = {"TYPE": None}
     allows_content = True
+
 
 @dispatch()
 class MetsDocumentID(MetsElement):
@@ -316,11 +374,20 @@ class MetsDocumentID(MetsElement):
     allowed_attributes = {"TYPE": None}
     allows_content = True
 
+
 @dispatch()
 class DmdSec(MetsElement):
     tag = "dmdSec"
     allowed_attributes = {"ID": None}
-    allowed_children = ["mdRef", "mdWrap", "amdSec", "fileSec", "structMap", "dmdSec", "structLink"]
+    allowed_children = [
+        "mdRef",
+        "mdWrap",
+        "amdSec",
+        "fileSec",
+        "structMap",
+        "dmdSec",
+        "structLink"]
+
 
 @dispatch()
 class MdRef(MetsElement):
@@ -333,11 +400,13 @@ class MdRef(MetsElement):
     }
     allows_content = True
 
+
 @dispatch()
 class AmdSec(MetsElement):
     tag = "amdSec"
     allowed_attributes = {"ID": None}
     allowed_children = ["techMD", "rightsMD", "sourceMD", "digiprovMD"]
+
 
 @dispatch()
 class TechMD(MetsElement):
@@ -345,11 +414,13 @@ class TechMD(MetsElement):
     allowed_attributes = {"ID": None}
     allowed_children = ["mdWrap", "mdRef"]
 
+
 @dispatch()
 class RightsMD(MetsElement):
     tag = "rightsMD"
     allowed_attributes = {"ID": None}
     allowed_children = ["mdWrap", "mdRef"]
+
 
 @dispatch()
 class SourceMD(MetsElement):
@@ -357,17 +428,24 @@ class SourceMD(MetsElement):
     allowed_attributes = {"ID": None}
     allowed_children = ["mdWrap", "mdRef"]
 
+
 @dispatch()
 class DigiprovMD(MetsElement):
     tag = "digiprovMD"
     allowed_attributes = {"ID": None}
     allowed_children = ["mdWrap", "mdRef"]
 
+
 @dispatch()
 class MdWrap(MetsElement):
     tag = "mdWrap"
-    allowed_attributes = {"MDTYPE": None, "ID": None, "MIMETYPE": None, "OTHERMDTYPE": None}
+    allowed_attributes = {
+        "MDTYPE": None,
+        "ID": None,
+        "MIMETYPE": None,
+        "OTHERMDTYPE": None}
     allowed_children = ["xmlData"]
+
 
 @dispatch()
 class XMLData(MetsElement):
@@ -382,11 +460,13 @@ class XMLData(MetsElement):
         """
         self.children.append(child)
 
+
 @dispatch()
 class FileSec(MetsElement):
     tag = "fileSec"
     allowed_attributes = {"ID": None}
     allowed_children = ["fileGrp"]
+
 
 @dispatch()
 class FileGrp(MetsElement):
@@ -394,15 +474,23 @@ class FileGrp(MetsElement):
     allowed_attributes = {"ID": None, "USE": None}
     allowed_children = ["file", "fileGrp"]
 
+
 @dispatch()
 class File(MetsElement):
     tag = "file"
     allowed_attributes = {
-        "ID": None, "SEQ": None, "MIMETYPE": None, "USE": None, "CREATED": None,
-        "CHECKSUM": None, "CHECKSUMTYPE": None, "SIZE": None,
-        "ADMID": None, "OWNERID": None
-    }
+        "ID": None,
+        "SEQ": None,
+        "MIMETYPE": None,
+        "USE": None,
+        "CREATED": None,
+        "CHECKSUM": None,
+        "CHECKSUMTYPE": None,
+        "SIZE": None,
+        "ADMID": None,
+        "OWNERID": None}
     allowed_children = ["FLocat"]
+
 
 @dispatch()
 class FLocat(MetsElement):
@@ -414,11 +502,13 @@ class FLocat(MetsElement):
                           "ID": None}
     allows_content = True
 
+
 @dispatch()
 class StructMap(MetsElement):
     tag = "structMap"
     allowed_attributes = {"ID": None, "TYPE": None}
     allowed_children = ["div"]
+
 
 @dispatch()
 class Div(MetsElement):
@@ -430,6 +520,7 @@ class Div(MetsElement):
     }
     allowed_children = ["mptr", "fptr", "div"]
 
+
 @dispatch()
 class Fptr(MetsElement):
     tag = "fptr"
@@ -437,11 +528,13 @@ class Fptr(MetsElement):
     allowed_children = ["area", "seq"]
     allows_content = True
 
+
 @dispatch()
 class Par(MetsElement):
     tag = "par"
     allowed_attributes = {"ID": None}
     allowed_children = ["area", "seq"]
+
 
 @dispatch()
 class Area(MetsElement):
@@ -453,11 +546,13 @@ class Area(MetsElement):
     }
     allows_content = True
 
+
 @dispatch()
 class StructLink(MetsElement):
     tag = "structLink"
     allowed_attributes = {"ID": None}
     allowed_children = ["smLink"]
+
 
 @dispatch()
 class SmLink(MetsElement):
@@ -472,11 +567,13 @@ class SmLink(MetsElement):
     }
     allows_content = True
 
+
 @dispatch()
 class BehaviorSec(MetsElement):
     tag = "behaviorSec"
     allowed_attributes = {"ID": None, "CREATED": None, "LABEL": None}
     allowed_children = ["behaviorSec", "behavior"]
+
 
 @dispatch()
 class Behavior(MetsElement):
@@ -488,22 +585,37 @@ class Behavior(MetsElement):
     }
     allowed_children = ["interfaceDef", "mechanism"]
 
+
 @dispatch()
 class InterfaceDef(MetsElement):
     tag = "interfaceDef"
-    allowed_attributes = {"ID": None, "LABEL": None, "LOCTYPE": None, "OTHERLOCTYPE": None}
+    allowed_attributes = {
+        "ID": None,
+        "LABEL": None,
+        "LOCTYPE": None,
+        "OTHERLOCTYPE": None}
     allows_content = True
+
 
 @dispatch()
 class Mechanism(MetsElement):
     tag = "mechanism"
-    allowed_attributes = {"ID": None, "LABEL": None, "LOCTYPE": None, "OTHERLOCTYPE": None}
+    allowed_attributes = {
+        "ID": None,
+        "LABEL": None,
+        "LOCTYPE": None,
+        "OTHERLOCTYPE": None}
     allows_content = True
+
 
 @dispatch()
 class TrpDocMetadata(MetsElement):
     tag = "trpDocMetadata"
-    allowed_attributes = {"ID": None, "LABEL": None, "LOCTYPE": None, "OTHERLOCTYPE": None}
+    allowed_attributes = {
+        "ID": None,
+        "LABEL": None,
+        "LOCTYPE": None,
+        "OTHERLOCTYPE": None}
     allows_content = True
     allowed_children = [
         "docId", "title", "uploadTimestamp", "uploader", "uploaderId",
@@ -511,71 +623,85 @@ class TrpDocMetadata(MetsElement):
         "localFolder", "origDocId", "collectionList", "isInMain"
     ]
 
+
 @dispatch()
 class DocId(MetsElement):
     tag = "docId"
     allows_content = True
+
 
 @dispatch()
 class Title(MetsElement):
     tag = "title"
     allows_content = True
 
+
 @dispatch()
 class UploadTimestamp(MetsElement):
     tag = "uploadTimestamp"
     allows_content = True
+
 
 @dispatch()
 class Uploader(MetsElement):
     tag = "uploader"
     allows_content = True
 
+
 @dispatch()
 class UploaderId(MetsElement):
     tag = "uploaderId"
     allows_content = True
+
 
 @dispatch()
 class NrOfPages(MetsElement):
     tag = "nrOfPages"
     allows_content = True
 
+
 @dispatch()
 class PageId(MetsElement):
     tag = "pageId"
     allows_content = True
 
+
 @dispatch()
 class Url(MetsElement):
     tag = "url"
-    allowed_attributes = {"access": None,}
+    allowed_attributes = {"access": None, }
     allows_content = True
+
 
 @dispatch()
 class ThumbUrl(MetsElement):
     tag = "thumbUrl"
     allows_content = True
 
+
 @dispatch()
 class Status(MetsElement):
     tag = "status"
     allows_content = True
+
 
 @dispatch()
 class FimgStoreColl(MetsElement):
     tag = "fimgStoreColl"
     allows_content = True
 
+
 @dispatch()
 class LocalFolder(MetsElement):
     tag = "localFolder"
     allows_content = True
 
+
 @dispatch()
 class OrigDocId(MetsElement):
     tag = "origDocId"
     allows_content = True
+
 
 @dispatch()
 class CollectionList(MetsElement):
@@ -584,49 +710,62 @@ class CollectionList(MetsElement):
     allows_content = False
     allowed_children = ["colList"]
 
+
 @dispatch()
 class ColList(MetsElement):
     tag = "colList"
     allowed_attributes = {}
     allows_content = False
     allowed_children = [
-        "colId", "colName", "description", "crowdsourcing", "elearning", "nrOfDocuments"
-    ]
+        "colId",
+        "colName",
+        "description",
+        "crowdsourcing",
+        "elearning",
+        "nrOfDocuments"]
+
 
 @dispatch()
 class ColId(MetsElement):
     tag = "colId"
     allows_content = True
 
+
 @dispatch()
 class ColName(MetsElement):
     tag = "colName"
     allows_content = True
+
 
 @dispatch()
 class Description(MetsElement):
     tag = "description"
     allows_content = True
 
+
 @dispatch()
 class Crowdsourcing(MetsElement):
     tag = "crowdsourcing"
     allows_content = True
+
 
 @dispatch()
 class Elearning(MetsElement):
     tag = "elearning"
     allows_content = True
 
+
 @dispatch()
 class NrOfDocuments(MetsElement):
     tag = "nrOfDocuments"
     allows_content = True
 
+
 @dispatch()
 class IsInMain(MetsElement):
     tag = "isInMain"
     allows_content = True
+
 
 @dispatch()
 class Mptr(MetsElement):
@@ -644,15 +783,29 @@ class Mptr(MetsElement):
     }
     allows_content = True
 
+
 @dispatch()
 class Mods(MetsElement):
     tag = "mods"
     allowed_attributes = {'version': None, XSI + 'schemaLocation': None}
     allowed_children = [
-        "classification", "relatedItem", "identifier", "recordInfo", "physicalDescription",
-        "titleInfo", "originInfo", "part", "language", "location", "typeOfResource", "note",
-        "accessCondition", "extension", "name", "subject"
-    ]
+        "classification",
+        "relatedItem",
+        "identifier",
+        "recordInfo",
+        "physicalDescription",
+        "titleInfo",
+        "originInfo",
+        "part",
+        "language",
+        "location",
+        "typeOfResource",
+        "note",
+        "accessCondition",
+        "extension",
+        "name",
+        "subject"]
+
 
 @dispatch()
 class Info(MetsElement):
@@ -660,10 +813,12 @@ class Info(MetsElement):
     allowed_attributes = {"version": None}
     allows_content = True
 
+
 @dispatch()
 class Version(MetsElement):
     tag = "version"
     allows_content = True
+
 
 @dispatch()
 class Classification(MetsElement):
@@ -671,20 +826,40 @@ class Classification(MetsElement):
     allowed_attributes = {"authority": None}
     allows_content = True
 
+
 @dispatch()
 class RelatedItem(MetsElement):
     tag = "relatedItem"
     allowed_attributes = {"type": None, "displayLabel": None}
-    allowed_children = ["recordInfo", "titleInfo", "originInfo", "part",
-                        "typeOfResource", "language", "note", "classification", "relatedItem", "identifier",
-                        "location", "extension", "name", "subject", "accessCondition"]
+    allowed_children = [
+        "recordInfo",
+        "titleInfo",
+        "originInfo",
+        "part",
+        "typeOfResource",
+        "language",
+        "note",
+        "classification",
+        "relatedItem",
+        "identifier",
+        "location",
+        "extension",
+        "name",
+        "subject",
+        "accessCondition"]
     allows_content = True
+
 
 @dispatch()
 class RecordInfo(MetsElement):
     tag = "recordInfo"
-    allowed_children = ["recordIdentifier", "recordCreationDate", "recordChangeDate", "descriptionStandard"]
+    allowed_children = [
+        "recordIdentifier",
+        "recordCreationDate",
+        "recordChangeDate",
+        "descriptionStandard"]
     allows_content = True
+
 
 @dispatch()
 class RecordIdentifier(MetsElement):
@@ -692,11 +867,13 @@ class RecordIdentifier(MetsElement):
     allowed_attributes = {"source": None}
     allows_content = True
 
+
 @dispatch()
 class Identifier(MetsElement):
     tag = "identifier"
     allowed_attributes = {"type": None}
     allows_content = True
+
 
 @dispatch()
 class PhysicalDescription(MetsElement):
@@ -704,10 +881,12 @@ class PhysicalDescription(MetsElement):
     allowed_children = ["digitalOrigin", "extent", "note"]
     allows_content = True
 
+
 @dispatch()
 class DigitalOrigin(MetsElement):
     tag = "digitalOrigin"
     allows_content = True
+
 
 @dispatch()
 class TitleInfo(MetsElement):
@@ -715,31 +894,42 @@ class TitleInfo(MetsElement):
     allowed_children = ["title", "subTitle", "nonSort"]
     allows_content = True
 
+
 @dispatch()
 class SubTitle(MetsElement):
     tag = "subTitle"
     allows_content = True
 
+
 @dispatch()
 class OriginInfo(MetsElement):
     tag = "originInfo"
-    allowed_children = ["dateIssued", "place", "publisher", "issuance", "edition"]
+    allowed_children = [
+        "dateIssued",
+        "place",
+        "publisher",
+        "issuance",
+        "edition"]
     allows_content = True
+
 
 @dispatch()
 class Edition(MetsElement):
     tag = "edition"
     allows_content = True
 
+
 @dispatch()
 class Publisher(MetsElement):
     tag = "publisher"
     allows_content = True
 
+
 @dispatch()
 class Issuance(MetsElement):
     tag = "issuance"
     allows_content = True
+
 
 @dispatch()
 class DateIssued(MetsElement):
@@ -747,17 +937,20 @@ class DateIssued(MetsElement):
     allowed_attributes = {"encoding": None, "keyDate": None, "point": None}
     allows_content = True
 
+
 @dispatch()
 class Place(MetsElement):
     tag = "place"
     allowed_children = ["placeTerm"]
     allows_content = True
 
+
 @dispatch()
 class PlaceTerm(MetsElement):
     tag = "placeTerm"
     allowed_attributes = {"type": None}
     allows_content = True
+
 
 @dispatch()
 class Part(MetsElement):
@@ -766,6 +959,7 @@ class Part(MetsElement):
     allowed_children = ["detail", "date"]
     allows_content = True
 
+
 @dispatch()
 class Detail(MetsElement):
     tag = "detail"
@@ -773,10 +967,12 @@ class Detail(MetsElement):
     allowed_children = ["number"]
     allows_content = True
 
+
 @dispatch()
 class Number(MetsElement):
     tag = "number"
     allows_content = True
+
 
 @dispatch()
 class Language(MetsElement):
@@ -784,18 +980,28 @@ class Language(MetsElement):
     allowed_children = ["languageTerm"]
     allows_content = True
 
+
 @dispatch()
 class LanguageTerm(MetsElement):
     tag = "languageTerm"
     allowed_attributes = {"authority": None, "type": None}
     allows_content = True
 
+
 @dispatch()
 class Location(MetsElement):
     tag = "location"
-    allowed_children = ["physicalLocation", "shelfLocator", "location", "extension", "recordInfo",
-                        "accessCondition", "part", "url"]
+    allowed_children = [
+        "physicalLocation",
+        "shelfLocator",
+        "location",
+        "extension",
+        "recordInfo",
+        "accessCondition",
+        "part",
+        "url"]
     allows_content = True
+
 
 @dispatch()
 class PhysicalLocation(MetsElement):
@@ -803,36 +1009,48 @@ class PhysicalLocation(MetsElement):
     allowed_attributes = {"valueURI": None}
     allows_content = True
 
+
 @dispatch()
 class Rights(MetsElement):
     tag = "rights"
-    allowed_children = ["owner", "ownerLogo", "ownerSiteURL", "ownerContact", "license"]
+    allowed_children = [
+        "owner",
+        "ownerLogo",
+        "ownerSiteURL",
+        "ownerContact",
+        "license"]
     allows_content = True
+
 
 @dispatch()
 class Owner(MetsElement):
     tag = "owner"
     allows_content = True
 
+
 @dispatch()
 class OwnerLogo(MetsElement):
     tag = "ownerLogo"
     allows_content = True
+
 
 @dispatch()
 class OwnerSiteURL(MetsElement):
     tag = "ownerSiteURL"
     allows_content = True
 
+
 @dispatch()
 class OwnerContact(MetsElement):
     tag = "ownerContact"
     allows_content = True
 
+
 @dispatch()
 class License(MetsElement):
     tag = "license"
     allows_content = True
+
 
 @dispatch()
 class Links(MetsElement):
@@ -840,15 +1058,18 @@ class Links(MetsElement):
     allowed_children = ["reference", "presentation", "iiif", "sru"]
     allows_content = True
 
+
 @dispatch()
 class Reference(MetsElement):
     tag = "reference"
     allows_content = True
 
+
 @dispatch()
 class Presentation(MetsElement):
     tag = "presentation"
     allows_content = True
+
 
 @dispatch()
 class TypeOfResource(MetsElement):
@@ -856,11 +1077,13 @@ class TypeOfResource(MetsElement):
     allowed_attributes = {"collection": None}
     allows_content = True
 
+
 @dispatch()
 class ShelfLocator(MetsElement):
     tag = "shelfLocator"
     allows_content = True
     allowed_children = ['a', 'b', 'i', ]
+
 
 @dispatch()
 class AccessCondition(MetsElement):
@@ -872,11 +1095,20 @@ class AccessCondition(MetsElement):
         "displayLabel": None
     }
 
+
 @dispatch()
 class Extension(MetsElement):
     tag = "extension"
     allows_content = True
-    allowed_children = ['externalType', 'info', 'id', 'odid', 'datatype', 'type', 'state']
+    allowed_children = [
+        'externalType',
+        'info',
+        'id',
+        'odid',
+        'datatype',
+        'type',
+        'state']
+
 
 @dispatch()
 class ExternalType(MetsElement):
@@ -884,11 +1116,13 @@ class ExternalType(MetsElement):
     allowed_attributes = {"recordSyntax": None, "code": None}
     allows_content = True
 
+
 @dispatch()
 class RecordCreationDate(MetsElement):
     tag = "recordCreationDate"
     allowed_attributes = {"encoding": None}
     allows_content = True
+
 
 @dispatch()
 class RecordChangeDate(MetsElement):
@@ -896,35 +1130,42 @@ class RecordChangeDate(MetsElement):
     allowed_attributes = {"encoding": None}
     allows_content = True
 
+
 @dispatch()
 class DescriptionStandard(MetsElement):
     tag = "descriptionStandard"
     allows_content = True
+
 
 @dispatch()
 class VlId(MetsElement):
     tag = "id"
     allows_content = True
 
+
 @dispatch()
 class VlOdid(MetsElement):
     tag = "odid"
     allows_content = True
+
 
 @dispatch()
 class VlDatatype(MetsElement):
     tag = "datatype"
     allows_content = True
 
+
 @dispatch()
 class VlType(MetsElement):
     tag = "type"
     allows_content = True
 
+
 @dispatch()
 class VlState(MetsElement):
     tag = "state"
     allows_content = True
+
 
 @dispatch()
 class Date(MetsElement):
@@ -932,20 +1173,24 @@ class Date(MetsElement):
     allowed_attributes = {"encoding": None}
     allows_content = True
 
+
 @dispatch()
 class IIIF(MetsElement):
     tag = "iiif"
     allows_content = True
+
 
 @dispatch()
 class Sru(MetsElement):
     tag = "sru"
     allows_content = True
 
+
 @dispatch()
 class NonSort(MetsElement):
     tag = "nonSort"
     allows_content = True
+
 
 @dispatch()
 class NamePart(MetsElement):
@@ -953,11 +1198,13 @@ class NamePart(MetsElement):
     allowed_attributes = {"type": None, "authority": None}
     allows_content = True
 
+
 @dispatch()
 class Role(MetsElement):
     tag = "role"
     allowed_children = ["roleTerm"]
     allows_content = True
+
 
 @dispatch()
 class RoleTerm(MetsElement):
@@ -965,36 +1212,54 @@ class RoleTerm(MetsElement):
     allowed_attributes = {"type": None, "authority": None}
     allows_content = True
 
+
 @dispatch()
 class Subject(MetsElement):
     tag = "subject"
     allowed_children = [
-        "topic", "geographic", "temporal", "name", "titleInfo", "genre",
-        "occupation", "hierarchicalGeographic", "cartographics", "geographicCode",
-        "language", "subject"
-    ]
+        "topic",
+        "geographic",
+        "temporal",
+        "name",
+        "titleInfo",
+        "genre",
+        "occupation",
+        "hierarchicalGeographic",
+        "cartographics",
+        "geographicCode",
+        "language",
+        "subject"]
     allows_content = True
+
 
 @dispatch()
 class Topic(MetsElement):
     tag = "topic"
-    allowed_attributes = {"type": None, "authority": None, "authorityURI": None, "valueURI": None}
+    allowed_attributes = {
+        "type": None,
+        "authority": None,
+        "authorityURI": None,
+        "valueURI": None}
     allows_content = True
+
 
 @dispatch()
 class Geographic(MetsElement):
     tag = "geographic"
     allows_content = True
 
+
 @dispatch()
 class Temporal(MetsElement):
     tag = "temporal"
     allows_content = True
 
+
 @dispatch()
 class Extent(MetsElement):
     tag = "extent"
     allows_content = True
+
 
 @dispatch()
 class DisplayForm(MetsElement):
@@ -1003,7 +1268,8 @@ class DisplayForm(MetsElement):
 
 
 def add_dynamic_tag(tag_name: str):
-    class_name = tag_name[0].upper() + tag_name[1:]  # Capitalize or adjust as needed
+    # Capitalize or adjust as needed
+    class_name = tag_name[0].upper() + tag_name[1:]
 
     # Create a new class with the desired name
     new_class = type(
@@ -1021,7 +1287,12 @@ def add_dynamic_tag(tag_name: str):
     METS_MODS_DISPATCH[tag_name] = new_class
     return new_class
 
-def download_file_from_flocat(file: File, output_folder: Path, nametag: str = None, overwrite: bool = False):
+
+def download_file_from_flocat(
+        file: File,
+        output_folder: Path,
+        nametag: str = None,
+        overwrite: bool = False):
     requests.packages.urllib3.disable_warnings()
 
     mimetype = file.attributes.get("MIMETYPE", "image/jpeg").lower()
@@ -1040,7 +1311,8 @@ def download_file_from_flocat(file: File, output_folder: Path, nametag: str = No
             if nametag:
                 filename = file.attributes.get(nametag)
                 if not filename:
-                    print(f"Warning: Attribute '{nametag}' not found. Falling back to filename from href.")
+                    print(
+                        f"Warning: Attribute '{nametag}' not found. Falling back to filename from href.")
                     filename = Path(href).name
                 else:
                     # Add extension from href if it exists
@@ -1057,7 +1329,8 @@ def download_file_from_flocat(file: File, output_folder: Path, nametag: str = No
             print(f"Downloading {href} -> {target_path}")
 
             if target_path.exists() and not overwrite:
-                print("Already exists and skipped! Use 'overwrite=True' to force download.")
+                print(
+                    "Already exists and skipped! Use 'overwrite=True' to force download.")
                 continue
 
             response = requests.get(
@@ -1074,7 +1347,11 @@ def download_file_from_flocat(file: File, output_folder: Path, nametag: str = No
         except Exception as e:
             print(f"Failed to download {href}: {e}")
 
-def parse_mets_xml_multiple_roots(xml_source, loose=False, verbose=False) -> List[Mets]:
+
+def parse_mets_xml_multiple_roots(
+        xml_source,
+        loose=False,
+        verbose=False) -> List[Mets]:
     """
     Parse XML content containing multiple <mets:mets> root elements using pattern matching.
 
@@ -1094,13 +1371,19 @@ def parse_mets_xml_multiple_roots(xml_source, loose=False, verbose=False) -> Lis
     mets_elements = []
 
     # Regex to find full <mets:mets ...> ... </mets:mets> blocks
-    pattern = re.compile(r"(<(?:mets:)?mets[^>]*>)(.*?)(</(?:mets:)?mets>)", re.DOTALL)
+    pattern = re.compile(
+        r"(<(?:mets:)?mets[^>]*>)(.*?)(</(?:mets:)?mets>)",
+        re.DOTALL)
 
     for match in pattern.finditer(content):
         full_block = match.group(0)
         # Parse each block as standalone XML
         try:
-            parsed = parse_mets_xml(BytesIO(full_block.encode('utf-8')), loose=loose, verbose=verbose)
+            parsed = parse_mets_xml(
+                BytesIO(
+                    full_block.encode('utf-8')),
+                loose=loose,
+                verbose=verbose)
             if parsed:
                 mets_elements.append(parsed)
         except Exception as e:
@@ -1138,20 +1421,26 @@ def parse_mets_xml(mets, loose=False, verbose=False) -> Mets | None:
             if localname not in METS_MODS_DISPATCH:
                 if loose:
                     if verbose:
-                        print(f"WARNING: Add \"{localname}\" dynamically to the xml-object.")
+                        print(
+                            f"WARNING: Add \"{localname}\" dynamically to the xml-object.")
                     METS_MODS_DISPATCH[localname] = add_dynamic_tag(localname)
                 else:
-                    raise MetsError(f"Element \"{localname}\" not found in dispatch.")
+                    raise MetsError(
+                        f"Element \"{localname}\" not found in dispatch.")
             if event == 'start':
                 content = element.text.strip() if element.text and element.text.strip() else None
                 if element.attrib and content is not None:
-                    obj = METS_MODS_DISPATCH[localname](attributes=element.attrib, content=content, loose=loose, verbose=verbose)
+                    obj = METS_MODS_DISPATCH[localname](
+                        attributes=element.attrib, content=content, loose=loose, verbose=verbose)
                 elif element.attrib:
-                    obj = METS_MODS_DISPATCH[localname](attributes=element.attrib, loose=loose, verbose=verbose)
+                    obj = METS_MODS_DISPATCH[localname](
+                        attributes=element.attrib, loose=loose, verbose=verbose)
                 elif content is not None:
-                    obj = METS_MODS_DISPATCH[localname](content=content, loose=loose, verbose=verbose)
+                    obj = METS_MODS_DISPATCH[localname](
+                        content=content, loose=loose, verbose=verbose)
                 else:
-                    obj = METS_MODS_DISPATCH[localname](loose=loose, verbose=verbose)
+                    obj = METS_MODS_DISPATCH[localname](
+                        loose=loose, verbose=verbose)
                 parent_stack.append(obj)
             elif event == 'end':
                 child = parent_stack.pop()

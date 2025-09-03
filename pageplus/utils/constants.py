@@ -1,5 +1,6 @@
 from __future__ import annotations
-from enum import Enum, auto
+
+from enum import Enum
 
 
 class WorkState(str, Enum):
@@ -33,14 +34,13 @@ class OutputFormats(str, Enum):
 
 class TextLevel(str, Enum):
     """
-    Level of text 
+    Level of text
     """
     TextRegion = "TextRegion"
     Textline = "Textline"
     Word = "Word"
     Glyph = "Glyph"
     TableRegion = "TableRegion"
-    
 
 
 class DrawingsPDF(str, Enum):
@@ -71,44 +71,44 @@ class Provider(str, Enum):
 
 
 class LLMProvider(Provider):
-    OPENAI              = "OpenAI"
-    OLLAMA              = "Ollama"
-    GROQ                = "Groq"
-    AZURE               = "Azure"
-    DEEPSEEK            = "Deepseek"
-    MISTRAL_AZURE       = "Mistral Azure"
-    VERTEX_AI           = "Vertex AI"
-    PALM                = "PaLM"
-    GEMINI              = "Gemini"
-    MISTRAL             = "Mistral"
-    ANTHROPIC           = "Anthropic"
-    AWS_SAGEMAKER       = "Sagemaker"
-    AWS_BEDROCK         = "Bedrock"
-    ANYSCALE            = "Anyscale"
-    HUGGINGFACE         = "Huggingface"
+    OPENAI = "OpenAI"
+    OLLAMA = "Ollama"
+    GROQ = "Groq"
+    AZURE = "Azure"
+    DEEPSEEK = "Deepseek"
+    MISTRAL_AZURE = "Mistral Azure"
+    VERTEX_AI = "Vertex AI"
+    PALM = "PaLM"
+    GEMINI = "Gemini"
+    MISTRAL = "Mistral"
+    ANTHROPIC = "Anthropic"
+    AWS_SAGEMAKER = "Sagemaker"
+    AWS_BEDROCK = "Bedrock"
+    ANYSCALE = "Anyscale"
+    HUGGINGFACE = "Huggingface"
 
 
 class Environments(str, Enum):
     """
     Service names are used as prefixes with _ for dotenvs variables
     """
-    PAGEPLUS        = "PagePlus"
-    #METS           = "METS"
-    #IIIF           = "IIIF"
-    ESCRIPTORIUM    = "eScriptorium"
-    TRANSKRIBUS     = "Transkribus"
-    DINGLEHOPPER    = "Dinglehopper"
-    LLM             = "LLM"
-    GEMINI          = "GEMINI"
+    PAGEPLUS = "PagePlus"
+    # METS           = "METS"
+    # IIIF           = "IIIF"
+    ESCRIPTORIUM = "eScriptorium"
+    TRANSKRIBUS = "Transkribus"
+    DINGLEHOPPER = "Dinglehopper"
+    LLM = "LLM"
+    GEMINI = "GEMINI"
 
     def as_prefix(self):
         return f"{self.name.upper()}_"
 
     def as_prefix_workspace(self):
-        return f"PAGEPLUS_WS_"
+        return "PAGEPLUS_WS_"
 
     def as_prefix_loaded_workspace(self):
-        return f"PAGEPLUS_LOADED_WS"
+        return "PAGEPLUS_LOADED_WS"
 
     def as_prefix_environment(self):
         return f"{self.name.upper()}_ENVIRONMENT"
@@ -141,6 +141,7 @@ MIME_IMAGE_EXTENSIONS = {
     'image/avif': '.avif',
     'image/vnd.adobe.photoshop': '.psd',
 }
+
 
 class ImageExtension(str, Enum):
     png = '.png'

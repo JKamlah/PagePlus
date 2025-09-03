@@ -1,26 +1,30 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
-from typing import Tuple, Iterator, List, Any
-import sys
 import subprocess
+import sys
+from pathlib import Path
+from typing import Any, Iterator, List, Tuple
 
 import lxml.etree as ET
 import typer
-from dotenv import load_dotenv, find_dotenv, get_key, dotenv_values
+from dotenv import dotenv_values, find_dotenv, get_key, load_dotenv
 
 from pageplus.utils.constants import Environments, PagePlus
-from pageplus.utils.exceptions import InputsDoNotExistException
 from pageplus.utils.envs import str_to_env
+from pageplus.utils.exceptions import InputsDoNotExistException
 
 
 def open_folder_default() -> bool:
     """Set the directory where all workspaces by all environments get stored"""
     dotfile = find_dotenv()
-    return get_key(dotfile, PagePlus.SYSTEM.as_prefix()+'OPEN_FOLDER') == 'True'
+    return get_key(
+        dotfile,
+        PagePlus.SYSTEM.as_prefix() +
+        'OPEN_FOLDER') == 'True'
 
-def open_folder(fpath: Path|str):
+
+def open_folder(fpath: Path | str):
     """
     Opens an existing folder on every os
     Args:
@@ -61,12 +65,19 @@ def join_modified_path(path: Path, count: int) -> Path:
     Returns:
         Path: The updated path with the modified segment appended 'count' times.
     """
-    mod_path = get_key(find_dotenv(), Environments.PAGEPLUS.as_prefix()+'MODIFIED')
+    mod_path = get_key(
+        find_dotenv(),
+        Environments.PAGEPLUS.as_prefix() +
+        'MODIFIED')
     for _ in range(0, count):
         path = path.joinpath(mod_path)
     return path
 
-def transform_output(ctx: typer.Context, param: typer.CallbackParam, value: str):
+
+def transform_output(
+        ctx: typer.Context,
+        param: typer.CallbackParam,
+        value: str):
     """
     Transforms the output value using the specified transformation inputs.
 
@@ -84,7 +95,11 @@ def transform_output(ctx: typer.Context, param: typer.CallbackParam, value: str)
     """
     return transform_inputs(ctx, param, [value])[0] if value else None
 
-def transform_input(ctx: typer.Context, param: typer.CallbackParam, value: str):
+
+def transform_input(
+        ctx: typer.Context,
+        param: typer.CallbackParam,
+        value: str):
     """
     Transforms a single input value based on the given context and parameters.
 
@@ -98,10 +113,14 @@ def transform_input(ctx: typer.Context, param: typer.CallbackParam, value: str):
     Returns:
         The transformed value.
     """
-    return transform_inputs(ctx, param, [value] if value is not None else None)[0]
+    return transform_inputs(
+        ctx, param, [value] if value is not None else None)[0]
 
 
-def transform_inputs(ctx: typer.Context, param: typer.CallbackParam, values: List[str]):
+def transform_inputs(
+        ctx: typer.Context,
+        param: typer.CallbackParam,
+        values: List[str]):
     """
     Transforms a list of input values based on the specified context and parameters.
 
@@ -119,16 +138,25 @@ def transform_inputs(ctx: typer.Context, param: typer.CallbackParam, values: Lis
     """
     load_dotenv()
     envs = dotenv_values()
-    loaded_env = Environments[envs.get(Environments.PAGEPLUS.as_prefix_environment(), 'PAGEPLUS')]
+    loaded_env = Environments[envs.get(
+        Environments.PAGEPLUS.as_prefix_environment(), 'PAGEPLUS')]
     ret_values = []
-    if not values or (len(values) == 1 and ''.join(values[0].split(':modified')) == ''):
-        ws_folder = Path(envs.get(envs.get(loaded_env.as_prefix_loaded_workspace())))
-        count = 0 if not values else len(values[0].split(':modified'))-1
+    if not values or (
+            len(values) == 1 and ''.join(
+            values[0].split(':modified')) == ''):
+        ws_folder = Path(
+            envs.get(
+                envs.get(
+                    loaded_env.as_prefix_loaded_workspace())))
+        count = 0 if not values else len(values[0].split(':modified')) - 1
         ws_folder = join_modified_path(ws_folder, count)
         if ws_folder.exists():
             ret_values.append(ws_folder)
     elif not values or (len(values) == 1 and ':' in values[0]):
-        ws_folder = Path(envs.get(envs.get(loaded_env.as_prefix_loaded_workspace())))
+        ws_folder = Path(
+            envs.get(
+                envs.get(
+                    loaded_env.as_prefix_loaded_workspace())))
         ws_folder = ws_folder.joinpath(values[0].split(':')[1])
         if ws_folder.exists():
             ret_values.append(ws_folder)
@@ -138,9 +166,17 @@ def transform_inputs(ctx: typer.Context, param: typer.CallbackParam, values: Lis
                 ret_values.append(value)
                 continue
             ws_name = str_to_env(value.split(':')[0])
-            ws_folder = envs.get(ws_name, None) if envs.get(ws_name, None) else (envs.get(loaded_env.as_prefix_workspace() + ws_name, None))
+            ws_folder = envs.get(
+                ws_name,
+                None) if envs.get(
+                ws_name,
+                None) else (
+                envs.get(
+                    loaded_env.as_prefix_workspace() +
+                    ws_name,
+                    None))
             if ws_folder:
-                count = len(value.split(':modified'))-1
+                count = len(value.split(':modified')) - 1
                 ws_folder = join_modified_path(Path(ws_folder), count)
                 if ws_folder.exists():
                     ret_values.append(ws_folder)
@@ -148,11 +184,16 @@ def transform_inputs(ctx: typer.Context, param: typer.CallbackParam, values: Lis
         raise InputsDoNotExistException(values)
     return ret_values
 
-def transform_substitutions(ctx: typer.Context, param: typer.CallbackParam, values):
+
+def transform_substitutions(
+        ctx: typer.Context,
+        param: typer.CallbackParam,
+        values):
     """Transform substitutions into valid (pattern, replacement) tuples."""
     if values is None or not values:
         return []
     return [tuple(value.split("==>", 1)) for value in values if "==>" in value]
+
 
 def find_image(imageFilename: str, imageFolder: Path):
     """
@@ -171,7 +212,7 @@ def find_image(imageFilename: str, imageFolder: Path):
     return None
 
 
-def collect_xml_files_by_mets(mets:Path) -> List[Path]:
+def collect_xml_files_by_mets(mets: Path) -> List[Path]:
     """
     Read METS and return the existing xml-files in correct order
     """
@@ -217,7 +258,8 @@ def collect_xml_files_by_mets(mets:Path) -> List[Path]:
         if not file_id:
             continue
 
-        # Find the corresponding <file> element in fileSec by matching the FILE ID.
+        # Find the corresponding <file> element in fileSec by matching the FILE
+        # ID.
         file_elem = root.find(f".//{alias}:file[@ID='{file_id}']", ns)
         if file_elem is None:
             continue
@@ -229,14 +271,14 @@ def collect_xml_files_by_mets(mets:Path) -> List[Path]:
 
         # Extract the file path from the xlink:href attribute.
         href = flocat.get("{http://www.w3.org/1999/xlink}href")
-        if href and href.lower().endswith('.xml') and mets.parent.joinpath(href.split('/')[-1]).is_file():
+        if href and href.lower().endswith('.xml') and mets.parent.joinpath(
+                href.split('/')[-1]).is_file():
             xml_files.append(mets.parent.joinpath(href.split('/')[-1]))
     return xml_files
 
 
-
-def collect_xml_files(inputpaths: Iterator[Path|str],
-                      exclude: Tuple[str, ...] = ('metadata.xml', 'mets.xml', 'METS.xml')) -> List[Path]:
+def collect_xml_files(inputpaths: Iterator[Path | str], exclude: Tuple[str, ...] = (
+        'metadata.xml', 'mets.xml', 'METS.xml')) -> List[Path]:
     """
     Collects XML files from given input paths or environmental names pointing to an existing path,
     excluding specified filenames.
@@ -252,11 +294,13 @@ def collect_xml_files(inputpaths: Iterator[Path|str],
     xml_files = []
     load_dotenv()
     envs = dotenv_values()
-    loaded_env = Environments[envs.get(Environments.PAGEPLUS.as_prefix_environment(), 'PAGEPLUS')]
+    loaded_env = Environments[envs.get(
+        Environments.PAGEPLUS.as_prefix_environment(), 'PAGEPLUS')]
     empty = True
     for inputpath in inputpaths:
         empty = False
-        if (inputpath.is_file() and inputpath.suffix == '.xml' and inputpath.name.upper() == 'METS.XML'):
+        if (inputpath.is_file() and inputpath.suffix ==
+                '.xml' and inputpath.name.upper() == 'METS.XML'):
             xml_files = collect_xml_files_by_mets(inputpath)
             return xml_files
         elif (inputpath.is_file() and inputpath.suffix == '.xml' and inputpath.name not in exclude and
@@ -264,21 +308,28 @@ def collect_xml_files(inputpaths: Iterator[Path|str],
             xml_files.append(inputpath)
         elif inputpath.is_dir():
             print([xml_file for xml_file in inputpath.glob('*.xml') if
-                              xml_file.name not in exclude])
-            xml_files.extend([xml_file for xml_file in inputpath.glob('*.xml') if
-                              xml_file.name not in exclude and is_page_xml(xml_file)])
+                   xml_file.name not in exclude])
+            xml_files.extend([xml_file for xml_file in inputpath.glob(
+                '*.xml') if xml_file.name not in exclude and is_page_xml(xml_file)])
         else:
             ws_name = str_to_env(inputpath.name)
-            ws_folder = envs.get(ws_name, None) if envs.get(ws_name, None) else \
-                (envs.get(loaded_env.as_prefix_workspace() + ws_name, None))
+            ws_folder = envs.get(
+                ws_name,
+                None) if envs.get(
+                ws_name,
+                None) else (
+                envs.get(
+                    loaded_env.as_prefix_workspace() +
+                    ws_name,
+                    None))
             if ws_folder:
-                xml_files.extend([xml_file for xml_file in Path(ws_folder).glob('*.xml') if
-                          xml_file.name not in exclude and is_page_xml(xml_file)])
+                xml_files.extend([xml_file for xml_file in Path(ws_folder).glob(
+                    '*.xml') if xml_file.name not in exclude and is_page_xml(xml_file)])
     if empty:
         ws_folder = envs.get(loaded_env.as_prefix_loaded_workspace())
         if ws_folder and ws_folder in envs.keys():
-            xml_files.extend([xml_file for xml_file in Path(envs.get(ws_folder)).glob('*.xml') if
-                          xml_file.name not in exclude and is_page_xml(xml_file)])
+            xml_files.extend([xml_file for xml_file in Path(envs.get(ws_folder)).glob(
+                '*.xml') if xml_file.name not in exclude and is_page_xml(xml_file)])
     return sorted(xml_files)
 
 
@@ -295,13 +346,15 @@ def is_page_xml(file_path: Path) -> bool:
 
         # Check for PAGE XML namespace or specific elements
         # Typical namespace URI for PAGE is something like: "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15"
-        # Adjust the namespace URI according to the version of PAGE XML you're expecting
+        # Adjust the namespace URI according to the version of PAGE XML you're
+        # expecting
         page_namespace = "http://schema.primaresearch.org/PAGE/gts/pagecontent/"
         return (root.tag.startswith(f"{{{page_namespace}") or root.tag.startswith("PcGts"))
 
     except ET.ParseError:
         # Not an XML file, or XML is malformed
         return False
+
 
 def is_page_version(file_path: Path) -> Any | None:
     """
@@ -327,6 +380,7 @@ def determine_output_path(xml_file, outputdir, filename):
     """
     load_dotenv()
     if outputdir is None:
-        return xml_file.parent / get_key(find_dotenv(), Environments.PAGEPLUS.as_prefix()+'MODIFIED') / filename
+        return xml_file.parent / \
+            get_key(find_dotenv(), Environments.PAGEPLUS.as_prefix() + 'MODIFIED') / filename
     else:
         return Path(outputdir) / filename

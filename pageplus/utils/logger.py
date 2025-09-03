@@ -1,16 +1,16 @@
 import logging
 import sys
+import warnings
 from pathlib import Path
 from typing import Optional
-import warnings
+
 
 def setup_logger(log_file: Optional[Path] = None) -> logging.Logger:
     """
     Set up the logger with the specified configuration.
-    
+
     Args:
         log_file (Optional[Path]): Path to the log file. If None, logs will only go to console.
-        
     Returns:
         logging.Logger: Configured logger instance
     """
@@ -19,7 +19,8 @@ def setup_logger(log_file: Optional[Path] = None) -> logging.Logger:
     logger.setLevel(logging.INFO)
 
     # Create formatters
-    file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     console_formatter = logging.Formatter('%(levelname)s: %(message)s')
 
     # Create console handler
@@ -35,7 +36,8 @@ def setup_logger(log_file: Optional[Path] = None) -> logging.Logger:
         file_handler.setFormatter(file_formatter)
         logger.addHandler(file_handler)
 
-    return logger 
+    return logger
+
 
 def configure_external_logging() -> None:
     """
@@ -54,8 +56,11 @@ def configure_external_logging() -> None:
     logging.getLogger("pytesseract").setLevel(logging.WARNING)
     logging.getLogger("PIL").setLevel(logging.WARNING)
     logging.getLogger("pikepdf").setLevel(logging.WARNING)
-    logging.getLogger('watchdog.observers.inotify_buffer').setLevel(logging.INFO)
-    logging.getLogger("streamlit.runtime.scriptrunner.script_runner").setLevel(logging.ERROR)
-    
+    logging.getLogger(
+        'watchdog.observers.inotify_buffer').setLevel(logging.INFO)
+    logging.getLogger('watchdog.').setLevel(logging.WARNING)
+    logging.getLogger(
+        "streamlit.runtime.scriptrunner.script_runner").setLevel(logging.ERROR)
+
     # Filter warnings
-    warnings.filterwarnings("ignore", category=UserWarning, module="pydantic") 
+    warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
