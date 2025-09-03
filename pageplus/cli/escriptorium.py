@@ -402,9 +402,7 @@ else:
         if loading:
             load_workspace(workspace)
         print(
-            f"The data was successfully stored in: [bold purple]{
-                str(
-                    wsfolder.absolute())}[/bold purple]")
+            f"The data was successfully stored in: [bold purple]{str(wsfolder.absolute())}[/bold purple]")
         print(
             f"And be access via the eScriptorium workspace: [bold green]{workspace}[/bold green]")
 

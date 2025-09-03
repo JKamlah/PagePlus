@@ -168,9 +168,7 @@ class Page:
                 region.set('id', f"r{element['counter']['r']}")
                 self.__reassign_id(
                     element, region, element['order'].get(
-                        ET.QName(
-                            region.tag).localname), f"r{
-                        element['counter']['r']}")
+                        ET.QName(region.tag).localname), f"r{element['counter']['r']}")
             element['counter']['r'] += 1
         reading_order = self.tree.find(f".//{{{self.ns}}}ReadingOrder")
         if reading_order is not None:

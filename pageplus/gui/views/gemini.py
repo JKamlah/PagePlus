@@ -148,14 +148,11 @@ def calculate_token_costs(aggregated_usage_data, settings):
         total_calculated_cost = prompt_cost + candidate_cost
 
         cost_report_lines.append(
-            f"Estimated Cost for Prompt Tokens: ${
-                prompt_cost:.6f}")
+            f"Estimated Cost for Prompt Tokens: ${prompt_cost:.6f}")
         cost_report_lines.append(
-            f"Estimated Cost for Candidates Tokens: ${
-                candidate_cost:.6f}")
+            f"Estimated Cost for Candidates Tokens: ${candidate_cost:.6f}")
         cost_report_lines.append(
-            f"Estimated Combined Total Cost: ${
-                total_calculated_cost:.6f}")
+            f"Estimated Combined Total Cost: ${total_calculated_cost:.6f}")
     elif costs_calculable:  # Should not happen if logic is correct, but as a fallback
         cost_report_lines.append(
             "One or both token costs are missing/invalid, detailed costs not calculated."
@@ -183,10 +180,7 @@ def process_result(
 
     if result and result.get("success"):
         final_message = (
-            f"{final_output_value}\n" f"{process_type} completed successfully.\n{
-                result.get(
-                    'output',
-                    '')}" f"{cost_report_str}")
+            f"{final_output_value}\n" f"{process_type} completed successfully.\n{result.get('output','')}" f"{cost_report_str}")
         terminal_text += terminal_container.text_area(
             "Process Terminal",
             value=final_message,
@@ -531,12 +525,9 @@ def show_gemini(bridge: GeminiBridge) -> None:
             if st.session_state.modification_input["type"] == "directory":
                 # For directory input, show directory path and file count
                 st.write(
-                    f"Directory: {
-                        st.session_state.modification_input['path']}")
+                    f"Directory: {st.session_state.modification_input['path']}")
                 st.write(
-                    f"Extensions: {
-                        ', '.join(
-                            st.session_state.modification_input['extensions'])}")
+                    f"Extensions: {', '.join(st.session_state.modification_input['extensions'])}")
                 st.write(
                     f"Total files: {len(st.session_state.modification_input['files'])}")
 
@@ -735,9 +726,7 @@ def show_gemini(bridge: GeminiBridge) -> None:
                                                     aggregated_usage["total_tokens"] += usage_meta.get(
                                                         'total_token_count', 0)
                                     elif isinstance(individual_results_messages, list):
-                                        main_output_message = (
-                                            f"Multithreaded OCR process initiated for " f"{
-                                                len(selected_files_for_ocr)} files. Output below.")
+                                        main_output_message = (f"Multithreaded OCR process initiated for " f"{len(selected_files_for_ocr)} files. Output below.")
                                     else:
                                         main_output_message = (
                                             "Multithreaded OCR process returned an unexpected data type."
@@ -754,8 +743,7 @@ def show_gemini(bridge: GeminiBridge) -> None:
                                         "aggregated_usage": aggregated_usage
                                     }
                                 except Exception as e:
-                                    error_msg = f"Error during OCR processing: {
-                                        str(e)}"
+                                    error_msg = f"Error during OCR processing: {str(e)}"
                                     # This print should go to the redirected stdout
                                     # (QueueOutput)
                                     print(error_msg)
@@ -1017,8 +1005,7 @@ def show_gemini(bridge: GeminiBridge) -> None:
                                         "aggregated_usage": aggregated_usage
                                     }
                                 except Exception as e:
-                                    error_msg = f"Error during ReOCR processing: {
-                                        str(e)}"
+                                    error_msg = f"Error during ReOCR processing: {str(e)}"
                                     # This print should go to the redirected stdout
                                     # (QueueOutput)
                                     print(error_msg)

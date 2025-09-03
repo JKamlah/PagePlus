@@ -161,8 +161,7 @@ def load_gemini2d_json(json_path: [str | Path]) -> List[dict]:
             # Check if data is a list, adapt if it's a single object
             if not isinstance(data, list):
                 logging.warning(
-                    f"JSON data in {
-                        json_path.name} is not a list. Assuming list structure from values if possible, or processing top-level keys.")
+                    f"JSON data in {json_path.name} is not a list. Assuming list structure from values if possible, or processing top-level keys.")
                 # Attempt to handle common structures, adjust as needed for
                 # your specific JSON format
                 if isinstance(
@@ -188,66 +187,59 @@ def load_gemini2d_json(json_path: [str | Path]) -> List[dict]:
 # --- Generate PAGE XML Content (remains the same) ---
 
 
-def gemini2d_to_page(data: json, image: Path, settings: dict = None) -> str:
+def gemini2d_to_page(data: dict, image: Path, settings: dict = None) -> str:
     try:
         with Image.open(image) as img:
             img_width, img_height = img.size
-            logging.info(
-                f"Image dimensions for {
-                    image.name}: Width={img_width}, Height={img_height}")
+            logging.info(f"Image dimensions for {image.name}: Width={img_width}, Height={img_height}")
     except FileNotFoundError:
         logging.error(f"Error: Image file not found at '{image}'")
+        return ""
     except Exception as e:
         logging.error(f"Error opening or reading image '{image}': {e}")
+        return ""
 
     _, data = gemini2d_preprocess(data, img, settings)
 
-    page_xml_lines = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
-                      '<PcGts xmlns="http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15 http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15/pagecontent.xsd">',
-                      '    <Metadata>', '        <Creator>PagePlus</Creator>',
-                      f'        <Created>{datetime.now().isoformat()}</Created>',
-                      '        <Comments>Generated from Gemini-2d-JSON</Comments>', '    </Metadata>',
-                      f'    <Page imageFilename="{image.name}" imageWidth="{img_width}" imageHeight="{img_height}">']
+    page_xml_lines = [
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+        '<PcGts xmlns="http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15" '
+        'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
+        'xsi:schemaLocation="http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15 '
+        'http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15/pagecontent.xsd">',
+        "    <Metadata>",
+        "        <Creator>PagePlus</Creator>",
+        f"        <Created>{datetime.now().isoformat()}</Created>",
+        "        <Comments>Generated from Gemini-2d-JSON</Comments>",
+        "    </Metadata>",
+        f'    <Page imageFilename="{image.name}" imageWidth="{img_width}" imageHeight="{img_height}">'
+    ]
 
     for ridx, region_data in enumerate(data):
-        region_id = f"r{ridx + 1}"
-        region_coords = f"{' '.join([f"{int(x)},{int(y)}" for x,
-                                    y in region_data['region_polygon']]).strip()}"
+        region_id = f"r{ridx+1}"
+        region_coords = " ".join(f"{int(x)},{int(y)}" for x, y in region_data["region_polygon"])
         page_xml_lines.append(f'        <TextRegion id="{region_id}">')
-        page_xml_lines.append(
-            f'            <Coords points="{region_coords}"/>')
+        page_xml_lines.append(f'            <Coords points="{region_coords}"/>')
 
-        for idx, line_data in enumerate(region_data['lines']):
-            # PAGE XML Coords: top-left, top-right, bottom-right, bottom-left
-            page_xml_lines.append(
-                f'            <TextLine id="{region_id}_l{
-                    idx +
-                    1}" custom=" structure {{type:{
-                    line_data['line_structure_type']}}}">')
-            page_xml_lines.append(
-                f'                <Coords points="{
-                    ' '.join(
-                        [
-                            f"{
-                                int(x)},{
-                                int(y)}" for x, y in line_data['line_polygon']]).strip()}"/>')
-            page_xml_lines.append(
-                f'                <Baseline points="{
-                    ' '.join(
-                        [
-                            f"{
-                                int(x)},{
-                                int(y)}" for x, y in line_data['line_baseline']]).strip()}"/>')
-            page_xml_lines.append('                <TextEquiv>')
-            page_xml_lines.append(
-                f'                    <Unicode>{
-                    escape(
-                        line_data['line_text'])}</Unicode>')
-            page_xml_lines.append('                </TextEquiv>')
-            page_xml_lines.append('            </TextLine>')
-        page_xml_lines.append('        </TextRegion>')
-    page_xml_lines.append('    </Page>')
-    page_xml_lines.append('</PcGts>')
+        for idx, line_data in enumerate(region_data["lines"]):
+            line_id = f"{region_id}_l{idx+1}"
+            line_type = line_data["line_structure_type"]
+            line_coords = " ".join(f"{int(x)},{int(y)}" for x, y in line_data["line_polygon"])
+            baseline_coords = " ".join(f"{int(x)},{int(y)}" for x, y in line_data["line_baseline"])
+            line_text = escape(line_data["line_text"])
+
+            page_xml_lines.append(f'            <TextLine id="{line_id}" custom=" structure {{type:{line_type}}}">')
+            page_xml_lines.append(f'                <Coords points="{line_coords}"/>')
+            page_xml_lines.append(f'                <Baseline points="{baseline_coords}"/>')
+            page_xml_lines.append("                <TextEquiv>")
+            page_xml_lines.append(f'                    <Unicode>{line_text}</Unicode>')
+            page_xml_lines.append("                </TextEquiv>")
+            page_xml_lines.append("            </TextLine>")
+
+        page_xml_lines.append("        </TextRegion>")
+
+    page_xml_lines.append("    </Page>")
+    page_xml_lines.append("</PcGts>")
 
     final_xml_content = "\n".join(page_xml_lines)
     return final_xml_content

@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from importlib import util
 from pathlib import Path
 from threading import Lock
-from typing import List, Optional
+from typing import List
 from enum import Enum
 
 import typer
@@ -18,7 +18,7 @@ from pageplus.utils.fs import transform_inputs
 from pageplus.utils.image import get_image
 from pageplus.utils.profile import profile, ProfileFnRet
 from pageplus.utils.io import gemini2d_to_page
-from pageplus.utils.fs import collect_xml_files, find_image
+from pageplus.utils.fs import find_image
 from pageplus.models.page import Page
 
 
@@ -118,7 +118,7 @@ else:
         return llm_api.model
 
     def ocr_settings(ctx: typer.Context, param: typer.CallbackParam, value):
-        model, api_key, api_url, provider = llm_api.model, llm_api.api_key, llm_api.api_base_url, llm_api.provider
+        model, _, _, _ = llm_api.model, llm_api.api_key, llm_api.api_base_url, llm_api.provider
         match param.name:
             case "api_base_url" if (value and value != llm_api.api_base_url):
                 llm_api.api_base_url = model
@@ -585,8 +585,7 @@ def reocr_single_image(
         rate_limit(calls_per_minute)
         try:
             print(
-                f"Processing: {image_path} with context from {xml_path} (Attempt {
-                    attempt + 1})")
+                f"Processing: {image_path} with context from {xml_path} (Attempt {attempt + 1})")
             outputdir_path = Path(
                 outputdir) if outputdir else image_path.parent
             output_path = outputdir_path / "json"
@@ -686,8 +685,7 @@ def reocr_single_image(
                         region = page.get_region_by_id(updated_region['id'])
                         if region is None:
                             print(
-                                f"Region {
-                                    updated_region['id']} not found in {xml_path}")
+                                f"Region {updated_region['id']} not found in {xml_path}")   
                             continue
                         # region.set_tag(tag=updated_region['type'])
                         for updated_line in updated_region['textlines']:
@@ -695,8 +693,7 @@ def reocr_single_image(
                                 updated_line['id'])
                             if textline is None:
                                 print(
-                                    f"Textline {
-                                        updated_line['id']} not found in {xml_path}")
+                                    f"Textline {updated_line['id']} not found in {xml_path}")
                                 continue
                             if updated_line.get('text_content_content', False):
                                 updated_line['text_content'] = updated_line['text_content_content'].strip(
@@ -721,7 +718,7 @@ def reocr_single_image(
             print(f"An error occurred processing {image_path}: {e}")
             attempt += 1
             if attempt <= retries and getattr(e, 'code', None) != 429:
-                print(f"[yellow]Retrying after 60 seconds...[/yellow]")
+                print("[yellow]Retrying after 60 seconds...[/yellow]")
                 time.sleep(60)
             else:
                 if getattr(e, 'code', None) == 429:

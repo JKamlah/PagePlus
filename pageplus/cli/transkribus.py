@@ -283,8 +283,7 @@ else:
         with Status("Searching for documents") as status:
             try:
                 cols = tsclient.list_collections()
-                print(
-                    "[bold green]Transkribus Document Search Report[/bold green] - [white]Version 1.0[/white]")
+                print("[bold green]Transkribus Document Search Report[/bold green] - [white]Version 1.0[/white]")
                 print(f"Total collections found: {len(cols)}")
                 documents = []
                 total_documents = 0
@@ -292,36 +291,23 @@ else:
                     col_id = col["colId"]
                     col_name = col["colName"]
                     total_documents += int(col["nrOfDocuments"])
-                    if str_filter_not_match(
-                        filter_by,
-                        search_term,
-                        col_name,
-                        DataFilter.COLLECTION,
-                        flag) or str_filter_not_match(
-                        filter_by,
-                        search_term,
-                        col.get(
-                            "role",
-                            ""),
-                            DataFilter.ROLE,
-                            flag):
+                    if str_filter_not_match(filter_by, search_term, col_name, DataFilter.COLLECTION, flag) or \
+                            str_filter_not_match(filter_by, search_term, col.get("role", ""), DataFilter.ROLE, flag):
                         continue
                     doc_list = tsclient.list_docs(col_id)
                     for doc in doc_list:
                         doc_id = doc["docId"]
-                        if str_filter_not_match(
-                            filter_by, search_term, doc.get(
-                                "title", ""), DataFilter.DOCUMENT, flag):
+                        if str_filter_not_match(filter_by, search_term, doc.get("title", ""), DataFilter.DOCUMENT,
+                                                flag):
                             continue
                         if DataFilter.PAGE in filter_by:
-                            if any(int(doc.get("nrOfPages")) < int(search_term[idx]) for idx, f in enumerate(
-                                    filter_by) if f == DataFilter.PAGE):
+                            if any(int(doc.get("nrOfPages")) < int(search_term[idx]) for idx, f in enumerate(filter_by) \
+                                   if f == DataFilter.PAGE):
                                 continue
-                        doc_overview = tsclient.get_doc_overview_md(
-                            col_id, doc_id)
+                        doc_overview = tsclient.get_doc_overview_md(col_id, doc_id)
                         doc_md = doc_overview["trp_return"]["md"]
                         if DataFilter.PAGESTATUS in filter_by:
-                            if not any(int(doc_md.get(f"nrOf{search_term[idx]}", -1)) != 0 for
+                            if not any(int(doc_md.get(f"nrOf{search_term[idx]}", -1)) != 0 for \
                                        idx, f in enumerate(filter_by) if f == DataFilter.PAGESTATUS):
                                 continue
                         doc_stats = {
@@ -335,7 +321,6 @@ else:
                         }
                         documents.append(doc_stats)
             except Exception as e:
-                print(status)
                 print(f"[red]Error occurred: {e}[/red]")
                 return
         print(f"Total documents found: {total_documents}")
@@ -348,23 +333,16 @@ else:
         table.add_column("Role", style="cyan")
         collection = ""
         for document in documents:
-            table.add_row(
-                f"{
-                    document.get('col_name')} ({
-                    document.get('col_id')})".replace(
-                    collection, ""), f"{
-                    document.get('doc_name')} ({
-                        document.get('doc_id')})", f"{
-                            document.get('pages')}", f"New: {
-                                document.get('doc_md').get('nrOfNew')}, " f"InProgress: {
-                                    document.get('doc_md').get('nrOfInProgress')}, " f"Done: {
-                                        document.get('doc_md').get('nrOfDone')}, " f"Final: {
-                                            document.get('doc_md').get('nrOfFinal')}, " f"GT: {
-                                                document.get('doc_md').get('nrOfGT')}", f"{
-                                                    document.get('role')}")
-            collection = f"{
-                document.get('col_name')} ({
-                document.get('col_id')})"
+            table.add_row(f"{document.get('col_name')} ({document.get('col_id')})".replace(collection, ""),
+                          f"{document.get('doc_name')} ({document.get('doc_id')})",
+                          f"{document.get('pages')}",
+                          f"New: {document.get('doc_md').get('nrOfNew')}, "
+                          f"InProgress: {document.get('doc_md').get('nrOfInProgress')}, "
+                          f"Done: {document.get('doc_md').get('nrOfDone')}, "
+                          f"Final: {document.get('doc_md').get('nrOfFinal')}, "
+                          f"GT: {document.get('doc_md').get('nrOfGT')}",
+                          f"{document.get('role')}")
+            collection = f"{document.get('col_name')} ({document.get('col_id')})"
         print(table)
 
     @app.command(rich_help_panel="Document")
@@ -519,9 +497,7 @@ else:
         if loading:
             load_workspace(workspace)
         print(
-            f"The data was successfully stored in: [bold purple]{
-                str(
-                    wsfolder.absolute())}[/bold purple]")
+            f"The data was successfully stored in: [bold purple]{str(wsfolder.absolute())}[/bold purple]")
         print(
             f"And be access via the Transkribus workspace: [bold green]{workspace}[/bold green]")
 
@@ -648,9 +624,7 @@ if (spec := util.find_spec('pageplus.utils.transkribus.transkribus_to_prima')) i
             print(
                 f"[green]File downloaded successfully: {output_filename}[/green]")
         else:
-            print(
-                f"[red]Failed to download file. Status code: {
-                    response.status_code}[/red]")
+            print(f"[red]Failed to download file. Status code: {response.status_code}[/red]")
 
 else:
 

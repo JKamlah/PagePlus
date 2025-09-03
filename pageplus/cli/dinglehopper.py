@@ -72,8 +72,7 @@ def _install() -> None:
                         f.write(line)
         else:
             print(
-                f"[red]Failed to download file. Status code: {
-                    response.status_code}[/red]")
+                f"[red]Failed to download file. Status code: {response.status_code}[/red]")
 
 
 if (spec := util.find_spec('pageplus.utils.dinglehopper.edit_distance')) is None:

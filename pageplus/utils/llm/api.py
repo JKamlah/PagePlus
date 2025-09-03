@@ -89,18 +89,15 @@ if (spec := util.find_spec('litellm')) is not None:
             modellist = [model['id'] for model in response['data']]
             if modellist is None:
                 print(
-                    f"[ModelCheck] [orange]No model selection available for provider {
-                        self.llmprovider.value}.[/orange]")
+                    f"[ModelCheck] [orange]No model selection available for provider {self.llmprovider.value}.[/orange]")
                 return True
             elif modelname in modellist:
                 print(
-                    f"[ModelCheck] [green]Model exists in provider {
-                        self.llmprovider.value} model selection.[/green]")
+                    f"[ModelCheck] [green]Model exists in provider {self.llmprovider.value} model selection.[/green]")
                 return True
             else:
                 print(
-                    f"[ModelCheck] [red]Model is not in selection options for {
-                        self.llmprovider.value}.[/red]")
+                    f"[ModelCheck] [red]Model is not in selection options for {self.llmprovider.value}.[/red]")
                 return False
 
         def show_models(self):
@@ -115,10 +112,7 @@ if (spec := util.find_spec('litellm')) is not None:
             response = response.json()
             modellist = response['data']
             if modellist:
-                print(
-                    f"[green]Available models for provider {
-                        self.provider.replace(
-                            '__', ' - ')}[/green]")
+                print(f"[green]Available models for provider {self.provider.replace('__', ' - ')}[/green]")
                 table = Table(title="[green]Models overview[/green]")
                 table.add_column(
                     "Provider",
@@ -126,8 +120,7 @@ if (spec := util.find_spec('litellm')) is not None:
                     style="cyan",
                     no_wrap=True)
                 table.add_column("Model")
-                table.add_row(self.provider.replace('__', ' - '),
-                              '\n'.join([model['id'] for model in modellist]))
+                table.add_row(self.provider.replace('__', ' - '), '\n'.join([model['id'] for model in modellist]))
                 print(table)
 
 if (spec := util.find_spec('google')) is not None and (

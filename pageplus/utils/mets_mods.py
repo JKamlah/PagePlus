@@ -179,13 +179,11 @@ class MetsElement:
         if content is not None:
             if not self.allows_content and not loose:
                 raise MetsError(
-                    f"Element '{
-                        self.tag}' does not allow content.")
+                    f"Element '{self.tag}' does not allow content.")
             if not self.allows_content and self.verbose:
                 print(
                     MetsError(
-                        f"WARNING: Element '{
-                            self.tag}' does not allow content."))
+                        f"WARNING: Element '{self.tag}' does not allow content."))
             self.content = content
         else:
             self.content = None
@@ -199,16 +197,11 @@ class MetsElement:
             if self.loose:
                 if self.verbose:
                     print(
-                        MetsError(
-                            f"WARNING: Child element '{
-                                child.tag}' not allowed in parent '{
-                                self.tag}'."))
+                        MetsError(f"WARNING: Child element '{child.tag}' not allowed in parent '{self.tag}'."))
                 self.children.append(child)
             else:
                 raise MetsError(
-                    f"WARNING: Child element '{
-                        child.tag}' not allowed in parent '{
-                        self.tag}'.")
+                    f"WARNING: Child element '{child.tag}' not allowed in parent '{self.tag}'.")
 
     def remove_child(self, child: "MetsElement"):
         """Remove a child element."""

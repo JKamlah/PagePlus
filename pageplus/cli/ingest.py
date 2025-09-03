@@ -52,12 +52,10 @@ def gemini2d(
             with open(json_file.with_suffix('.xml'), 'w', encoding='utf-8') as f_out:
                 f_out.write(xml_content)
             print(
-                f"Successfully wrote PAGE XML to: {
-                    json_file.with_suffix('.xml')}")
+                f"Successfully wrote PAGE XML to: {json_file.with_suffix('.xml')}")
         except Exception as e:
             print(
-                f"Error writing PAGE XML file '{
-                    json_file.with_suffix('.xml')}': {e}")
+                f"Error writing PAGE XML file '{json_file.with_suffix('.xml')}': {e}")
 
 
 if __name__ == "__main__":

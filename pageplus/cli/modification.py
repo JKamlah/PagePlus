@@ -327,17 +327,11 @@ def delete_textlines(
                     if len(textregion.textlines) == count:
                         page.delete_element(textregion.xml_element)
                         logging.info(
-                            f'Delete region: {
-                                textregion.get_id()} containing only textline {
-                                line.get_id()} with text {
-                                line.get_text()}')
+                                f'Delete region: {textregion.get_id()} containing only textline {line.get_id()} with text {line.get_text()}')
                     else:
                         page.delete_element(line.xml_element)
                         logging.info(
-                            f'Delete textline: {
-                                line.get_id()} in region {
-                                textregion.get_id()} with text {
-                                line.get_text()}')
+                            f'Delete textline: {line.get_id()} in region {textregion.get_id()} with text {line.get_text()}')
                         count += 1
 
         # Determine output file path and write the modified XML file
@@ -445,8 +439,7 @@ def extend_lines(
                         process_overlapping_lines(textregion, idx, line)
                 except Exception as e:
                     logging.error(
-                        f"Error processing line {
-                            line.get_id()}: {e}")
+                        f"Error processing line {line.get_id()}: {e}")
         if not dry_run:
             fout = xml_file if outputdir is None else determine_output_path(
                 xml_file, outputdir, filename)
@@ -492,8 +485,7 @@ def pseudolinepolygon(
                     line.extend_baseline()
                 except Exception as e:
                     logging.error(
-                        f"Error processing line {
-                            line.get_id()}: {e}")
+                        f"Error processing line {line.get_id()}: {e}")
 
         fout = xml_file if outputdir is None else determine_output_path(
             xml_file, outputdir, filename)
@@ -776,9 +768,7 @@ def split_big_regions_vertical(
             page.save_xml(fout)
         else:
             logging.info(
-                f'[DRY RUN] Would write modified xml file to: ' f'{
-                    xml_file if outputdir is None else determine_output_path(
-                        xml_file, outputdir, filename)}')
+                f'[DRY RUN] Would write modified xml file to: ' f'{xml_file if outputdir is None else determine_output_path(xml_file, outputdir, filename)}')
 
 
 @app.command()
@@ -986,8 +976,7 @@ def _calculate_hull(coords: list, group_regions: list):
         hull = hull.buffer(5)
     elif not isinstance(hull, Polygon):
         logging.warning(
-            f"Unexpected hull type: {
-                type(hull)}, using original region coordinates")
+            f"Unexpected hull type: {type(hull)}, using original region coordinates")
         hull = group_regions[0].get_coordinates(returntype="polygon")
 
     return hull
@@ -1115,8 +1104,7 @@ def merge_columnaligned_regions(
                 continue
 
             logging.info(
-                f'Merging {
-                    len(group_indices)} column-aligned regions')
+                f'Merging {len(group_indices)} column-aligned regions')
 
             group_regions = [page.regions.textregions[i]
                              for i in group_indices]
@@ -1157,8 +1145,7 @@ def merge_columnaligned_regions(
 
                 # base_region.sort_baselines(mode='single_col')
                 logging.info(
-                    f'Successfully merged {
-                        len(group_indices)} regions into one')
+                    f'Successfully merged {len(group_indices)} regions into one')
 
             except Exception as e:
                 logging.error(f'Error merging regions: {str(e)}')
@@ -1231,8 +1218,7 @@ def replace_tag(
                         continue
                 if region.get_tag() == old_tag:
                     print(
-                        f"[yellow]Replacing tag in TextRegion: {
-                            region.get_id()}[/yellow]")
+                        f"[yellow]Replacing tag in TextRegion: {region.get_id()} with tag {new_tag}")
                     region.set_tag(new_tag)
 
         # Process TableRegions
@@ -1248,8 +1234,7 @@ def replace_tag(
                         continue
                 if tableregion.get_tag() == old_tag:
                     print(
-                        f"[yellow]Replacing tag in TableRegion: {
-                            tableregion.get_id()}[/yellow]")
+                        f"[yellow]Replacing tag in TableRegion: {tableregion.get_id()} with tag {new_tag}")
                     tableregion.set_tag(new_tag)
 
         # Process Textlines
@@ -1266,8 +1251,7 @@ def replace_tag(
                             continue
                     if line.get_tag() == old_tag:
                         print(
-                            f"[yellow]Replacing tag in Textline: {
-                                line.get_id()}[/yellow]")
+                            f"[yellow]Replacing tag in Textline: {line.get_id()} with tag {new_tag}")
                         line.set_tag(new_tag)
 
         if not dry_run:
@@ -1330,8 +1314,7 @@ def remove_tag(
                         continue
                 if region.get_tag() == tag_to_remove:
                     print(
-                        f"[red]Removing TextRegion: {
-                            region.get_id()} with tag '{tag_to_remove}'[/red]")
+                        f"[red]Removing TextRegion: {region.get_id()} with tag '{tag_to_remove}'[/red]")
                     page.delete_element(region.xml_element)
 
         # Process TableRegions
@@ -1347,8 +1330,7 @@ def remove_tag(
                         continue
                 if tableregion.get_tag() == tag_to_remove:
                     print(
-                        f"[red]Removing TableRegion: {
-                            tableregion.get_id()} with tag '{tag_to_remove}'[/red]")
+                        f"[red]Removing TableRegion: {tableregion.get_id()} with tag '{tag_to_remove}'[/red]")
                     page.delete_element(tableregion.xml_element)
 
         # Reload regions after deletions
@@ -1368,8 +1350,7 @@ def remove_tag(
                             continue
                     if line.get_tag() == tag_to_remove:
                         print(
-                            f"[red]Removing Textline: {
-                                line.get_id()} with tag '{tag_to_remove}'[/red]")
+                            f"[red]Removing Textline: {line.get_id()} with tag '{tag_to_remove}'[/red]")
                         page.delete_element(line.xml_element)
 
         if not dry_run:
@@ -1414,23 +1395,20 @@ def rectangularize(
                 region.buffer(distance=0, direction='all', rectangle=True)
                 region.fit_into_parent(page_size)
                 print(
-                    f"[yellow]Rectangularizing TextRegion: {
-                        region.get_id()}[/yellow]")
+                    f"[yellow]Rectangularizing TextRegion: {region.get_id()}[/yellow]")
         # Process TableRegions
         if 'TableRegion' in level:
             for tableregion in page.regions.tableregions:
                 tableregion.buffer(distance=0, direction='all', rectangle=True)
                 tableregion.fit_into_parent(page_size)
                 print(
-                    f"[yellow]Rectangularizing TableRegion: {
-                        tableregion.get_id()}[/yellow]")
+                    f"[yellow]Rectangularizing TableRegion: {tableregion.get_id()}[/yellow]")
                 for cell in tableregion.tablecells:
                     cell.buffer(distance=0, direction='all', rectangle=True)
                     tableregion.fit_into_parent(
                         tableregion.get_coordinates('linearring'))
                     print(
-                        f"[yellow]Rectangularizing TableCell: {
-                            cell.get_id()}[/yellow]")
+                        f"[yellow]Rectangularizing TableCell: {cell.get_id()}[/yellow]")
 
         # Process Textlines
         if 'Textline' in level:
@@ -1441,8 +1419,7 @@ def rectangularize(
                     line.buffer(distance=0, direction='all', rectangle=True)
                     line.fit_into_parent()
                     print(
-                        f"[yellow]Rectangularizing Textline: {
-                            line.get_id()}[/yellow]")
+                        f"[yellow]Rectangularizing Textline: {line.get_id()}[/yellow]")
 
         if not dry_run:
             fout = xml_file if outputdir is None else determine_output_path(
@@ -1484,8 +1461,7 @@ def repair_dummy_region(
             if region.get_coordinates(returntype="polygon") is None:
                 if region.textlines:
                     print(
-                        f"[yellow]Repairing TextRegion: {
-                            region.get_id()} - Calculating new convex hull[/yellow]")
+                        f"[yellow]Repairing TextRegion: {region.get_id()} - Calculating new convex hull[/yellow]")
                     # Calculate new convex hull from textlines
                     textline_coords = []
                     for line in region.textlines:
@@ -1500,8 +1476,7 @@ def repair_dummy_region(
                         region.buffer(distance=5, direction='all')
                 else:
                     print(
-                        f"[red]Deleting TextRegion: {
-                            region.get_id()} - No textlines found[/red]")
+                        f"[red]Deleting TextRegion: {region.get_id()} - No textlines found[/red]")
                     page.delete_element(region.xml_element)
 
         if not dry_run:
@@ -1604,22 +1579,19 @@ def fit_into_parent(
             for region in page.regions.textregions:
                 region.fit_into_parent(page_size)
                 print(
-                    f"[yellow]Fitting TextRegion: {
-                        region.get_id()} into page[/yellow]")
+                    f"[yellow]Fitting TextRegion: {region.get_id()} into page[/yellow]")
 
         # Process TableRegions
         if 'TableRegion' in level:
             for tableregion in page.regions.tableregions:
                 tableregion.fit_into_parent(page_size)
                 print(
-                    f"[yellow]Fitting TableRegion: {
-                        tableregion.get_id()} into page[/yellow]")
+                    f"[yellow]Fitting TableRegion: {tableregion.get_id()} into page[/yellow]")
                 for cell in tableregion.tablecells:
                     cell.fit_into_parent(
                         tableregion.get_coordinates('linearring'))
                     print(
-                        f"[yellow]Fitting TableCell: {
-                            cell.get_id()} into table[/yellow]")
+                        f"[yellow]Fitting TableCell: {cell.get_id()} into table[/yellow]")
 
         # Process Textlines
         if 'Textline' in level:
@@ -1629,8 +1601,7 @@ def fit_into_parent(
                 for line in region.textlines:
                     line.fit_into_parent()
                     print(
-                        f"[yellow]Fitting Textline: {
-                            line.get_id()} into region[/yellow]")
+                        f"[yellow]Fitting Textline: {line.get_id()} into region[/yellow]")
 
         if not dry_run:
             fout = xml_file if outputdir is None else determine_output_path(

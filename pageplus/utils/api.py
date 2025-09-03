@@ -109,11 +109,9 @@ class API:
         """
         dotfile = find_dotenv()
         name = get_key(
-            dotfile, f"{
-                self.prefix + self.prefix_provider()}USERNAME")
+            dotfile, f"{self.prefix + self.prefix_provider()}USERNAME")
         password = get_key(
-            dotfile, f"{
-                self.prefix + self.prefix_provider()}PASSWORD")
+            dotfile, f"{self.prefix + self.prefix_provider()}PASSWORD")
         return name, password
 
     @credentials.setter

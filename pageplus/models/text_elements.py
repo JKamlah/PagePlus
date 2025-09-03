@@ -569,9 +569,7 @@ class Textline(CoordElement):
 
             if not textline_polygon.intersects(baseline_linestring):
                 logging.warning(
-                    f"{
-                        self.get_id()}: Baseline is outside of the textregion " f"{
-                        self.get_parent_element().attrib['id']}.")
+                    f"{self.get_id()}: Baseline is outside of the textregion " f"{self.get_parent_element().attrib['id']}.")
                 return False
 
             new_baseline_tuples, pts_outside, pts_replaced = [], [], []
@@ -602,22 +600,16 @@ class Textline(CoordElement):
 
             if pts_outside:
                 logging.warning(
-                    f"{
-                        self.get_id()}: Some points of the baseline are outside of the textregion " f"{
-                        self.get_parent_element().attrib['id']}. Points outside {pts_outside}")
+                    f"{self.get_id()}: Some points of the baseline are outside of the textregion " f"{self.get_parent_element().attrib['id']}. Points outside {pts_outside}")
                 if not update:
                     return False
                 else:
                     logging.warning(
-                        f"{
-                            self.get_id()}: Some points got deleted or replaced" f"{
-                            self.get_parent_element().attrib['id']}. Points outside {pts_replaced}")
+                        f"{self.get_id()}: Some points got deleted or replaced" f"{self.get_parent_element().attrib['id']}. Points outside {pts_replaced}")
 
         except TopologicalError:
             logging.warning(
-                f"{
-                    self.get_id()}: Baseline or parentregion {
-                    self.get_parent_element().attrib['id']} is invalid.")
+                f"{self.get_id()}: Baseline or parentregion " f"{self.get_parent_element().attrib['id']} is invalid.")
             return False
         if update:
             self.update_baseline_coordinates(baseline_tuples)
@@ -775,5 +767,4 @@ class Textline(CoordElement):
                 self.update_baseline_coordinates(coords)
         except GEOSException:
             logging.warning(
-                f"The baseline of textline {
-                    self.get_id()} could not be extended.")
+                f"The baseline of textline {self.get_id()} could not be extended.")

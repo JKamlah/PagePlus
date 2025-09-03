@@ -135,10 +135,7 @@ class Workspace:
         for (var, key) in filter_envs(self.prefix_ws).items():
             if not Path(key).exists():
                 print(
-                    f"Workspace {
-                        var.replace(
-                            self.prefix_ws,
-                            '')} does not exist anymore and will be deleted!")
+                    f"Workspace {var.replace(self.prefix_ws, '')} does not exist anymore and will be deleted!")
                 unset_key(dotenv_path, var)
         for (var, key) in filter_envs(self.prefix_loaded_ws).items():
             workspace = self.prefix_ws + \
@@ -163,10 +160,7 @@ class Workspace:
         if get_key(dotenv_path, self.prefix_loaded_ws) == workspace:
             set_key(dotenv_path, self.prefix_loaded_ws, '')
         print(
-            f"Workspace {
-                workspace.replace(
-                    self.prefix_ws,
-                    '')} was deleted!")
+            f"Workspace {workspace.replace(self.prefix_ws, '')} was deleted!")
 
     def copy(
             self,
@@ -224,8 +218,7 @@ class Workspace:
             for file in xml_files:
                 shutil.copy(file, backup_path.joinpath(file.name))
             print(
-                f"Backup created: [bold green]{
-                    len(xml_files)} XML-files[bold green]")
+                f"Backup created: [bold green]{len(xml_files)} XML-files[bold green]")
 
     def restore(
             self,
@@ -253,8 +246,7 @@ class Workspace:
             for file in xml_files:
                 shutil.copy(file, wsfolder)
             print(
-                f"Restored: [bold green]{
-                    len(xml_files)} XML-files[bold green]")
+                f"Restored: [bold green]{len(xml_files)} XML-files[bold green]")
 
     def open(self,
              workspace: Annotated[str,

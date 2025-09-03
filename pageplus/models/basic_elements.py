@@ -65,9 +65,7 @@ class CoordElement:
                 customdict = custom_to_dict(custom)
                 return customdict.get('structure', {}).get('type', '')
         except Exception as e:
-            logging.error(
-                f"Error getting tag for element {
-                    self.xml_element.attrib['id']}: {e}")
+            logging.error(f"Error getting tag for element {self.xml_element.attrib['id']}: {e}")
         return ''
 
     def set_tag(self, tag: str) -> None:
@@ -124,9 +122,7 @@ class CoordElement:
             return MultiPoint(coord_tuples)
 
         if len(coord_tuples) < 3:
-            logging.warning(
-                f"The region {
-                    self.get_id()} has less than 3 coords.")
+            logging.warning(f"The region {self.get_id()} has less than 3 coords.")
             return None
 
         if returntype == "linearring":
@@ -214,8 +210,7 @@ class CoordElement:
         """
         Converts a list of coordinate tuples (x, y) to a string representation.
         """
-        return ' '.join([f"{int(x)},{int(y)}" for x,
-                        y in coords_tuples]).strip()
+        return ' '.join([f"{int(x)},{int(y)}" for x,y in coords_tuples]).strip()
 
     @staticmethod
     def convert_coordinates_polygon_to_str(polygon: Polygon) -> str:
@@ -223,8 +218,7 @@ class CoordElement:
         Converts a Polygon object to a string representation of its coordinates.
         """
         polygon = polygon.exterior if isinstance(polygon, Polygon) else polygon
-        return ' '.join([f"{int(x)},{int(y)}" for x,
-                        y in polygon.coords]).strip() if polygon else ''
+        return ' '.join([f"{int(x)},{int(y)}" for x,y in polygon.coords]).strip() if polygon else ''
 
     # Text Methods
     def get_text(self):

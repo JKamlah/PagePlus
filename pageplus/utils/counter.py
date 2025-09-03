@@ -50,15 +50,8 @@ class SubCounter:
     def statistics(self, pre_text: str = "") -> None:
         if pre_text != "":
             pre_text += "\n"
-        logging.info(
-            f"{pre_text}" f"Overall substitution count\n" f"{
-                self.subs.total()}\n" f"All substitutions\n" +
-            '\n'.join(
-                [
-                    f'{k}: \t{
-                        v:04d}' for k,
-                    v in self.subs.most_common()]))
-
+        logging.info(f"{pre_text}" f"Overall substitution count\n" f"{self.subs.total()}\n" f"All substitutions\n" + '\n'.join([f'{k}: \t{v:04d}' for k,v in self.subs.most_common()]))
+      
     def __add__(self, other: SubCounter) -> SubCounter:
         if isinstance(other, SubCounter):
             self.subs.update(other.subs)

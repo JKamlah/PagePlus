@@ -72,8 +72,7 @@ def statistics(inputs: Annotated[List[str],
 
     # Log cumulative statistics
     pagescounter.statistics(
-        pre_text=f"Statistics for all {
-            len(xml_files)} PAGE-XML")
+        pre_text=f"Statistics for all {len(xml_files)} PAGE-XML")
     counters[f'All {len(xml_files)} PAGE-XML'] = pagescounter
     return counters
 

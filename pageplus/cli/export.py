@@ -343,10 +343,8 @@ def alto(
         page = Page(xml_file)
 
         # ALTO namespace and schema settings.
-        alto_ns = f"http://www.loc.gov/standards/alto/ns-v{
-            alto_version.split('.')[0]}#"
-        xsd_url = f"http://www.loc.gov/standards/alto/v{
-            alto_version.split('.')[0]}/alto-{alto_version}.xsd"
+        alto_ns = f"http://www.loc.gov/standards/alto/ns-v{alto_version.split('.')[0]}#"
+        xsd_url = f"http://www.loc.gov/standards/alto/v{alto_version.split('.')[0]}/alto-{alto_version}.xsd"
 
         # Create ALTO root element.
         alto = ET.Element("alto", nsmap={None: alto_ns})
@@ -594,12 +592,9 @@ else:
                 merged_pdf.pages.extend(pdf_file.pages)
 
             # Save the merged PDF
-            print(
-                f"Converted all PAGE XML files to pdf: '{
-                    xml_files[0].parent.joinpath(
-                        output_filename +
-                        '.pdf')}'.")
-            merged_pdf.save(f'{xml_files[0].parent.joinpath(output_filename + '.pdf')}',
+            output_path = xml_files[0].parent.joinpath(output_filename + '.pdf')
+            print(f"Converted all PAGE XML files to pdf: '{output_path}'.")
+            merged_pdf.save(output_path,
                             compress_streams=True,
                             recompress_flat=True,
                             object_stream_mode=ObjectStreamMode.generate,  # <--- use the ENUM, not a string!
