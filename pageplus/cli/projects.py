@@ -3,7 +3,8 @@ from rich import print
 
 app = typer.Typer()
 
-## TODO: Template for adding project specific methods
+# TODO: Template for adding project specific methods
+
 
 @app.command()
 def project_x():

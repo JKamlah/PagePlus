@@ -30,8 +30,10 @@ def _install() -> None:
     Before llm can be used, please use this install command
     to install litellm!
     """
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-I", "google-genai"])
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-I", "json-repair"])
+    subprocess.check_call([sys.executable, "-m", "pip",
+                          "install", "-I", "google-genai"])
+    subprocess.check_call([sys.executable, "-m", "pip",
+                          "install", "-I", "json-repair"])
 
 
 if (spec := util.find_spec('google')) is None:
@@ -56,8 +58,8 @@ else:
     llm_workspace = Workspace(Environments.GEMINI)
     llm_api = GEMINIAPI(Environments.GEMINI)
 
-
     ### PACKAGE ###
+
     @app.command(rich_help_panel="Package")
     def update_package() -> None:
         """
@@ -65,17 +67,17 @@ else:
         """
         _install()
 
-
     ### SETTINGS ###
+
     @app.command(rich_help_panel="Settings")
-    def set_api_key(api_key: Annotated[str, typer.Argument(help="API Key for the provider")]) -> None:
+    def set_api_key(api_key: Annotated[str, typer.Argument(
+            help="API Key for the provider")]) -> None:
         """
         Set the API Key for the provider
         Returns:
         None
         """
         llm_api.api_key = api_key
-
 
     @app.command(rich_help_panel="Settings")
     def show_settings() -> None:
@@ -86,37 +88,34 @@ else:
         """
         llm_api.show_settings()
 
-
     @app.command()
     def check_valid_key() -> None:
         return llm_api.check_valid_key()
 
-
     ### MODELS ###
+
     @app.command()
     def show_models() -> None:
         return llm_api.show_models()
-
 
     @app.command()
     def show_modeldetails(model: str) -> None:
         llm_api.show_modeldetails(model)
 
-
     @app.command()
-    def check_model(model: Annotated[str, typer.Argument(help="Set model for LLM Provider")]) -> None:
+    def check_model(model: Annotated[str, typer.Argument(
+            help="Set model for LLM Provider")]) -> None:
         llm_api.check_model(model)
 
-
     @app.command()
-    def set_model(model: Annotated[str, typer.Argument(help="Set model for LLM Provider")]) -> None:
+    def set_model(model: Annotated[str, typer.Argument(
+            help="Set model for LLM Provider")]) -> None:
         llm_api.model = model
 
     @app.command()
     def show_model() -> None:
         print(f" Current model: {llm_api.model}")
         return llm_api.model
-
 
     def ocr_settings(ctx: typer.Context, param: typer.CallbackParam, value):
         model, api_key, api_url, provider = llm_api.model, llm_api.api_key, llm_api.api_base_url, llm_api.provider
@@ -128,7 +127,6 @@ else:
             case _:
                 pass
         return None
-
 
     def preprocess_json(data, image):
         """
@@ -156,7 +154,8 @@ else:
             try:
                 # --- 4. Get Relative Bbox and Text ---
                 relative_bbox = entry.get(bbox_key)
-                text = entry.get(text_key, "")  # Default to empty string if no text
+                # Default to empty string if no text
+                text = entry.get(text_key, "")
                 if text == "":
                     for subkey in text_subkeys:
                         if subkey in entry.keys():
@@ -164,7 +163,8 @@ else:
                             break
 
                 if not relative_bbox or len(relative_bbox) != 4:
-                    print(f"Warning: Skipping entry {i} due to missing or invalid bbox: {relative_bbox}")
+                    print(
+                        f"Warning: Skipping entry {i} due to missing or invalid bbox: {relative_bbox}")
                     continue
 
                 xmin_rel, ymin_rel, xmax_rel, ymax_rel = relative_bbox
@@ -185,7 +185,8 @@ else:
                 if num_lines == 0:  # Should not happen with split, but safety check
                     continue
                 if original_box_height_abs < 0:
-                    print(f"Warning: Skipping entry {i} due to negative box height: {relative_bbox}")
+                    print(
+                        f"Warning: Skipping entry {i} due to negative box height: {relative_bbox}")
                     continue
 
                 # --- 7. Calculate Bbox for Each Line ---
@@ -199,7 +200,9 @@ else:
                 else:
                     # Multiple lines, divide the original box height
                     # Avoid division by zero if height is zero
-                    line_box_height = (original_box_height_abs / num_lines) if original_box_height_abs > 0 else 0
+                    line_box_height = (
+                        original_box_height_abs /
+                        num_lines) if original_box_height_abs > 0 else 0
 
                     for line_index, line_text in enumerate(lines):
                         line_ymin = ymin_abs + line_index * line_box_height
@@ -219,32 +222,41 @@ else:
             except KeyError as e:
                 print(f"Warning: Skipping entry {i} due to missing key: {e}")
             except Exception as e:
-                print(f"Warning: Skipping entry {i} due to unexpected error: {e}")
+                print(
+                    f"Warning: Skipping entry {i} due to unexpected error: {e}")
 
         return processed_lines
-
 
     @app.command()
     @profile('gemini-ocr')
     def ocr(inputs: Annotated[List[str],
-    typer.Argument(exists=True, help="Paths to the image files to be checked.", callback=transform_inputs)] = None,
-            outputdir: Annotated[str, typer.Option(
-                help="Path to the output directory where the text files will be saved. "
-                     "If not specified, the output will be created "
-                     "in the image directory.")] = None,
-            image_extensions: Annotated[List[ImageExtension], typer.Option(
-                help="Image file extensions to try (only active with 'same_names')", case_sensitive=False
-            )] = ['.png', '.jpg', '.jpeg', '.tif', '.tiff'],
-            calls_per_minute: Annotated[
-                int, typer.Option(help="API call rate limit per minute")] = 150,
-            create_page: Annotated[bool, typer.Option(help="Tries to create a PAGE XML file from the JSON output.")] = True,
-            profile: Annotated[
-                str, typer.Option(help="Profile function with tag (default:'' no profiling active.")] = '',
+                              typer.Argument(exists=True,
+                                             help="Paths to the image files to be checked.",
+                                             callback=transform_inputs)] = None,
+            outputdir: Annotated[str,
+                                 typer.Option(help="Path to the output directory where the text files will be saved. "
+                                              "If not specified, the output will be created "
+                                              "in the image directory.")] = None,
+            image_extensions: Annotated[List[ImageExtension],
+                                        typer.Option(help="Image file extensions to try (only active with 'same_names')",
+                                                     case_sensitive=False)] = ['.png',
+                                                                               '.jpg',
+                                                                               '.jpeg',
+                                                                               '.tif',
+                                                                               '.tiff'],
+            calls_per_minute: Annotated[int,
+                                        typer.Option(help="API call rate limit per minute")] = 150,
+            create_page: Annotated[bool,
+                                   typer.Option(help="Tries to create a PAGE XML file from the JSON output.")] = True,
+            profile: Annotated[str,
+                               typer.Option(help="Profile function with tag (default:'' no profiling active.")] = '',
             profilelevel: Annotated[List[ProfileLevel],
-            typer.Option(
-                help="Level of profiling. Options: 'stats' (always true), 'params', 'results', 'analytics', 'summary'")
-            ] = ("stats", "params", "analytics", "summary"),
-            dry_run: Annotated[bool, typer.Option(help="If True, the function will not write any files.")] = False):
+                                    typer.Option(help="Level of profiling. Options: 'stats' (always true), 'params', 'results', 'analytics', 'summary'")] = ("stats",
+                                                                                                                                                             "params",
+                                                                                                                                                             "analytics",
+                                                                                                                                                             "summary"),
+            dry_run: Annotated[bool,
+                               typer.Option(help="If True, the function will not write any files.")] = False):
         """
         OCR with the existing layout information. Existing text will be overwritten.
         """
@@ -254,7 +266,8 @@ else:
         ocr.profile.name = profile
         ocr.profile.dir = Path(inputs[0]).absolute() if len(inputs) > 0 else ''
         ocr.profile.stats = {'pages': 0, 'lines': 0}
-        system_prompt = ("""**Role:** You are a hyper-precise Optical Character Recognition (OCR) engine.
+        system_prompt = (
+            """**Role:** You are a hyper-precise Optical Character Recognition (OCR) engine.
 **Task:** Process the provided image and extract absolutely all discernible textual content, no matter how small or isolated.
 **Accuracy:** Prioritize extreme accuracy and completeness. Your primary directive is to detect and transcribe *every* visible textual element. This explicitly includes:
     *   Single, isolated characters (alphanumeric, e.g., 'A', '1').
@@ -273,9 +286,12 @@ else:
 
         user_prompt = ("<|input|>\n")
         if 'params' in profilelevel:
-            ocr.profile.params = {'model': llm_api.model,
-                                  'api_base': llm_api.api_base_url,
-                                  'prompts': {'system': system_prompt, 'user': user_prompt}}
+            ocr.profile.params = {
+                'model': llm_api.model,
+                'api_base': llm_api.api_base_url,
+                'prompts': {
+                    'system': system_prompt,
+                    'user': user_prompt}}
         # Read XML
         images_paths = []
         for image_path in map(Path, inputs):
@@ -296,10 +312,12 @@ else:
             # Find Textlines
             now = time.time()
             # Remove timestamps older than 60 seconds
-            request_timestamps = [t for t in request_timestamps if now - t < 60]
+            request_timestamps = [
+                t for t in request_timestamps if now - t < 60]
             if len(request_timestamps) >= calls_per_minute:
                 wait_time = 60 - (now - request_timestamps[0])
-                print(f"[red]Rate limit reached.[/red] Waiting {wait_time:.2f} seconds...")
+                print(
+                    f"[red]Rate limit reached.[/red] Waiting {wait_time:.2f} seconds...")
                 time.sleep(wait_time)
             # Add the current timestamp
             request_timestamps.append(time.sleep(time.time()))
@@ -324,30 +342,38 @@ else:
                 try:
                     usage = response.usage_metadata
                     print(usage)
-                    data = json_repair.repair_json(response.text, return_objects=True)
+                    data = json_repair.repair_json(
+                        response.text, return_objects=True)
                     if not dry_run:
-                        outputdir = Path(outputdir) if outputdir else image_path.parent
-                        output_path = outputdir.joinpath(f"json/").joinpath(image_path.with_suffix('.json').name)
+                        outputdir = Path(
+                            outputdir) if outputdir else image_path.parent
+                        output_path = outputdir.joinpath(
+                            f"json/").joinpath(image_path.with_suffix('.json').name)
                         output_path.parent.mkdir(exist_ok=True, parents=True)
                         with output_path.open("w", encoding="utf-8") as jf:
                             json.dump(data, jf, indent=4, ensure_ascii=False)
                         if create_page:
                             xml_content = gemini2d_to_page(data, image_path)
-                            output_path = outputdir.joinpath(f"page/").joinpath(image_path.with_suffix('.xml').name)
-                            output_path.parent.mkdir(exist_ok=True, parents=True)
+                            output_path = outputdir.joinpath(
+                                f"page/").joinpath(image_path.with_suffix('.xml').name)
+                            output_path.parent.mkdir(
+                                exist_ok=True, parents=True)
                             try:
                                 with open(output_path, 'w', encoding='utf-8') as f_out:
                                     f_out.write(xml_content)
-                                print(f"Successfully wrote PAGE XML to: {output_path}")
+                                print(
+                                    f"Successfully wrote PAGE XML to: {output_path}")
                             except Exception as e:
-                                print(f"Error writing PAGE XML file '{output_path}': {e}")
-                except:
+                                print(
+                                    f"Error writing PAGE XML file '{output_path}': {e}")
+                except BaseException:
                     print(f"[red] Error: No valid output[/red]")
             except Exception as e:
                 print("An error occurred during completion:", e)
                 continue
 lock = Lock()
 timestamps = []
+
 
 def rate_limit(calls_per_minute):
     with lock:
@@ -356,26 +382,39 @@ def rate_limit(calls_per_minute):
             timestamps.pop(0)
         if len(timestamps) >= calls_per_minute:
             sleep_time = 60 - (now - timestamps[0])
-            print(f"[red]Rate limit reached.[/red] Waiting {sleep_time:.2f} seconds...")
+            print(
+                f"[red]Rate limit reached.[/red] Waiting {sleep_time:.2f} seconds...")
             time.sleep(sleep_time)
         timestamps.append(time.time())
 
 
-def ocr_single_image(image_path, outputdir, system_prompt, user_prompt, calls_per_minute, create_page, dry_run=False, retries=1, overwrite=True, thinking_budget=0):
+def ocr_single_image(
+        image_path,
+        outputdir,
+        system_prompt,
+        user_prompt,
+        calls_per_minute,
+        create_page,
+        dry_run=False,
+        retries=1,
+        overwrite=True,
+        thinking_budget=0):
     attempt = 0
     while attempt <= retries:
         rate_limit(calls_per_minute)
         try:
             print(f"Processing: {image_path} (Attempt {attempt + 1})")
 
-            outputdir_path = Path(outputdir) if outputdir else image_path.parent
+            outputdir_path = Path(
+                outputdir) if outputdir else image_path.parent
             output_path = outputdir_path / "json"
             output_path.mkdir(parents=True, exist_ok=True)
             output_file = output_path / image_path.with_suffix('.json').name
             if not overwrite and output_file.exists():
-                print(f"Skipping {image_path} because {output_file} already exists.\n")
+                print(
+                    f"Skipping {image_path} because {output_file} already exists.\n")
                 return image_path, True, None, None
-            
+
             image, image_format = get_image(image_path)
 
             file_upload = llm_api.client().files.upload(file=image_path)
@@ -397,9 +436,7 @@ def ocr_single_image(image_path, outputdir, system_prompt, user_prompt, calls_pe
                     system_instruction=system_prompt,
                     thinking_config=types.ThinkingConfig(
                         include_thoughts=False if thinking_budget == 0 else True,
-                        thinking_budget=thinking_budget
-                    )
-                ),
+                        thinking_budget=thinking_budget)),
             )
             data = json_repair.repair_json(response.text, return_objects=True)
             usage = response.usage_metadata
@@ -409,14 +446,16 @@ def ocr_single_image(image_path, outputdir, system_prompt, user_prompt, calls_pe
                     json.dump(data, jf, indent=4, ensure_ascii=False)
                 if create_page:
                     xml_content = gemini2d_to_page(data, image_path)
-                    output_path = outputdir_path.joinpath(f"page/").joinpath(image_path.with_suffix('.xml').name)
+                    output_path = outputdir_path.joinpath(
+                        f"page/").joinpath(image_path.with_suffix('.xml').name)
                     output_path.parent.mkdir(exist_ok=True, parents=True)
                     try:
                         with open(output_path, 'w', encoding='utf-8') as f_out:
                             f_out.write(xml_content)
                         print(f"Successfully wrote PAGE XML to: {output_path}")
                     except Exception as e:
-                        print(f"Error writing PAGE XML file '{output_path}': {e}")
+                        print(
+                            f"Error writing PAGE XML file '{output_path}': {e}")
 
             return image_path, True, None, usage
 
@@ -428,7 +467,8 @@ def ocr_single_image(image_path, outputdir, system_prompt, user_prompt, calls_pe
                 time.sleep(60)
             else:
                 if e.code == 429:
-                    print(f"[red]Rate limit reached. Or this model is not supported for free quota tier.[/red]")
+                    print(
+                        f"[red]Rate limit reached. Or this model is not supported for free quota tier.[/red]")
                 return image_path, False, str(e), None
     return None
 
@@ -444,7 +484,8 @@ def ocr_multithread(inputs: Annotated[List[str], typer.Argument(exists=True)],
                     dry_run: Annotated[bool, typer.Option()] = False,
                     overwrite: Annotated[bool, typer.Option()] = True,
                     thinking_budget: Annotated[int, typer.Option(help="Thinking budget in tokens.(0 = no thinking)")] = 0):
-    system_prompt = system_prompt if system_prompt else ("""**Role:** You are a hyper-precise Optical Character Recognition (OCR) engine.
+    system_prompt = system_prompt if system_prompt else (
+        """**Role:** You are a hyper-precise Optical Character Recognition (OCR) engine.
     **Task:** Process the provided image and extract absolutely all discernible textual content, no matter how small or isolated.
     **Accuracy:** Prioritize extreme accuracy and completeness. Your primary directive is to detect and transcribe *every* visible textual element. This explicitly includes:
         *   Single, isolated characters (alphanumeric, e.g., 'A', '1').
@@ -458,7 +499,7 @@ def ocr_multithread(inputs: Annotated[List[str], typer.Argument(exists=True)],
         *   `"text_content"`: A string containing the exact text transcribed from the bounding box. Preserve case, spacing, and all characters precisely as detected.
         *   `"region"`: An integer representing the logical block or paragraph number this text line belongs to. Text lines visually grouped together (like in a paragraph or a single table cell's content if multi-line) should share the same region number. Start numbering regions from 1.Try to find meaningful paragraph/regions.
         *   `"type"`: One of the following contextual roles or styles of the line: "heading", "header", "paragraph", "table-header-{Nr.}", "table-column-{Nr.}", "page-number", "marginalia", "footnote", "drop-capital", "toc", "music, "chem", "advert", "map", "maths", "graphic", "image"
-        *   `"style"`: (Optional) Select if it apply to the style of the font in the line: "handwriting", "bold", "italic" 
+        *   `"style"`: (Optional) Select if it apply to the style of the font in the line: "handwriting", "bold", "italic"
     **Granularity:** Operate at the highest possible granularity. If a single character or symbol exists independently in a location (like a hyphen in an otherwise empty table cell), it MUST be detected and reported as its own text object (or as part of the cell's content if appropriate for the region grouping).
     **Strictness:** Adhere strictly to the specified JSON structure and content requirements. Do not add extra keys, omit required keys, or deviate from the requested format. Report everything detected.""")
     user_prompt = ("<|input|>\n")
@@ -483,7 +524,7 @@ def ocr_multithread(inputs: Annotated[List[str], typer.Argument(exists=True)],
                 outputdir,
                 system_prompt,
                 user_prompt,
-                calls_per_minute, 
+                calls_per_minute,
                 create_page,
                 dry_run,
                 overwrite=overwrite,
@@ -511,34 +552,50 @@ def extract_text_from_xml(xml_path: Path) -> str:
         import xml.etree.ElementTree as ET
         tree = ET.parse(xml_path)
         root = tree.getroot()
-        
+
         # Extract text from TextLine elements
         text_lines = []
-        for textline in root.findall('.//{http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15}TextLine'):
-            text = textline.find('.//{http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15}TextEquiv/{http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15}Unicode')
+        for textline in root.findall(
+                './/{http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15}TextLine'):
+            text = textline.find(
+                './/{http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15}TextEquiv/{http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15}Unicode')
             if text is not None and text.text:
                 text_lines.append(text.text.strip())
-        
+
         return "\n".join(text_lines)
     except Exception as e:
         print(f"Error extracting text from XML {xml_path}: {e}")
         return ""
 
-def reocr_single_image(image_path: Path, xml_path: Path, outputdir: Path, system_prompt: str, calls_per_minute: int, 
-                       update_page: bool, thinking_budget: int, dry_run: bool = False, retries: int = 1, overwrite: bool = True):
+
+def reocr_single_image(
+        image_path: Path,
+        xml_path: Path,
+        outputdir: Path,
+        system_prompt: str,
+        calls_per_minute: int,
+        update_page: bool,
+        thinking_budget: int,
+        dry_run: bool = False,
+        retries: int = 1,
+        overwrite: bool = True):
     """Process a single image with XML context."""
     attempt = 0
     while attempt <= retries:
         rate_limit(calls_per_minute)
         try:
-            print(f"Processing: {image_path} with context from {xml_path} (Attempt {attempt + 1})")
-            outputdir_path = Path(outputdir) if outputdir else image_path.parent
+            print(
+                f"Processing: {image_path} with context from {xml_path} (Attempt {
+                    attempt + 1})")
+            outputdir_path = Path(
+                outputdir) if outputdir else image_path.parent
             output_path = outputdir_path / "json"
             output_path.mkdir(parents=True, exist_ok=True)
             output_file = output_path / image_path.with_suffix('.json').name
-            
+
             if not overwrite and output_file.exists():
-                print(f"Skipping {image_path} because {output_file} already exists.\n")
+                print(
+                    f"Skipping {image_path} because {output_file} already exists.\n")
                 return image_path, True, None, None
 
             # Extract text from XML
@@ -547,8 +604,9 @@ def reocr_single_image(image_path: Path, xml_path: Path, outputdir: Path, system
             page.delete_textlevel('TextRegion')
             # Get the page number from the filename# Create JSON file
             json_data = {'regions': []}
-            
-            for region in page.get_ordered_regions(region_types=('TextRegion')):
+
+            for region in page.get_ordered_regions(
+                    region_types=('TextRegion')):
                 textlines = region.textlines
                 if textlines is None:
                     continue
@@ -561,19 +619,19 @@ def reocr_single_image(image_path: Path, xml_path: Path, outputdir: Path, system
                     text = line.get_text()
                     if text != '':
                         json_data['regions'][-1]['textlines'].append({
-                           'id': line.get_id(),
-                           'text_content': text,
-                           'type': line.get_tag(),
-                       })
-            
+                            'id': line.get_id(),
+                            'text_content': text,
+                            'type': line.get_tag(),
+                        })
+
             if json_data['regions'] is None:
                 print(f"No regions found in {xml_path}")
                 return image_path, False, "No regions found in {xml_path}", None
-            
+
             user_prompt = json.dumps(json_data, indent=4, ensure_ascii=False)
             image, image_format = get_image(image_path)
             file_upload = llm_api.client().files.upload(file=image_path)
-            
+
             if "2.5" in llm_api.model:
                 response = llm_api.client().models.generate_content(
                     model=llm_api.model,
@@ -593,9 +651,7 @@ def reocr_single_image(image_path: Path, xml_path: Path, outputdir: Path, system
                         system_instruction=system_prompt,
                         thinking_config=types.ThinkingConfig(
                             include_thoughts=False if thinking_budget == 0 else True,
-                            thinking_budget=thinking_budget
-                        )
-                    ),
+                            thinking_budget=thinking_budget)),
                 )
             else:
                 response = llm_api.client().models.generate_content(
@@ -629,23 +685,32 @@ def reocr_single_image(image_path: Path, xml_path: Path, outputdir: Path, system
                     for updated_region in data['regions']:
                         region = page.get_region_by_id(updated_region['id'])
                         if region is None:
-                            print(f"Region {updated_region['id']} not found in {xml_path}")
+                            print(
+                                f"Region {
+                                    updated_region['id']} not found in {xml_path}")
                             continue
-                        #region.set_tag(tag=updated_region['type'])
+                        # region.set_tag(tag=updated_region['type'])
                         for updated_line in updated_region['textlines']:
-                            textline = region.get_textline_by_id(updated_line['id'])
+                            textline = region.get_textline_by_id(
+                                updated_line['id'])
                             if textline is None:
-                                print(f"Textline {updated_line['id']} not found in {xml_path}")
+                                print(
+                                    f"Textline {
+                                        updated_line['id']} not found in {xml_path}")
                                 continue
                             if updated_line.get('text_content_content', False):
-                                updated_line['text_content'] = updated_line['text_content_content'].strip()
+                                updated_line['text_content'] = updated_line['text_content_content'].strip(
+                                )
                             elif updated_line.get('text', False):
-                                updated_line['text_content'] = updated_line['text'].strip()
-                            text = updated_line.get('text_content','')
+                                updated_line['text_content'] = updated_line['text'].strip(
+                                )
+                            text = updated_line.get('text_content', '')
                             # Limit text to 500 characters (Loop effect)
                             text = text if len(text) < 500 else text[:500]
                             textline.update_text(text)
-                            textline.set_tag(tag=updated_line.get('type','paragraph'))
+                            textline.set_tag(
+                                tag=updated_line.get(
+                                    'type', 'paragraph'))
 
                     page.save_xml(xml_path)
                     print(f"Successfully updated PAGE XML: {xml_path}")
@@ -660,7 +725,8 @@ def reocr_single_image(image_path: Path, xml_path: Path, outputdir: Path, system
                 time.sleep(60)
             else:
                 if getattr(e, 'code', None) == 429:
-                    print(f"[red]Rate limit reached. Or this model is not supported for free quota tier.[/red]")
+                    print(
+                        f"[red]Rate limit reached. Or this model is not supported for free quota tier.[/red]")
                 return image_path, False, str(e), None
     return None
 
@@ -670,6 +736,7 @@ class AdditionalCheck(str, Enum):
     STYLE = "style"
     REGION = "region"
     READING_ORDER = "reading_order"
+
 
 @app.command()
 def reocr_multithread(
@@ -767,7 +834,7 @@ def reocr_multithread(
             xml_paths.append(xml_path)
         else:
             xml_paths.extend(xml_path.glob('*.xml'))
-    
+
     if not xml_paths:
         raise FileNotFoundError('No XML files found in input directory')
 
@@ -778,30 +845,41 @@ def reocr_multithread(
         # Use provided image files
         for image_path in map(Path, image_files):
             if image_path.is_file():
-                if xml_names.get(image_path.with_suffix('.xml').name, None) is not None:
-                    image_xml_paths.append((image_path, xml_names.get(image_path.with_suffix('.xml').name)))
+                if xml_names.get(
+                        image_path.with_suffix('.xml').name,
+                        None) is not None:
+                    image_xml_paths.append(
+                        (image_path, xml_names.get(
+                            image_path.with_suffix('.xml').name)))
             else:
                 for image_path in image_path.glob('*.*'):
-                    if xml_names.get(image_path.with_suffix('.xml').name, None) is not None:
-                        image_xml_paths.append((image_path, xml_names.get(image_path.with_suffix('.xml').name)))
+                    if xml_names.get(
+                            image_path.with_suffix('.xml').name,
+                            None) is not None:
+                        image_xml_paths.append(
+                            (image_path, xml_names.get(
+                                image_path.with_suffix('.xml').name)))
     else:
         # Look for images in image_folder
         if not image_folder:
-            raise ValueError("Either image_files or image_folder must be provided")
-        
+            raise ValueError(
+                "Either image_files or image_folder must be provided")
+
         image_folder = Path(image_folder)
         if not image_folder.exists():
             raise FileNotFoundError(f"Image folder not found: {image_folder}")
-        
+
         # Match images to XML files
         for xml_file in xml_paths:
             # Find image (same name or image filename from page-xml file)
             page = Page(xml_file)
-            imageFilename = page.imageFilename() if not same_names else xml_file.with_suffix('.jpg').name
+            imageFilename = page.imageFilename(
+            ) if not same_names else xml_file.with_suffix('.jpg').name
             imageDir = xml_file
             for _ in range(0, len(image_folder.split('../'))):
                 imageDir = imageDir.parent
-                imageDir = imageDir.joinpath('./' + image_folder.rsplit('./')[0])
+                imageDir = imageDir.joinpath(
+                    './' + image_folder.rsplit('./')[0])
             imagePath = find_image(imageFilename, imageDir)
             if not imagePath:
                 continue
@@ -817,15 +895,17 @@ def reocr_multithread(
                 reocr_single_image,
                 image_path=image_path,
                 xml_path=xml_path,
-                outputdir = Path(outputdir) if outputdir else None,
+                outputdir=Path(outputdir) if outputdir else None,
                 system_prompt=system_prompt,
                 calls_per_minute=calls_per_minute,
                 update_page=update_page,
                 thinking_budget=thinking_budget,
                 dry_run=dry_run,
-                overwrite=overwrite
-            ): (image_path, xml_path) for (image_path, xml_path) in image_xml_paths
-        }
+                overwrite=overwrite): (
+                image_path,
+                xml_path) for (
+                image_path,
+                xml_path) in image_xml_paths}
 
         for future in as_completed(future_to_image):
             image_path, xml_path = future_to_image[future]
@@ -838,7 +918,7 @@ def reocr_multithread(
                 print(f"[red]Failed processing {path}: {error}[/red]")
             print("Total tokens: ", getattr(usage, 'total_token_count', 0))
             print(f"Progress state: {count}/{len(image_xml_paths)}")
-    
+
     return all_usage
 
 

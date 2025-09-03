@@ -23,10 +23,12 @@ from pageplus.cli.export import transform_substitutions
 
 app = typer.Typer()
 
+
 @app.command()
-def statistics(
-        inputs: Annotated[List[str],
-        typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None):
+def statistics(inputs: Annotated[List[str],
+                                 typer.Argument(exists=True,
+                                                help="Paths to the XML files to be checked.",
+                                                callback=transform_inputs)] = None):
     """
     Statistics about PAGE XML files.
 
@@ -69,15 +71,20 @@ def statistics(
         pagescounter += page_counter
 
     # Log cumulative statistics
-    pagescounter.statistics(pre_text=f"Statistics for all {len(xml_files)} PAGE-XML")
+    pagescounter.statistics(
+        pre_text=f"Statistics for all {
+            len(xml_files)} PAGE-XML")
     counters[f'All {len(xml_files)} PAGE-XML'] = pagescounter
     return counters
 
+
 @app.command()
-def confidences(
-        inputs: Annotated[List[str],
-        typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None,
-        output_filename: Annotated[str, typer.Option(help="Name of the output file.")] = 'output'):
+def confidences(inputs: Annotated[List[str],
+                                  typer.Argument(exists=True,
+                                                 help="Paths to the XML files to be checked.",
+                                                 callback=transform_inputs)] = None,
+                output_filename: Annotated[str,
+                                           typer.Option(help="Name of the output file.")] = 'output'):
     """
     Calculate the mean confidence of each page and return a list of pages which are beneath a specific threshold and/or
     just print a report of all pages
@@ -114,18 +121,22 @@ def confidences(
                 if conf:
                     page_confs[textline.get_id()] = conf
         all_confs[str(xml_file)]['confs'] = page_confs
-        all_confs[str(xml_file)]['median'] = nanmedian(array(list(page_confs.values())))
-        all_confs[str(xml_file)]['mean'] = nanmean(array(list(page_confs.values())))
+        all_confs[str(xml_file)]['median'] = nanmedian(
+            array(list(page_confs.values())))
+        all_confs[str(xml_file)]['mean'] = nanmean(
+            array(list(page_confs.values())))
         all_confs[str(xml_file)]['state'] = 'inital'
 
     all_median = nanmedian([confs['median'] for confs in all_confs.values()])
-    Q1 = nanmedian(([confs['median'] for confs in all_confs.values() if confs['median'] < all_median]))
-    Q3 = nanmedian(([confs['median'] for confs in all_confs.values() if confs['median'] > all_median]))
-    IQR = Q3-Q1
+    Q1 = nanmedian(([confs['median']
+                   for confs in all_confs.values() if confs['median'] < all_median]))
+    Q3 = nanmedian(([confs['median']
+                   for confs in all_confs.values() if confs['median'] > all_median]))
+    IQR = Q3 - Q1
     for confs in all_confs.values():
         if isnan(confs['median']):
             confs['state'] = '0 (empty)'
-        elif confs['median'] < Q1-(1.5*IQR):
+        elif confs['median'] < Q1 - (1.5 * IQR):
             confs['state'] = '1 (Very low)'
         elif confs['median'] < Q1:
             confs['state'] = '2 (Low)'
@@ -133,16 +144,16 @@ def confidences(
             confs['state'] = '3 (Moderate)'
         elif confs['median'] < Q3:
             confs['state'] = '4 (Median)'
-        elif confs['median'] < Q3+(1.5*IQR):
+        elif confs['median'] < Q3 + (1.5 * IQR):
             confs['state'] = ('5 (High)')
         else:
             confs['state'] = '6 (Very high)'
 
-    table = Table(title=f"[green]Confidences[/green]")
+    table = Table(title="[green]Confidences[/green]")
     table.add_column("Filename", justify="right", no_wrap=True)
     table.add_column("Confidence", justify="right", no_wrap=True)
-    table.add_column(f"Confidence level\n(Very low=<Q1-1.5*IQR\nLow=Q1–1.5*IQR-Q1\nModerate=Q1–Median\nMedian=Median–Q3\n"
-                     f"High=Q3–Q3+1.5*IQR\nVery high=>Q3+1.5*IQR)", justify="left", no_wrap=True)
+    table.add_column("Confidence level\n(Very low=<Q1-1.5*IQR\nLow=Q1–1.5*IQR-Q1\nModerate=Q1–Median\nMedian=Median–Q3\n"
+                     "High=Q3–Q3+1.5*IQR\nVery high=>Q3+1.5*IQR)", justify="left", no_wrap=True)
 
     colors = {'0': "bright_white",
               '1': "red1",
@@ -161,25 +172,29 @@ def confidences(
     ws = wb.active
 
     # Populate the worksheet with data
-    ws.append([f"Seite", f"Band", f"Filename",
-                f"Confidence"])
+    ws.append(["Seite", "Band", "Filename",
+               "Confidence"])
     for idx, (filenames, confs) in enumerate(all_confs.items()):
-            ws.append([f"{idx+1}", f"1951" f"", f"{Path(filenames).name}",
-                f"{confs['median']:.5f}"])
-            # Create a Color object using a color name
-            color = Color.parse(f"{colors.get(confs['state'][0])}")
-            # Get the hexadecimal value of the color
-            hex_value = color.get_truecolor().hex
-            color_argbhex = f"FF{hex_value[1:].upper()}"
-            if colors.get(confs['state'][0]) != 'bright_white':
-                #ws.cell(row=idx+2, column=4).font = Font(color=color_argbhex)
-                ws.cell(row=idx+2, column=4).fill = PatternFill(start_color=color_argbhex,
-                                                                fill_type="solid")
+        ws.append([f"{idx + 1}", "1951" "", f"{Path(filenames).name}",
+                   f"{confs['median']:.5f}"])
+        # Create a Color object using a color name
+        color = Color.parse(f"{colors.get(confs['state'][0])}")
+        # Get the hexadecimal value of the color
+        hex_value = color.get_truecolor().hex
+        color_argbhex = f"FF{hex_value[1:].upper()}"
+        if colors.get(confs['state'][0]) != 'bright_white':
+            # ws.cell(row=idx+2, column=4).font = Font(color=color_argbhex)
+            ws.cell(
+                row=idx + 2,
+                column=4).fill = PatternFill(
+                start_color=color_argbhex,
+                fill_type="solid")
 
     # Save the workbook to a file
     wb.save(f"{output_filename}.xlsx")
 
     return table
+
 
 if (spec := util.find_spec('pageplus.utils.dinglehopper.edit_distance')) is not None:
     from pageplus.cli.dinglehopper import get_metrics, summarize_metrics
@@ -199,9 +214,10 @@ if (spec := util.find_spec('pageplus.utils.dinglehopper.edit_distance')) is not 
                 help="A regular expression, if specific textlines should be filtered")] = None,
             substitutions: Annotated[List[str], typer.Option(
                 help="Regex substitutions with pattern==>replacement,...]", callback=transform_substitutions)] = [''],
-            profile: Annotated[str, typer.Option(help="Profile function with tag (default: no profiling active.")] = '',
+            profile: Annotated[str, typer.Option(
+                help="Profile function with tag (default: no profiling active.")] = '',
             profilelevel: Annotated[List[ProfileLevel],
-            typer.Option(
+                                    typer.Option(
                 help="Level of profiling. Options: 'stats' (always true), 'params', 'results', 'analytics', 'summary'")
             ] = ("stats", "params", "analytics", "summary"),
     ):
@@ -224,9 +240,11 @@ if (spec := util.find_spec('pageplus.utils.dinglehopper.edit_distance')) is not 
         if not gt_xml_files:
             raise FileNotFoundError('No xml files found in input directory')
 
-        compare.profile.dir = gt_xml_files[0].parent.absolute() if len(ocr) > 0 else ''
+        compare.profile.dir = gt_xml_files[0].parent.absolute() if len(
+            ocr) > 0 else ''
 
-        reg_filter = re.compile(rf"{text_filter}") if text_filter is not None else '.'
+        reg_filter = re.compile(
+            rf"{text_filter}") if text_filter is not None else '.'
         all_diff = Counter()
         all_metrics = []
         ocr_path = Path(ocr)
@@ -241,42 +259,52 @@ if (spec := util.find_spec('pageplus.utils.dinglehopper.edit_distance')) is not 
             page_diff = Counter()
             page_metrics = []
             # Find Textlines
-            for gt_region, ocr_region in zip(gt_page.get_ordered_regions(), ocr_page.get_ordered_regions()):
+            for gt_region, ocr_region in zip(
+                    gt_page.get_ordered_regions(), ocr_page.get_ordered_regions()):
                 if gt_region.get_id() != ocr_region.get_id():
                     continue
                 tr_id = gt_region.get_id()
                 if region_tagfilter is not None and region_tagfilter != gt_region.get_tag():
                     continue
                 text_dict[tr_id] = {}
-                for line_idx, (gt_line, ocr_line) in enumerate(zip(gt_region.textlines, ocr_region.textlines)):
+                for line_idx, (gt_line, ocr_line) in enumerate(
+                        zip(gt_region.textlines, ocr_region.textlines)):
                     gt_text, ocr_text = gt_line.get_text(), ocr_line.get_text()
                     for (pattern, replacement) in substitutions:
-                        gt_text = re.sub(rf'{pattern}', rf'{replacement}', gt_text)
-                        ocr_text = re.sub(rf'{pattern}', rf'{replacement}', ocr_text)
+                        gt_text = re.sub(
+                            rf'{pattern}', rf'{replacement}', gt_text)
+                        ocr_text = re.sub(
+                            rf'{pattern}', rf'{replacement}', ocr_text)
                     if textline_tagfilter is not None and textline_tagfilter != gt_text:
                         continue
-                    if text_filter is not None and not re.search(reg_filter, gt_text):
+                    if text_filter is not None and not re.search(
+                            reg_filter, gt_text):
                         continue
                     if 'analytics' in profilelevel:
                         print(gt_text + ' ==> ' + ocr_text)
-                        if line_idx == len(gt_region.textlines)-1:
+                        if line_idx == len(gt_region.textlines) - 1:
                             page_metrics.append(get_metrics(gt_text, ocr_text))
                         else:
-                            page_metrics.append(get_metrics(gt_text+'\n', ocr_text+'\n'))
+                            page_metrics.append(get_metrics(
+                                gt_text + '\n', ocr_text + '\n'))
 
             if 'results' in profilelevel:
-                compare.profile.results.append({gt_file.name :text_dict})
-            compare.profile.stats['pages'] += any([1 for region in text_dict.values() if len(region.values()) > 0])
-            compare.profile.stats['lines'] += sum([len(region.values()) for region in text_dict.values()])
+                compare.profile.results.append({gt_file.name: text_dict})
+            compare.profile.stats['pages'] += any(
+                [1 for region in text_dict.values() if len(region.values()) > 0])
+            compare.profile.stats['lines'] += sum(
+                [len(region.values()) for region in text_dict.values()])
             if 'analytics' in profilelevel:
-                metrics = summarize_metrics(page_metrics) if len(page_metrics) > 0 else {}
+                metrics = summarize_metrics(page_metrics) if len(
+                    page_metrics) > 0 else {}
                 all_metrics.extend(page_metrics)
-                compare.profile.analytics.append({gt_file.name : metrics})
+                compare.profile.analytics.append({gt_file.name: metrics})
                 all_diff.update(page_diff)
         if 'summary' in profilelevel:
             if 'analytics' in profilelevel:
                 metrics = summarize_metrics(all_metrics)
-                compare.profile.summary['analytics'] =  metrics
+                compare.profile.summary['analytics'] = metrics
+
 
 @app.command()
 def tags(
@@ -284,8 +312,8 @@ def tags(
                                                     help="Paths or workspace to the files to be validated.",
                                                     callback=transform_inputs)] = None,
         levels: Annotated[List[str], typer.Option(
-                help="Granularity levels to process: 'TextRegion', 'TableRegion', 'Textline', "
-                     " (default: TextRegion, Textline).")] = ("TextRegion", "Textline", "TableRegion")):
+            help="Granularity levels to process: 'TextRegion', 'TableRegion', 'Textline', "
+            " (default: TextRegion, Textline).")] = ("TextRegion", "Textline", "TableRegion")):
     """
     Analyzes tags with details across all pages.
     """
@@ -294,25 +322,23 @@ def tags(
         raise FileNotFoundError('No xml files found in input directory')
 
     tag_analysis = {}
-    
-    for xml_file in track(sorted(xml_files), description="Analyzing tags in files..."):
+
+    for xml_file in track(sorted(xml_files),
+                          description="Analyzing tags in files..."):
         filename = xml_file.name
         print('[green]Processing file:[/green] ' + filename)
 
         page = Page(xml_file)
-        
+
         # Get tag details for the page
         tag_details = page.get_tags(levels=levels, details=True)
-        
+
         # Store the analysis in the dictionary
         tag_analysis[filename] = tag_details
-        
+
         # Print summary for this file
         print(f'{filename}: {tag_details}')
-        #for tag, count in tag_details.get('counts', {}).items():
+        # for tag, count in tag_details.get('counts', {}).items():
         #     print(f"  - {tag}: {count} occurrences")
-    
-    return tag_analysis
 
-if __name__ == "__main__":
-    app()
+    return tag_analysis

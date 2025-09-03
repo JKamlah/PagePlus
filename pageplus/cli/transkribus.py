@@ -31,7 +31,10 @@ if (spec := util.find_spec('transkribus_utils')) is None:
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-I",
                                "git+https://github.com/JKamlah/PagePlus-transkribus-utils"])
 
-    def validate_workspace(ctx: typer.Context, param: typer.CallbackParam, value: str) -> str:
+    def validate_workspace(
+            ctx: typer.Context,
+            param: typer.CallbackParam,
+            value: str) -> str:
         """
         Callback function to validate the workspace option against the dynamic list,
         ensuring case-insensitive comparison.
@@ -42,17 +45,17 @@ else:
     import logging
 
     from transkribus_utils.transkribus_utils import PagePlusTranskribusUtils
-    from dotenv import load_dotenv, find_dotenv, get_key, set_key, dotenv_values, unset_key
+    from dotenv import load_dotenv, find_dotenv, get_key, set_key, dotenv_values
 
     from pageplus.utils.constants import Environments, WorkState
-    from pageplus.utils.envs import str_to_env, filter_envs
+    from pageplus.utils.envs import str_to_env
     from pageplus.utils.workspace import Workspace
     from pageplus.utils.api import API
 
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
-    ### CONSTANTS ###
+    # CONSTANTS #
     ts_workspace = Workspace(Environments.TRANSKRIBUS)
     ts_api = API(Environments.TRANSKRIBUS)
 
@@ -66,7 +69,6 @@ else:
         PAGE = "Page"
         PAGESTATUS = "PageStatus"
 
-
     class DataLevel(str, Enum):
         """
         Level of transkribus data
@@ -74,7 +76,6 @@ else:
         COLLECTION = "Collection"
         DOCUMENT = "Document"
         PAGE = "Page"
-
 
     class PageStatus(str, Enum):
         """
@@ -86,7 +87,6 @@ else:
         FINAL = "Final"
         GT = "GT"
 
-
     class Role(str, Enum):
         """
         Roles of transkribus user
@@ -96,7 +96,7 @@ else:
         TRANSCRIBER = "Transcriber"
         READER = "Reader"
 
-    ### PACKAGE ###
+    # PACKAGE #
     @app.command(rich_help_panel="Package")
     def update_package() -> None:
         """
@@ -106,9 +106,10 @@ else:
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-I",
                                "git+https://github.com/JKamlah/PagePlus-transkribus-utils"])
 
-    ### SETTINGS ###
+    # SETTINGS #
     @app.command(rich_help_panel="Settings")
-    def set_url(url: Annotated[str, typer.Argument(help="URL to Transkribus")]) -> None:
+    def set_url(url: Annotated[str, typer.Argument(
+            help="URL to Transkribus")]) -> None:
         """
         Write the URL of the Transkribus instance if it not refers to the official url
         https://transkribus.eu/TrpServer/rest to the .env file
@@ -118,8 +119,10 @@ else:
         ts_api.base_url = url
 
     @app.command(rich_help_panel="Settings")
-    def set_credentials(name: Annotated[str, typer.Argument(help="Username for Transkribus")],
-                        password: Annotated[str, typer.Argument(help="Password for Transkribus")]) -> None:
+    def set_credentials(name: Annotated[str,
+                                        typer.Argument(help="Username for Transkribus")],
+                        password: Annotated[str,
+                        typer.Argument(help="Password for Transkribus")]) -> None:
         """
         Write your credentials to the .env file
         Returns:
@@ -136,8 +139,11 @@ else:
         """
         ts_api.show_settings()
 
-    ### WORKSPACE ###
-    def validate_workspace(ctx: typer.Context, param: typer.CallbackParam, value: str) -> str:
+    # WORKSPACE #
+    def validate_workspace(
+            ctx: typer.Context,
+            param: typer.CallbackParam,
+            value: str) -> str:
         """
         Callback function to validate the workspace option against the dynamic list,
         ensuring case-insensitive comparison.
@@ -154,8 +160,8 @@ else:
         ts_workspace.show()
 
     @app.command(rich_help_panel="Workspace")
-    def load_workspace(workspace: Annotated[str, typer.Argument(help="Set environmental name",
-                                                                  callback=validate_workspace)]) -> None:
+    def load_workspace(workspace: Annotated[str, typer.Argument(
+            help="Set environmental name", callback=validate_workspace)]) -> None:
         """
         Set default workspace
         Returns:
@@ -173,8 +179,8 @@ else:
         ts_workspace.update()
 
     @app.command(rich_help_panel="Workspace")
-    def delete_workspace(workspace: Annotated[str, typer.Argument(help="Set environmental name",
-                                                                  callback=validate_workspace)]) -> None:
+    def delete_workspace(workspace: Annotated[str, typer.Argument(
+            help="Set environmental name", callback=validate_workspace)]) -> None:
         """
         Deletes an existing workspace
         Returns:
@@ -184,13 +190,12 @@ else:
 
     @app.command(rich_help_panel="Workspace")
     def copy_workspace(destination_path: Annotated[Path,
-                       typer.Argument(help="Path to the output directory where the text files will be saved")],
-                        workspace: Annotated[str,
-                       typer.Argument(help=f"Workspace name pointing to an existing path",
-                                      callback=validate_workspace)] = None,
+                                                   typer.Argument(help="Path to the output directory where the text files will be saved")],
+                       workspace: Annotated[str,
+                                            typer.Argument(help="Workspace name pointing to an existing path",
+                                                           callback=validate_workspace)] = None,
                        new_workspace: Annotated[str,
-                       typer.Option(help=f"If set a new workspace is created.")] = "") \
-            -> None:
+                                                typer.Option(help="If set a new workspace is created.")] = "") -> None:
         """
         Copy pages of from a workspace path to another location
         Returns:
@@ -200,14 +205,14 @@ else:
 
     @app.command(rich_help_panel="Workspace")
     def open_workspace(workspace: Annotated[
-        str, typer.Argument(help=f"Workspace name pointing to an existing path",
+        str, typer.Argument(help="Workspace name pointing to an existing path",
                             callback=validate_workspace)] = None) -> None:
         """
         Open a workspace folder in the file explorer, works for Windows, macOS, and Linux.
         """
         ts_workspace.open(workspace)
 
-    ### DOCUMENTS ###
+    # DOCUMENTS #
     def valid_filter(filter_by: list, search_term: list) -> bool:
         valid = True
         for f, s in zip(filter_by, search_term):
@@ -216,17 +221,23 @@ else:
                     'For transcription filter please choose one of the following: New, InProgress, Done, Final or GT.')
                 valid = False
             if f == 'Role' and s.upper() not in Role.__members__.keys():
-                print('For role filter please choose one of the following: Owner, Editor, Transcriber or Reader.')
+                print(
+                    'For role filter please choose one of the following: Owner, Editor, Transcriber or Reader.')
                 valid = False
             if f == 'Page' and not s.isdigit():
                 print('For page filter please provide a minimum page number.')
                 valid = False
         return valid
 
-
-    def str_filter_not_match(filter_by: list, search_term: list, string: str, filter_option: str, flag=0) -> bool:
+    def str_filter_not_match(
+            filter_by: list,
+            search_term: list,
+            string: str,
+            filter_option: str,
+            flag=0) -> bool:
         if filter_option in filter_by:
-            for s in [search_term[idx] for idx, f in enumerate(filter_by) if f == filter_option]:
+            for s in [search_term[idx]
+                      for idx, f in enumerate(filter_by) if f == filter_option]:
                 if not re.match(s, string, flags=flag):
                     return True
         return False
@@ -240,13 +251,13 @@ else:
                                                                            case_sensitive=False)],
                        search_term: Annotated[
                            List[str], typer.Option("--search-term", "-s",
-                                                   help=f"RegEx search term for the filter option (Use . to find "
-                                                        f"all documents). For 'PageStatus' filter the search-term "
-                                                        f"is limited to: New, InProgress, Done, Final or GT."
-                                                        f"For 'user' filter the search-term "
-                                                        f"is limited to: Owner, Editor, Transcriber or Reader."
-                                                        f"For 'pages' filter the search-term "
-                                                        f"is limited to: Number of minimum pages.")],
+                                                   help="RegEx search term for the filter option (Use . to find "
+                                                   "all documents). For 'PageStatus' filter the search-term "
+                                                   "is limited to: New, InProgress, Done, Final or GT."
+                                                   "For 'user' filter the search-term "
+                                                   "is limited to: Owner, Editor, Transcriber or Reader."
+                                                   "For 'pages' filter the search-term "
+                                                   "is limited to: Number of minimum pages.")],
 
                        case_sensitive: Annotated[Optional[bool], typer.Option(
                            help="De-/Activate case sensitivity for the regex search")] = False) -> None:
@@ -256,7 +267,7 @@ else:
         None
         """
         load_dotenv()
-        envs = dotenv_values()
+        # envs = dotenv_values()
         if not ts_api.valid_login():
             return
         flag = 0 if case_sensitive else re.IGNORECASE
@@ -272,7 +283,8 @@ else:
         with Status("Searching for documents") as status:
             try:
                 cols = tsclient.list_collections()
-                print(f"[bold green]Transkribus Document Search Report[/bold green] - [white]Version 1.0[/white]")
+                print(
+                    "[bold green]Transkribus Document Search Report[/bold green] - [white]Version 1.0[/white]")
                 print(f"Total collections found: {len(cols)}")
                 documents = []
                 total_documents = 0
@@ -280,23 +292,36 @@ else:
                     col_id = col["colId"]
                     col_name = col["colName"]
                     total_documents += int(col["nrOfDocuments"])
-                    if str_filter_not_match(filter_by, search_term, col_name, DataFilter.COLLECTION, flag) or \
-                            str_filter_not_match(filter_by, search_term, col.get("role", ""), DataFilter.ROLE, flag):
+                    if str_filter_not_match(
+                        filter_by,
+                        search_term,
+                        col_name,
+                        DataFilter.COLLECTION,
+                        flag) or str_filter_not_match(
+                        filter_by,
+                        search_term,
+                        col.get(
+                            "role",
+                            ""),
+                            DataFilter.ROLE,
+                            flag):
                         continue
                     doc_list = tsclient.list_docs(col_id)
                     for doc in doc_list:
                         doc_id = doc["docId"]
-                        if str_filter_not_match(filter_by, search_term, doc.get("title", ""), DataFilter.DOCUMENT,
-                                                flag):
+                        if str_filter_not_match(
+                            filter_by, search_term, doc.get(
+                                "title", ""), DataFilter.DOCUMENT, flag):
                             continue
                         if DataFilter.PAGE in filter_by:
-                            if any(int(doc.get("nrOfPages")) < int(search_term[idx]) for idx, f in enumerate(filter_by) \
-                                   if f == DataFilter.PAGE):
+                            if any(int(doc.get("nrOfPages")) < int(search_term[idx]) for idx, f in enumerate(
+                                    filter_by) if f == DataFilter.PAGE):
                                 continue
-                        doc_overview = tsclient.get_doc_overview_md(col_id, doc_id)
+                        doc_overview = tsclient.get_doc_overview_md(
+                            col_id, doc_id)
                         doc_md = doc_overview["trp_return"]["md"]
                         if DataFilter.PAGESTATUS in filter_by:
-                            if not any(int(doc_md.get(f"nrOf{search_term[idx]}", -1)) != 0 for \
+                            if not any(int(doc_md.get(f"nrOf{search_term[idx]}", -1)) != 0 for
                                        idx, f in enumerate(filter_by) if f == DataFilter.PAGESTATUS):
                                 continue
                         doc_stats = {
@@ -310,6 +335,7 @@ else:
                         }
                         documents.append(doc_stats)
             except Exception as e:
+                print(status)
                 print(f"[red]Error occurred: {e}[/red]")
                 return
         print(f"Total documents found: {total_documents}")
@@ -322,65 +348,84 @@ else:
         table.add_column("Role", style="cyan")
         collection = ""
         for document in documents:
-            table.add_row(f"{document.get('col_name')} ({document.get('col_id')})".replace(collection, ""),
-                          f"{document.get('doc_name')} ({document.get('doc_id')})",
-                          f"{document.get('pages')}",
-                          f"New: {document.get('doc_md').get('nrOfNew')}, "
-                          f"InProgress: {document.get('doc_md').get('nrOfInProgress')}, "
-                          f"Done: {document.get('doc_md').get('nrOfDone')}, "
-                          f"Final: {document.get('doc_md').get('nrOfFinal')}, "
-                          f"GT: {document.get('doc_md').get('nrOfGT')}",
-                          f"{document.get('role')}")
-            collection = f"{document.get('col_name')} ({document.get('col_id')})"
+            table.add_row(
+                f"{
+                    document.get('col_name')} ({
+                    document.get('col_id')})".replace(
+                    collection, ""), f"{
+                    document.get('doc_name')} ({
+                        document.get('doc_id')})", f"{
+                            document.get('pages')}", f"New: {
+                                document.get('doc_md').get('nrOfNew')}, " f"InProgress: {
+                                    document.get('doc_md').get('nrOfInProgress')}, " f"Done: {
+                                        document.get('doc_md').get('nrOfDone')}, " f"Final: {
+                                            document.get('doc_md').get('nrOfFinal')}, " f"GT: {
+                                                document.get('doc_md').get('nrOfGT')}", f"{
+                                                    document.get('role')}")
+            collection = f"{
+                document.get('col_name')} ({
+                document.get('col_id')})"
         print(table)
 
-
     @app.command(rich_help_panel="Document")
-    def load_local_document(
-            inputdir: Annotated[
-                Path, typer.Argument(help="Path to the output directory where the text files will be saved")],
-            workspace: Annotated[str, typer.Argument(help="Set environmental name")],
-            overwrite_workspace: Annotated[bool, typer.Option(help="Overwrite environmental name")] = False,
-            loading: Annotated[bool, typer.Option(help="Load the created workspace as default")] = True):
+    def load_local_document(inputdir: Annotated[Path,
+                                                typer.Argument(help="Path to the output directory where the text files will be saved")],
+                            workspace: Annotated[str,
+                                                 typer.Argument(help="Set environmental name")],
+                            overwrite_workspace: Annotated[bool,
+                                                           typer.Option(help="Overwrite environmental name")] = False,
+                            loading: Annotated[bool,
+                                               typer.Option(help="Load the created workspace as default")] = True):
         """
         Set an environmental variable to an existing folder
         Returns:
         None
         """
-        #TODO: Validationcheck missing
+        # TODO: Validationcheck missing
         load_dotenv()
         if workspace in ts_workspace.names() and not overwrite_workspace:
             print(f"[red bold]Warning:[/red bold] The environment variable {workspace} already exists."
                   " Please set [green]overwrite-workspace[/green] "
                   "to True, if you want to overwrite the workspace.")
         if inputdir.is_dir():
-            set_key(find_dotenv(), ts_workspace.prefix_ws + workspace, str(inputdir.absolute()))
+            set_key(find_dotenv(), ts_workspace.prefix_ws +
+                    workspace, str(inputdir.absolute()))
             if loading:
                 load_workspace(ts_workspace.prefix_ws + workspace)
         else:
-            print(f"[red]Warning:[/red] The inputdir does not point to an existing folder.")
-
+            print(
+                "[red]Warning:[/red] The inputdir does not point to an existing folder.")
 
     @app.command(rich_help_panel="Document")
     def load_document(collection_id: Annotated[int,
-                      typer.Argument(help="Collection identifier (collId).")],
+                                               typer.Argument(help="Collection identifier (collId).")],
                       document_id: Annotated[int,
-                      typer.Argument(help="Document identifier (id).")],
-                      pages: Annotated[List[int], typer.Option("--pages", "-p",
-                                                               help="Page selection. If not set all pages get loaded.")] = None,
-                      load_images: Annotated[bool, typer.Option(help="Store also the corresponding images")] = False,
-                      folderpath: Annotated[Optional[Path], typer.Option("--folderpath", "-f",
-                                                                         help="Path to store the loaded document. If "
-                                                                              "not set it get stored in the workspace "
-                                                                              "directory.")] = None,
-                      workspace: Annotated[Optional[str], typer.Option("--workspace", "-w",
-                                                                       help="Name of environmental variable, which "
-                                                                            "stores the path to loaded document. The "
-                                                                            "name get's appended to 'TRANSKRIBUS_WS_' and "
-                                                                            "automatically cast to uppercase. E.g. "
-                                                                            "new data -> TRANSKRIBUS_WS_NEW_DATA.")] = "MAIN",
-                      overwrite_ws: Annotated[bool, typer.Option(help="If workspace already exists the old data gets removed."),] = False,
-                      loading: Annotated[bool, typer.Option(help="Load the created workspace as default")] = True) -> None:
+                                             typer.Argument(help="Document identifier (id).")],
+                      pages: Annotated[List[int],
+                                       typer.Option("--pages",
+                                                    "-p",
+                                                    help="Page selection. If not set all pages get loaded.")] = None,
+                      load_images: Annotated[bool,
+                                             typer.Option(help="Store also the corresponding images")] = False,
+                      folderpath: Annotated[Optional[Path],
+                                            typer.Option("--folderpath",
+                                                         "-f",
+                                                         help="Path to store the loaded document. If "
+                                                         "not set it get stored in the workspace "
+                                                         "directory.")] = None,
+                      workspace: Annotated[Optional[str],
+                                           typer.Option("--workspace",
+                                                        "-w",
+                                                        help="Name of environmental variable, which "
+                                                        "stores the path to loaded document. The "
+                                                        "name get's appended to 'TRANSKRIBUS_WS_' and "
+                                                        "automatically cast to uppercase. E.g. "
+                                                        "new data -> TRANSKRIBUS_WS_NEW_DATA.")] = "MAIN",
+                      overwrite_ws: Annotated[bool,
+                                              typer.Option(help="If workspace already exists the old data gets removed."),
+                                              ] = False,
+                      loading: Annotated[bool,
+                                         typer.Option(help="Load the created workspace as default")] = True) -> None:
         """
         Loads pages of a document with a specific transcription to work with PagePlus.
         For more information abouth the pk values and page numbers see the --find-documents function.
@@ -402,12 +447,15 @@ else:
         # Download document
         with Status("Downloading document") as status:
             for page in pages:
-                fulldoc_md = tsclient.get_fulldoc_md(collection_id, document_id, str(page))
+                fulldoc_md = tsclient.get_fulldoc_md(
+                    collection_id, document_id, str(page))
                 transcript = tsclient.get_transcript(fulldoc_md)
                 pagedata.append((fulldoc_md, transcript))
 
-        wsfolder = Path(tempfile.mkdtemp(prefix=ts_workspace.prefix_dir(), dir=ts_workspace.dir())) \
-                   if folderpath is None else Path(folderpath)
+        wsfolder = Path(
+            tempfile.mkdtemp(
+                prefix=ts_workspace.prefix_dir(),
+                dir=ts_workspace.dir())) if folderpath is None else Path(folderpath)
         wsfolder.mkdir(parents=True, exist_ok=True)
 
         dotfile = find_dotenv()
@@ -416,13 +464,24 @@ else:
         for idx, (md, transcript) in enumerate(pagedata):
             doc_md = md.get('extra_info')
             if idx == 0:
-                col_md = md.get('extra_info').get('collectionList').get('colList')[0]
+                col_md = md.get('extra_info').get(
+                    'collectionList').get('colList')[0]
                 metadata[ts_workspace.env]['collection'].update(col_md)
                 metadata[ts_workspace.env]['collection']['document'] = {}
-                for key in ['docId', 'title', 'uploadTimestamp', 'uploader', 'uploaderId', 'nrOfPages', 'status']:
-                    metadata[ts_workspace.env]['collection']['document'][key] = doc_md.get(key)
-                metadata[ts_workspace.env]['collection']['document']['page'] = defaultdict(dict)
-            page_info = metadata[ts_workspace.env]['collection']['document']['page'][md.get('page_id')]
+                for key in [
+                    'docId',
+                    'title',
+                    'uploadTimestamp',
+                    'uploader',
+                    'uploaderId',
+                    'nrOfPages',
+                        'status']:
+                    metadata[ts_workspace.env]['collection']['document'][key] = doc_md.get(
+                        key)
+                metadata[ts_workspace.env]['collection']['document']['page'] = defaultdict(
+                    dict)
+            page_info = metadata[ts_workspace.env]['collection']['document']['page'][md.get(
+                'page_id')]
             page_info['fileName'] = md.get('file_name')
             page_info['transcriptURL'] = md.get('transcript_url')
             page_info['timestamp'] = md.get('timestamp')
@@ -449,7 +508,8 @@ else:
         # Update envs
         ws_absolute = ts_workspace.prefix_ws + workspace
         current_folder = envs.get(ws_absolute, None)
-        if current_folder is not None and current_folder != '' and Path(current_folder).exists():
+        if current_folder is not None and current_folder != '' and Path(
+                current_folder).exists():
             if overwrite_ws:
                 rmtree(current_folder)
             else:
@@ -458,40 +518,57 @@ else:
         set_key(dotfile, ws_absolute, str(wsfolder.absolute()))
         if loading:
             load_workspace(workspace)
-        print(f"The data was successfully stored in: [bold purple]{str(wsfolder.absolute())}[/bold purple]")
-        print(f"And be access via the Transkribus workspace: [bold green]{workspace}[/bold green]")
-
+        print(
+            f"The data was successfully stored in: [bold purple]{
+                str(
+                    wsfolder.absolute())}[/bold purple]")
+        print(
+            f"And be access via the Transkribus workspace: [bold green]{workspace}[/bold green]")
 
     @app.command(rich_help_panel="Document")
-    def update_document(
-            workspace: Annotated[
-                str, typer.Argument(help="An environmental name pointing to an existing path",
-                                                                  callback=validate_workspace)] = None,
-            workstate: Annotated[Optional[WorkState], typer.Option('--workstate', '-s',
-                                                                   help="Choose the documents inside this folder with "
-                                                                        "'original', or the 'modified' scripts inside "
-                                                                        "a subfolder.",
-                                                                   case_sensitive=False)] = "original",
-            use_metadata: Annotated[bool, typer.Option(help="Use information from metadata")] = True,
-            collection_id: Annotated[int, typer.Option("--document-pk", "-d",
-                                                       help="Document's primary key (pk). (Not necessary if "
+    def update_document(workspace: Annotated[str,
+                                             typer.Argument(help="An environmental name pointing to an existing path",
+                                                            callback=validate_workspace)] = None,
+                        workstate: Annotated[Optional[WorkState],
+                                             typer.Option('--workstate',
+                                                          '-s',
+                                                          help="Choose the documents inside this folder with "
+                                                          "'original', or the 'modified' scripts inside "
+                                                          "a subfolder.",
+                                                          case_sensitive=False)] = "original",
+                        use_metadata: Annotated[bool,
+                                                typer.Option(help="Use information from metadata")] = True,
+                        collection_id: Annotated[int,
+                                                 typer.Option("--document-pk",
+                                                              "-d",
+                                                              help="Document's primary key (pk). (Not necessary if "
+                                                              "environmental is used, but can also overwrite)")] = None,
+                        document_id: Annotated[int,
+                                               typer.Option("--document-pk",
+                                                            "-d",
+                                                            help="Document's primary key (pk). (Not necessary if "
                                                             "environmental is used, but can also overwrite)")] = None,
-            document_id: Annotated[int, typer.Option("--document-pk", "-d",
-                                                     help="Document's primary key (pk). (Not necessary if "
-                                                          "environmental is used, but can also overwrite)")] = None,
-            pages: Annotated[Optional[List[int]], typer.Option("--pages", "-p",
-                                                               help="Page selection. If not set all pages get uploaded.")] = None,
-            overwrite: Annotated[bool, typer.Option(help="Overwrite existing Transcription")] = True,
-            status: Annotated[PageStatus, typer.Option("--status",
+                        pages: Annotated[Optional[List[int]],
+                                         typer.Option("--pages",
+                                                      "-p",
+                                                      help="Page selection. If not set all pages get uploaded.")] = None,
+                        overwrite: Annotated[bool,
+                                             typer.Option(help="Overwrite existing Transcription")] = True,
+                        status: Annotated[PageStatus,
+                                          typer.Option("--status",
                                                        help="Page status selection.")] = None,
-            note: Annotated[Optional[str], typer.Option("--note",
-                                                        help="Additional information.")] = "",
-            parent: Annotated[Optional[int], typer.Option("--parent",
-                                                          help="Id of the parent transcription. Default: -1 (Unknown).")] = -1,
-            nr_is_page_id: Annotated[Optional[bool], typer.Option("--nr-is-page-id",
-                                                                  help="Set to true, if the pages variable don't contain page ids instead of page number.")] = False,
-            tool_name: Annotated[Optional[str], typer.Option("--tool-name",
-                                                             help="Name of the uploading tool. Default: PagePlus.")] = "PagePlus") -> None:
+                        note: Annotated[Optional[str],
+                        typer.Option("--note",
+                                     help="Additional information.")] = "",
+                        parent: Annotated[Optional[int],
+                                          typer.Option("--parent",
+                                                       help="Id of the parent transcription. Default: -1 (Unknown).")] = -1,
+                        nr_is_page_id: Annotated[Optional[bool],
+                                                 typer.Option("--nr-is-page-id",
+                                                              help="Set to true, if the pages variable don't contain page ids instead of page number.")] = False,
+                        tool_name: Annotated[Optional[str],
+                                             typer.Option("--tool-name",
+                                                          help="Name of the uploading tool. Default: PagePlus.")] = "PagePlus") -> None:
         """
         Uploads pages of a document to Transkribus.
         Returns:
@@ -502,7 +579,8 @@ else:
         envs = dotenv_values()
         if not ts_api.valid_login():
             return
-        # TODO: https://transkribus.eu/TrpServer/rest/collections/colID/docId/page/text
+        # TODO:
+        # https://transkribus.eu/TrpServer/rest/collections/colID/docId/page/text
 
         tsclient = PagePlusTranskribusUtils(*ts_api.credentials)
 
@@ -510,16 +588,19 @@ else:
         if ts_workspace.prefix_ws + workspace in envs.keys():
             wsfolder = Path(envs[ts_workspace.prefix_ws + workspace])
             if use_metadata:
-                metadata = json.loads(wsfolder.joinpath('metadata.pageplus.json').open('r').read())
+                metadata = json.loads(wsfolder.joinpath(
+                    'metadata.pageplus.json').open('r').read())
                 collection_id = metadata[ts_workspace.env]['collection']['colId']
                 document_id = metadata[ts_workspace.env]['collection']['document']['docId']
-                page_names = [p["fileName"] for p in metadata[ts_workspace.env]['collection']['document']['page'].values()]
-                wsfolder = wsfolder.joinpath(envs.get(Environments.PAGEPLUS.as_prefix_workstate(workstate), ''))
+                page_names = [p["fileName"] for p in metadata[ts_workspace.env]
+                              ['collection']['document']['page'].values()]
+                wsfolder = wsfolder.joinpath(
+                    envs.get(Environments.PAGEPLUS.as_prefix_workstate(workstate), ''))
         else:
             return
         if not pages:
-            pages = sorted([file for file in wsfolder.glob('*.xml') if file.is_file() and file.name.lower not in [
-                'metadata.xml', 'mets.xml']])
+            pages = sorted([file for file in wsfolder.glob(
+                '*.xml') if file.is_file() and file.name.lower not in ['metadata.xml', 'mets.xml']])
             pages = list(range(1, len(pages) + 1))
 
         with Status("Updating document") as updating_status:
@@ -527,14 +608,25 @@ else:
                 if page_names:
                     page_name = page_names[page - 1]
                 else:
-                    fulldoc_md = tsclient.get_fulldoc_md(collection_id, document_id, page)
-                    page_name = fulldoc_md.get("fileName", "") if fulldoc_md else ""
+                    fulldoc_md = tsclient.get_fulldoc_md(
+                        collection_id, document_id, page)
+                    page_name = fulldoc_md.get(
+                        "fileName", "") if fulldoc_md else ""
                 page_path = Path(wsfolder).joinpath(page_name)
                 if page_path.is_file():
                     print(collection_id, document_id, page, overwrite,
                           status, note, parent, nr_is_page_id, tool_name)
-                    tsclient.update_transcription(page_path.absolute(), collection_id, document_id, page,
-                                                  overwrite, status, note, parent, nr_is_page_id, tool_name)
+                    tsclient.update_transcription(
+                        page_path.absolute(),
+                        collection_id,
+                        document_id,
+                        page,
+                        overwrite,
+                        status,
+                        note,
+                        parent,
+                        nr_is_page_id,
+                        tool_name)
 
 if (spec := util.find_spec('pageplus.utils.transkribus.transkribus_to_prima')) is None:
 
@@ -547,14 +639,18 @@ if (spec := util.find_spec('pageplus.utils.transkribus.transkribus_to_prima')) i
         """
 
         url = 'https://raw.githubusercontent.com/kba/transkribus-to-prima/master/transkribus_to_prima/convert.py'
-        output_filename = Path(__file__).resolve().parent.parent.joinpath('utils/transkribus/transkribus_to_prima.py')
+        output_filename = Path(__file__).resolve().parent.parent.joinpath(
+            'utils/transkribus/transkribus_to_prima.py')
         response = requests.get(url)
         if response.status_code == 200:
             with open(output_filename, 'wb') as file:
                 file.write(response.content)
-            print(f"[green]File downloaded successfully: {output_filename}[/green]")
+            print(
+                f"[green]File downloaded successfully: {output_filename}[/green]")
         else:
-            print(f"[red]Failed to download file. Status code: {response.status_code}[/red]")
+            print(
+                f"[red]Failed to download file. Status code: {
+                    response.status_code}[/red]")
 
 else:
 
@@ -570,21 +666,20 @@ else:
         IMAGE_TRANSFORM = "Images"
         TAG_PROPERTY_LINK = "Tags"
 
-
     @app.command(rich_help_panel="Document")
     def to_prima(workspace: Annotated[str, typer.Argument(help="Environmental name pointing to an existing path",
-                            callback=validate_workspace)] = None,
+                                                          callback=validate_workspace)] = None,
                  workstate: Annotated[Optional[WorkState],
-                            typer.Option('--workstate', '-s',
-                                          help="Choose the documents inside this folder with "
-                                          "'original', or the 'modified' scripts inside the subfolder.",
-                                           case_sensitive=False)] = "original",
+                                      typer.Option('--workstate', '-s',
+                                                   help="Choose the documents inside this folder with "
+                                                   "'original', or the 'modified' scripts inside the subfolder.",
+                                                   case_sensitive=False)] = "original",
                  convert: Annotated[
                      ConvertOptions, typer.Option(help="Convert options (recommended just convert all)")] = "All",
                  outputdir: Annotated[Path, typer.Option('--outputdir', '-o',
-                                                         help=f"Path to the output directory where "
-                                                              f"the text files will be saved. If not specified, "
-                                                              f"input files will be overwritten.")] = None) -> None:
+                                                         help="Path to the output directory where "
+                                                         "the text files will be saved. If not specified, "
+                                                         "input files will be overwritten.")] = None) -> None:
         """
         If you want to use Transkribus PAGE-XML for other tools, sometimes you need to convert their version into
         the official, current PRIMA version.
@@ -597,8 +692,14 @@ else:
 
         load_dotenv()
         envs = dotenv_values()
-        wsfolder = Path(get_key(find_dotenv(), ts_workspace.prefix_ws + workspace)).joinpath(
-            envs.get(Environments.PAGEPLUS.as_prefix_workstate(workstate), ''))
+        wsfolder = Path(
+            get_key(
+                find_dotenv(),
+                ts_workspace.prefix_ws +
+                workspace)).joinpath(
+            envs.get(
+                Environments.PAGEPLUS.as_prefix_workstate(workstate),
+                ''))
         outputdir = wsfolder if outputdir is None else Path(outputdir)
         outputdir.mkdir(parents=True, exist_ok=True)
         if wsfolder.exists() and outputdir is not None:

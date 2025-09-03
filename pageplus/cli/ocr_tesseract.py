@@ -25,7 +25,8 @@ def _install(env_path: Path = None) -> None:
     Before tesseract can be used, please use this install command
     to install pytesseract by Samuel Hoffstaetter!
     """
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-I", "pytesseract"])
+    subprocess.check_call([sys.executable, "-m", "pip",
+                          "install", "-I", "pytesseract"])
 
 
 if spec := util.find_spec('pytesseract') is None:
@@ -42,35 +43,45 @@ if spec := util.find_spec('pytesseract') is None:
 else:
     import pytesseract
 
-
     @app.command()
     @profile('tesseract-ocr')
     def ocr(inputs: Annotated[List[str],
-    typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None,
-            image_folder: Annotated[str, typer.Option(exists=True,
-                                                        help="Folder to the images relative to page-xml (default same as input)")] = '.',
-            model_name: Annotated[str, typer.Option(help="Name of the model (should exist in Tessdata-Directory)")] = None,
-            same_names: Annotated[bool, typer.Option(
-                help="Use the page-xml filename to search for the image (default use imageFilename from pagexml file)")] = False,
-            image_extensions: Annotated[List[ImageExtension], typer.Option(
-                help="Image file extensions to try (only active with 'same_names')", case_sensitive=False
-            )] = ['.png', '.jpg', '.jpeg', '.tif', '.tiff'],
-            save_snippets: Annotated[bool, typer.Option(help="Save snippets (debug option)")] = False,
-            text_filter: Annotated[str, typer.Option(
-                help="A regular expression, if specific textlines should be filtered")] = None,
-            region_tagfilter: Annotated[str, typer.Option(
-                help="A regular expression, if specific textlines should be filtered")] = None,
-            textline_tagfilter: Annotated[str, typer.Option(
-                help="A regular expression, if specific textlines should be filtered")] = None,
-            profile: Annotated[
-                str, typer.Option(help="Profile function with tag (default:'' no profiling active.")] = '',
+                              typer.Argument(exists=True,
+                                             help="Paths to the XML files to be checked.",
+                                             callback=transform_inputs)] = None,
+            image_folder: Annotated[str,
+                                    typer.Option(exists=True,
+                                                 help="Folder to the images relative to page-xml (default same as input)")] = '.',
+            model_name: Annotated[str,
+                                  typer.Option(help="Name of the model (should exist in Tessdata-Directory)")] = None,
+            same_names: Annotated[bool,
+                                  typer.Option(help="Use the page-xml filename to search for the image (default use imageFilename from pagexml file)")] = False,
+            image_extensions: Annotated[List[ImageExtension],
+                                        typer.Option(help="Image file extensions to try (only active with 'same_names')",
+                                                     case_sensitive=False)] = ['.png',
+                                                                               '.jpg',
+                                                                               '.jpeg',
+                                                                               '.tif',
+                                                                               '.tiff'],
+            save_snippets: Annotated[bool,
+                                     typer.Option(help="Save snippets (debug option)")] = False,
+            text_filter: Annotated[str,
+                                   typer.Option(help="A regular expression, if specific textlines should be filtered")] = None,
+            region_tagfilter: Annotated[str,
+                                        typer.Option(help="A regular expression, if specific textlines should be filtered")] = None,
+            textline_tagfilter: Annotated[str,
+                                          typer.Option(help="A regular expression, if specific textlines should be filtered")] = None,
+            profile: Annotated[str,
+                               typer.Option(help="Profile function with tag (default:'' no profiling active.")] = '',
             profilelevel: Annotated[List[ProfileLevel],
-            typer.Option(
-                help="Level of profiling. Options: 'stats' (always true), 'params', 'results', 'analytics', 'summary'")
-            ] = ("stats", "params", "analytics", "summary"),
-            overwrite: Annotated[
-                bool, typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
-            dry_run: Annotated[bool, typer.Option(help="If True, the function will not write any files.")] = False):
+                                    typer.Option(help="Level of profiling. Options: 'stats' (always true), 'params', 'results', 'analytics', 'summary'")] = ("stats",
+                                                                                                                                                             "params",
+                                                                                                                                                             "analytics",
+                                                                                                                                                             "summary"),
+            overwrite: Annotated[bool,
+                                 typer.Option(help="If True, ignores outputdir and overwrites input data.")] = False,
+            dry_run: Annotated[bool,
+                               typer.Option(help="If True, the function will not write any files.")] = False):
         """
         EXPERIMENTAL: NOT SAFE TO USE!
         OCR with the existing layout information. Existing text will be overwritten.
@@ -83,8 +94,9 @@ else:
         ocr.profile.stats = {'pages': 0, 'lines': 0}
         if util.find_spec('pageplus.utils.dinglehopper.edit_distance') is None:
             profilelevel.remove(ProfileLevel.analytics)
-            print("[red]Warning:[/red] 'analytics' profiling level requires 'dinglehopper' package to be installed. "
-                  "It will be disabled.")
+            print(
+                "[red]Warning:[/red] 'analytics' profiling level requires 'dinglehopper' package to be installed. "
+                "It will be disabled.")
         elif 'analytics' in profilelevel:
             from pageplus.cli.dinglehopper import get_metrics, summarize_metrics
 
@@ -98,7 +110,8 @@ else:
         # Raise error if no xml files are found
         if not xml_files:
             raise FileNotFoundError('No xml files found in input directory')
-        reg_filter = re.compile(rf"{text_filter}") if text_filter is not None else '.'
+        reg_filter = re.compile(
+            rf"{text_filter}") if text_filter is not None else '.'
         all_diff = Counter()
         all_metrics = []
         for xml_file in xml_files:
@@ -109,18 +122,22 @@ else:
             # Find image (same name or image filename from page-xml file)
             if not same_names:
                 imageFilename = page.imageFilename()
-                imagePath = find_image(imageFilename, xml_file.parent / image_folder)
+                imagePath = find_image(
+                    imageFilename, xml_file.parent / image_folder)
             else:
                 imagePath = None
                 for ext in image_extensions:
                     candidate = xml_file.with_suffix(ext.value).name
-                    candidate_path = find_image(candidate, xml_file.parent / image_folder)
+                    candidate_path = find_image(
+                        candidate, xml_file.parent / image_folder)
                     if candidate_path:
                         imagePath = candidate_path
                         break
-                imageFilename = imagePath.name if imagePath else xml_file.with_suffix(image_extensions[0].value).name
+                imageFilename = imagePath.name if imagePath else xml_file.with_suffix(
+                    image_extensions[0].value).name
             if not imagePath:
-                print(f"Warning: Image {imageFilename} not found in {image_folder}")
+                print(
+                    f"Warning: Image {imageFilename} not found in {image_folder}")
                 continue
             imageDir = Path(xml_file).parent
             image, image_format = get_image(imagePath)
@@ -137,10 +154,13 @@ else:
                     if textline_tagfilter is not None and textline_tagfilter != line.get_tag():
                         continue
                     text = line.get_text()
-                    if text_filter is not None and not re.search(reg_filter, text):
+                    if text_filter is not None and not re.search(
+                            reg_filter, text):
                         continue
                     line_id = line.get_id()
-                    text_dict[tr_id][line_id] = {'original': text} if text else {'original': ''}
+                    text_dict[tr_id][line_id] = {
+                        'original': text} if text else {
+                        'original': ''}
                     # Cut image
                     image_snippet, bbox = crop_image_by_polygon(image,
                                                                 line.get_coordinates(returntype='mrr'),
@@ -152,7 +172,8 @@ else:
                                                                 snippet_dir=imageDir.joinpath(
                                                                     imageFilename.rsplit('.', 1)[0]),
                                                                 snippet_name='snippet_' + line_id)
-                    ocr_text = pytesseract.image_to_string(image_snippet, lang=model_name, config='--psm 13').strip()
+                    ocr_text = pytesseract.image_to_string(
+                        image_snippet, lang=model_name, config='--psm 13').strip()
                     print(f'{line_id} -> [green]{ocr_text}[green]')
                     line.update_text(ocr_text)
                     text_dict[tr_id][line_id]['ocr'] = ocr_text
@@ -160,10 +181,13 @@ else:
                         page_metrics.append(get_metrics(text, ocr_text))
             if 'results' in profilelevel:
                 ocr.profile.results.append({xml_file.name: text_dict})
-            ocr.profile.stats['pages'] += any([1 for region in text_dict.values() if len(region.values()) > 0])
-            ocr.profile.stats['lines'] += sum([len(region.values()) for region in text_dict.values()])
+            ocr.profile.stats['pages'] += any(
+                [1 for region in text_dict.values() if len(region.values()) > 0])
+            ocr.profile.stats['lines'] += sum([len(region.values())
+                                              for region in text_dict.values()])
             if 'analytics' in profilelevel:
-                metrics = summarize_metrics(page_metrics) if len(page_metrics) > 0 else {}
+                metrics = summarize_metrics(page_metrics) if len(
+                    page_metrics) > 0 else {}
                 all_metrics.extend(page_metrics)
                 ocr.profile.analytics.append({xml_file.name: metrics})
                 all_diff.update(page_diff)
@@ -171,7 +195,8 @@ else:
                 fout = xml_file if overwrite else xml_file.parent.joinpath(
                     model_name.replace('.', '_').replace(':', '-')).joinpath(xml_file.name)
                 fout.parent.mkdir(parents=True, exist_ok=True)
-                logging.info(f'Wrote modified xml file to output directory: {fout}')
+                logging.info(
+                    f'Wrote modified xml file to output directory: {fout}')
                 page.save_xml(fout)
         if 'summary' in profilelevel:
             if 'analytics' in profilelevel:

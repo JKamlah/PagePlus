@@ -52,12 +52,15 @@ def validate_all(
                 line.validate_region()
                 line.validate_baseline()
             except Exception as e:
-                logging.error(f"{line.get_id()}: Error during validation - {e}")
+                logging.error(
+                    f"{line.get_id()}: Error during validation - {e}")
 
         if region.counter(level='textlines') == 0:
             logging.info(f"{region.get_id()}: Region contains no text.")
 
-    for xml_file in track(sorted(xml_files), description="Validating files..."):
+    for xml_file in track(
+            sorted(xml_files),
+            description="Validating files..."):
         filename = xml_file.name
         logging.info('Validating file: ' + filename)
 

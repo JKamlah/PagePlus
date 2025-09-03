@@ -13,6 +13,7 @@ from pageplus.utils.workspace import Workspace
 
 app = typer.Typer()
 
+
 @app.command(rich_help_panel="PagePlus")
 def update_pip() -> None:
     """
@@ -21,7 +22,9 @@ def update_pip() -> None:
     Returns:
     None
     """
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", "pip"])
+    subprocess.check_call(
+        [sys.executable, "-m", "pip", "install", "-U", "pip"])
+
 
 @app.command(rich_help_panel="PagePlus")
 def update_ssl() -> None:
@@ -30,7 +33,14 @@ def update_ssl() -> None:
     Returns:
     None
     """
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", "PyOpenSSL", "cryptography", "ndg-httpsclient"])
+    subprocess.check_call([sys.executable,
+                           "-m",
+                           "pip",
+                           "install",
+                           "-U",
+                           "PyOpenSSL",
+                           "cryptography",
+                           "ndg-httpsclient"])
 
 
 @app.command(rich_help_panel="PagePlus")
@@ -63,21 +73,28 @@ def clean_logs() -> None:
         except OSError as e:
             print(f"Error: {e} - {log_file}")
 
+
 @app.command(rich_help_panel="Default Settings")
-def set_open_folder_default(default_true: Annotated[bool,
-                            typer.Argument(help="Opens the folder with the results after processing.")] = True) -> None:
+def set_open_folder_default(default_true: Annotated[bool, typer.Argument(
+        help="Opens the folder with the results after processing.")] = True) -> None:
     """Set the directory where all workspaces by all environments get stored"""
     dotfile = find_dotenv()
-    set_key(dotfile, PagePlus.SYSTEM.as_prefix()+'OPEN_FOLDER', str(default_true))
+    set_key(
+        dotfile,
+        PagePlus.SYSTEM.as_prefix() +
+        'OPEN_FOLDER',
+        str(default_true))
 
 
 @app.command(rich_help_panel="Workspace")
-def set_workspace_dir(wsdir: Annotated[Path,
-                       typer.Argument(help="Path to the directory where all workspaces get stored. Default: Tempfolder")],) -> None:
+def set_workspace_dir(wsdir: Annotated[Path, typer.Argument(
+        help="Path to the directory where all workspaces get stored. Default: Tempfolder")],) -> None:
     """Set the directory where all workspaces by all environments get stored"""
     dotfile = find_dotenv()
     wsdir.mkdir(parents=True, exist_ok=True)
-    set_key(dotfile, PagePlus.SYSTEM.as_prefix_workspace_dir(), str(wsdir.absolute()))
+    set_key(
+        dotfile, PagePlus.SYSTEM.as_prefix_workspace_dir(), str(
+            wsdir.absolute()))
 
 
 @app.command(rich_help_panel="Workspace")
