@@ -13,6 +13,7 @@ pageplus/utils/pdf/fonts/
 pageplus/cli/visualize.py
 tests/
 .cursorrules
+.env
 
 # Packages #
 ############
