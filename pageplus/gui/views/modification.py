@@ -100,17 +100,18 @@ def show_modification(bridge: ModificationBridge) -> None:
                 dry_run = st.checkbox("Dry run", key="spellcheck_dry_run")
 
                 if st.button("Run Spellchecking"):
-                    result = bridge.spellchecking(
-                        files=selected_files,
-                        language=language,
-                        distance=distance,
-                        ignore_last_character=ignore_last,
-                        workspace_dictionary=workspace_dict,
-                        workspace_word_length=word_length if workspace_dict else 8,
-                        workspace_word_frequency=word_freq if workspace_dict else 50,
-                        report=report,
-                        dry_run=dry_run,
-                        outputdir=st.session_state.get('modification_dir'))
+                    with st.spinner("Running spellchecking..."):
+                        result = bridge.spellchecking(
+                            files=selected_files,
+                            language=language,
+                            distance=distance,
+                            ignore_last_character=ignore_last,
+                            workspace_dictionary=workspace_dict,
+                            workspace_word_length=word_length if workspace_dict else 8,
+                            workspace_word_frequency=word_freq if workspace_dict else 50,
+                            report=report,
+                            dry_run=dry_run,
+                            outputdir=st.session_state.get('modification_dir'))
                     if result["success"]:
                         st.success(result["output"])
                     else:
@@ -125,11 +126,12 @@ def show_modification(bridge: ModificationBridge) -> None:
                 key="remove_text"
             )
             if st.button("Delete Text (content)"):
-                result = bridge.delete_text(
-                    files=selected_files,
-                    levels=[TextLevel(level) for level in levels],
-                    outputdir=st.session_state.get('modification_dir')
-                )
+                with st.spinner("Deleting text content..."):
+                    result = bridge.delete_text(
+                        files=selected_files,
+                        levels=[TextLevel(level) for level in levels],
+                        outputdir=st.session_state.get('modification_dir')
+                    )
                 if result["success"]:
                     st.success(result["output"])
                 else:
@@ -178,23 +180,24 @@ def show_modification(bridge: ModificationBridge) -> None:
 
             if st.button("Replace Tags"):
                 old_tags = old_tags if old_tags else [None]
-                for old_tag in old_tags:
-                    result = bridge.replace_tag(
-                        files=selected_files,
-                        old_tag=old_tag,
-                        new_tag=new_tag,
-                        level=[TextLevel(level) for level in levels],
-                        textfilter=textfilter if textfilter else None,
-                        skip_textfilter=skip_textfilter,
-                        dry_run=dry_run,
-                        outputdir=st.session_state.get('modification_dir')
-                    )
-                    if result["success"]:
-                        st.success(
-                            result["output"] +
-                            f': {old_tag} -> {new_tag}')
-                    else:
-                        st.error(result["output"])
+                with st.spinner("Replacing tags..."):
+                    for old_tag in old_tags:
+                        result = bridge.replace_tag(
+                            files=selected_files,
+                            old_tag=old_tag,
+                            new_tag=new_tag,
+                            level=[TextLevel(level) for level in levels],
+                            textfilter=textfilter if textfilter else None,
+                            skip_textfilter=skip_textfilter,
+                            dry_run=dry_run,
+                            outputdir=st.session_state.get('modification_dir')
+                        )
+                        if result["success"]:
+                            st.success(
+                                result["output"] +
+                                f': {old_tag} -> {new_tag}')
+                        else:
+                            st.error(result["output"])
 
         # Remove Tags
         with st.expander("Remove Tags"):
@@ -235,22 +238,23 @@ def show_modification(bridge: ModificationBridge) -> None:
 
             if st.button("Remove Tags"):
                 tags_to_remove = tags_to_remove if tags_to_remove else [None]
-                for tag_to_remove in tags_to_remove:
-                    result = bridge.remove_tag(
-                        files=selected_files,
-                        tag_to_remove=tag_to_remove,
-                        level=[TextLevel(level) for level in levels],
-                        textfilter=textfilter if textfilter else None,
-                        skip_textfilter=skip_textfilter,
-                        dry_run=dry_run,
-                        outputdir=st.session_state.get('modification_dir')
-                    )
-                    if result["success"]:
-                        st.success(
-                            result["output"] +
-                            f': Removed elements with tag "{tag_to_remove}"')
-                    else:
-                        st.error(result["output"])
+                with st.spinner("Removing tags..."):
+                    for tag_to_remove in tags_to_remove:
+                        result = bridge.remove_tag(
+                            files=selected_files,
+                            tag_to_remove=tag_to_remove,
+                            level=[TextLevel(level) for level in levels],
+                            textfilter=textfilter if textfilter else None,
+                            skip_textfilter=skip_textfilter,
+                            dry_run=dry_run,
+                            outputdir=st.session_state.get('modification_dir')
+                        )
+                        if result["success"]:
+                            st.success(
+                                result["output"] +
+                                f': Removed elements with tag "{tag_to_remove}"')
+                        else:
+                            st.error(result["output"])
 
         # Remove Empty
         with st.expander("Remove Empty Text Levels"):
@@ -263,12 +267,13 @@ def show_modification(bridge: ModificationBridge) -> None:
             dry_run = st.checkbox("Dry run", key="remove_empty_dry_run")
             if st.button("Remove Empty"):
                 level = [TextLevel(level) for level in level]
-                result = bridge.remove_empty(
-                    files=selected_files,
-                    level=level,
-                    dry_run=dry_run,
-                    outputdir=st.session_state.get('modification_dir')
-                )
+                with st.spinner("Removing empty elements..."):
+                    result = bridge.remove_empty(
+                        files=selected_files,
+                        level=level,
+                        dry_run=dry_run,
+                        outputdir=st.session_state.get('modification_dir')
+                    )
                 if result["success"]:
                     st.success(result["output"])
                 else:
@@ -277,10 +282,11 @@ def show_modification(bridge: ModificationBridge) -> None:
         # Delete Textlines
         with st.expander("Delete Textlines (with content)"):
             if st.button("Delete Textlines"):
-                result = bridge.delete_textlines(
-                    files=selected_files,
-                    outputdir=st.session_state.get('modification_dir')
-                )
+                with st.spinner("Deleting textlines..."):
+                    result = bridge.delete_textlines(
+                        files=selected_files,
+                        outputdir=st.session_state.get('modification_dir')
+                    )
                 if result["success"]:
                     st.success(result["output"])
                 else:
@@ -300,13 +306,14 @@ def show_modification(bridge: ModificationBridge) -> None:
             )
             dry_run = st.checkbox("Dry run", key="translate_lines_dry_run")
             if st.button("Translate Lines"):
-                result = bridge.translate_lines(
-                    files=selected_files,
-                    xoff=xoff,
-                    yoff=yoff,
-                    dry_run=dry_run,
-                    outputdir=st.session_state.get('modification_dir')
-                )
+                with st.spinner("Translating lines..."):
+                    result = bridge.translate_lines(
+                        files=selected_files,
+                        xoff=xoff,
+                        yoff=yoff,
+                        dry_run=dry_run,
+                        outputdir=st.session_state.get('modification_dir')
+                    )
                 if result["success"]:
                     st.success(result["output"])
                 else:
@@ -333,15 +340,16 @@ def show_modification(bridge: ModificationBridge) -> None:
             )
             dry_run = st.checkbox("Dry run", key="extend_lines_dry_run")
             if st.button("Extend Lines"):
-                result = bridge.extend_lines(
-                    files=selected_files,
-                    distance=distance,
-                    dim=dim,
-                    rectangularize=rectangularize,
-                    cut_overlaps=cut_overlaps,
-                    dry_run=dry_run,
-                    outputdir=st.session_state.get('modification_dir')
-                )
+                with st.spinner("Extending lines..."):
+                    result = bridge.extend_lines(
+                        files=selected_files,
+                        distance=distance,
+                        dim=dim,
+                        rectangularize=rectangularize,
+                        cut_overlaps=cut_overlaps,
+                        dry_run=dry_run,
+                        outputdir=st.session_state.get('modification_dir')
+                    )
                 if result["success"]:
                     st.success(result["output"])
                 else:
@@ -361,24 +369,26 @@ def show_modification(bridge: ModificationBridge) -> None:
             dry_run = st.checkbox("Dry run", key="rectangularize_dry_run")
 
             if st.button("Rectangularize Coordinates"):
-                result = bridge.rectangularize(
-                    files=selected_files,
-                    level=[TextLevel(level) for level in levels],
-                    dry_run=dry_run,
-                    outputdir=st.session_state.get('modification_dir')
-                )
-                if result["success"]:
-                    st.success(result["output"])
-                else:
-                    st.error(result["output"])
+                with st.spinner("Rectangularizing coordinates..."):
+                    result = bridge.rectangularize(
+                        files=selected_files,
+                        level=[TextLevel(level) for level in levels],
+                        dry_run=dry_run,
+                        outputdir=st.session_state.get('modification_dir')
+                    )
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
 
         # Pseudoline Polygon
         with st.expander("Pseudoline Polygon"):
             if st.button("Pseudoline Polygon"):
-                result = bridge.pseudolinepolygon(
-                    files=selected_files,
-                    outputdir=st.session_state.get('modification_dir')
-                )
+                with st.spinner("Generating pseudo-line polygons..."):
+                    result = bridge.pseudolinepolygon(
+                        files=selected_files,
+                        outputdir=st.session_state.get('modification_dir')
+                    )
                 if result["success"]:
                     st.success(result["output"])
                 else:
@@ -387,10 +397,11 @@ def show_modification(bridge: ModificationBridge) -> None:
         # Sort
         with st.expander("Sort"):
             if st.button("Sort"):
-                result = bridge.sort(
-                    files=selected_files,
-                    outputdir=st.session_state.get('modification_dir')
-                )
+                with st.spinner("Sorting elements..."):
+                    result = bridge.sort(
+                        files=selected_files,
+                        outputdir=st.session_state.get('modification_dir')
+                    )
                 if result["success"]:
                     st.success(result["output"])
                 else:
@@ -411,12 +422,13 @@ def show_modification(bridge: ModificationBridge) -> None:
                 key="sort_and_merge_gap_y"
             )
             if st.button("Sort and Merge"):
-                result = bridge.sort_and_merge(
-                    files=selected_files,
-                    merge_lines_gap_x=merge_lines_gap_x,
-                    merge_lines_gap_y=merge_lines_gap_y,
-                    outputdir=st.session_state.get('modification_dir')
-                )
+                with st.spinner("Sorting and merging elements..."):
+                    result = bridge.sort_and_merge(
+                        files=selected_files,
+                        merge_lines_gap_x=merge_lines_gap_x,
+                        merge_lines_gap_y=merge_lines_gap_y,
+                        outputdir=st.session_state.get('modification_dir')
+                    )
                 if result["success"]:
                     st.success(result["output"])
                 else:
@@ -438,13 +450,14 @@ def show_modification(bridge: ModificationBridge) -> None:
             )
             dry_run = st.checkbox("Dry run", key="split_regions_dry_run")
             if st.button("Split Big Regions"):
-                result = bridge.split_big_regions_vertical(
-                    files=selected_files,
-                    split_min_area=split_min_area,
-                    scale_min_area_by_maxlines=scale_min_area,
-                    dry_run=dry_run,
-                    outputdir=st.session_state.get('modification_dir')
-                )
+                with st.spinner("Splitting large regions..."):
+                    result = bridge.split_big_regions_vertical(
+                        files=selected_files,
+                        split_min_area=split_min_area,
+                        scale_min_area_by_maxlines=scale_min_area,
+                        dry_run=dry_run,
+                        outputdir=st.session_state.get('modification_dir')
+                    )
                 if result["success"]:
                     st.success(result["output"])
                 else:
@@ -466,12 +479,13 @@ def show_modification(bridge: ModificationBridge) -> None:
             dry_run = st.checkbox("Dry run", key="fit_into_parent_dry_run")
 
             if st.button("Fit into Parent"):
-                result = bridge.fit_into_parent(
-                    files=selected_files,
-                    level=[TextLevel(level) for level in levels],
-                    dry_run=dry_run,
-                    outputdir=st.session_state.get('modification_dir')
-                )
+                with st.spinner("Fitting elements into parent boundaries..."):
+                    result = bridge.fit_into_parent(
+                        files=selected_files,
+                        level=[TextLevel(level) for level in levels],
+                        dry_run=dry_run,
+                        outputdir=st.session_state.get('modification_dir')
+                    )
                 if result["success"]:
                     st.success(result["output"])
                 else:
@@ -487,11 +501,12 @@ def show_modification(bridge: ModificationBridge) -> None:
             dry_run = st.checkbox("Dry run", key="top_tier_textregion_dry_run")
 
             if st.button("Create Top Tier TextRegion"):
-                result = bridge.top_tier_textregion(
-                    files=selected_files,
-                    dry_run=dry_run,
-                    outputdir=st.session_state.get('modification_dir')
-                )
+                with st.spinner("Creating top-tier text regions..."):
+                    result = bridge.top_tier_textregion(
+                        files=selected_files,
+                        dry_run=dry_run,
+                        outputdir=st.session_state.get('modification_dir')
+                    )
                 if result["success"]:
                     st.success(result["output"])
                 else:
@@ -550,16 +565,17 @@ def show_modification(bridge: ModificationBridge) -> None:
             dry_run = st.checkbox("Dry run", key="merge_columnaligned_dry_run")
 
             if st.button("Merge Column-Aligned Regions"):
-                result = bridge.merge_columnaligned_regions(
-                    files=selected_files,
-                    tolerance=tolerance,
-                    based_on_baselines=based_on_baselines,
-                    convex_hull_method=convex_hull_method,
-                    max_height_distance=max_height_distance,
-                    mid_tolerance=mid_tolerance,
-                    dry_run=dry_run,
-                    outputdir=st.session_state.get('modification_dir')
-                )
+                with st.spinner("Merging column-aligned regions..."):
+                    result = bridge.merge_columnaligned_regions(
+                        files=selected_files,
+                        tolerance=tolerance,
+                        based_on_baselines=based_on_baselines,
+                        convex_hull_method=convex_hull_method,
+                        max_height_distance=max_height_distance,
+                        mid_tolerance=mid_tolerance,
+                        dry_run=dry_run,
+                        outputdir=st.session_state.get('modification_dir')
+                    )
                 if result["success"]:
                     st.success(result["output"])
                 else:
@@ -588,13 +604,14 @@ def show_modification(bridge: ModificationBridge) -> None:
             dry_run = st.checkbox("Dry run", key="sort_regions_dry_run")
 
             if st.button("Sort Regions"):
-                result = bridge.sort_regions(
-                    files=selected_files,
-                    based_on_baselines=based_on_baselines,
-                    overlap_pct=overlap_pct,
-                    dry_run=dry_run,
-                    outputdir=st.session_state.get('modification_dir')
-                )
+                with st.spinner("Sorting regions..."):
+                    result = bridge.sort_regions(
+                        files=selected_files,
+                        based_on_baselines=based_on_baselines,
+                        overlap_pct=overlap_pct,
+                        dry_run=dry_run,
+                        outputdir=st.session_state.get('modification_dir')
+                    )
                 if result["success"]:
                     st.success(result["output"])
                 else:
@@ -612,12 +629,13 @@ def show_modification(bridge: ModificationBridge) -> None:
             )
             dry_run = st.checkbox("Dry run", key="reassign_ids_dry_run")
             if st.button("Reassign IDs"):
-                result = bridge.reassign_ids(
-                    files=selected_files,
-                    reading_order_mode=mode,
-                    dry_run=dry_run,
-                    outputdir=st.session_state.get('modification_dir')
-                )
+                with st.spinner("Reassigning IDs..."):
+                    result = bridge.reassign_ids(
+                        files=selected_files,
+                        reading_order_mode=mode,
+                        dry_run=dry_run,
+                        outputdir=st.session_state.get('modification_dir')
+                    )
                 if result["success"]:
                     st.success(result["output"])
                 else:
@@ -627,11 +645,12 @@ def show_modification(bridge: ModificationBridge) -> None:
         with st.expander("Repair"):
             dry_run = st.checkbox("Dry run", key="repair_dry_run")
             if st.button("Repair"):
-                result = bridge.repair(
-                    files=selected_files,
-                    dry_run=dry_run,
-                    outputdir=st.session_state.get('modification_dir')
-                )
+                with st.spinner("Repairing files..."):
+                    result = bridge.repair(
+                        files=selected_files,
+                        dry_run=dry_run,
+                        outputdir=st.session_state.get('modification_dir')
+                    )
                 if result["success"]:
                     st.success(result["output"])
                 else:
@@ -648,11 +667,12 @@ def show_modification(bridge: ModificationBridge) -> None:
             dry_run = st.checkbox("Dry run", key="repair_dummy_dry_run")
 
             if st.button("Repair Dummy Regions"):
-                result = bridge.repair_dummy_region(
-                    files=selected_files,
-                    dry_run=dry_run,
-                    outputdir=st.session_state.get('modification_dir')
-                )
+                with st.spinner("Repairing dummy regions..."):
+                    result = bridge.repair_dummy_region(
+                        files=selected_files,
+                        dry_run=dry_run,
+                        outputdir=st.session_state.get('modification_dir')
+                    )
                 if result["success"]:
                     st.success(result["output"])
                 else:

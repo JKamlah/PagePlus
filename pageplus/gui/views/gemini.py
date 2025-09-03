@@ -262,14 +262,16 @@ def show_gemini(bridge: GeminiBridge) -> None:
                 type="password"
             )
             if st.button("Set API Key", key="set_api_key_button"):
-                result = bridge.set_api_key(api_key)
+                with st.spinner("Setting API key..."):
+                    result = bridge.set_api_key(api_key)
                 if result["success"]:
                     st.success(result["output"])
                 else:
                     st.error(result["output"])
 
             if st.button("Check API Key", key="check_api_key_button"):
-                result = bridge.check_valid_key()
+                with st.spinner("Checking API key..."):
+                    result = bridge.check_valid_key()
                 if result["success"]:
                     st.success(result["output"])
                 else:
@@ -278,7 +280,8 @@ def show_gemini(bridge: GeminiBridge) -> None:
         # Models
         with st.expander("Models", expanded=True):
             if st.button("Show Available Models", key="show_models_button"):
-                result = bridge.show_models()
+                with st.spinner("Fetching available models..."):
+                    result = bridge.show_models()
                 if result["success"]:
                     df = rich_table_to_dataframe(result["models"])
                     st.dataframe(df)
@@ -293,14 +296,16 @@ def show_gemini(bridge: GeminiBridge) -> None:
             if st.button(
                 "Show Model Details",
                     key="show_model_details_button"):
-                result = bridge.show_modeldetails(model)
+                with st.spinner(f"Fetching details for model {model}..."):
+                    result = bridge.show_modeldetails(model)
                 if result["success"]:
                     st.success(result["output"])
                 else:
                     st.error(result["output"])
 
             if st.button("Check Model", key="check_model_button"):
-                result = bridge.check_model(model)
+                with st.spinner(f"Checking model {model}..."):
+                    result = bridge.check_model(model)
                 if result["success"]:
                     st.success(result["output"])
                 else:
@@ -308,7 +313,8 @@ def show_gemini(bridge: GeminiBridge) -> None:
 
             if st.button("Set Model", key="set_model_button"):
                 settings.set("GEMINI_MODEL", model)
-                result = bridge.set_model(model)
+                with st.spinner(f"Setting model to {model}..."):
+                    result = bridge.set_model(model)
                 if result["success"]:
                     st.success(result["output"])
                 else:
@@ -665,132 +671,134 @@ def show_gemini(bridge: GeminiBridge) -> None:
                         output_queue = queue.Queue()
                         # Create a buffer to store all output
                         output_buffer = StringIO()
+                        
+                        with st.spinner("Running OCR...", show_time=True):
 
-                        # Run OCR with real-time output capture
-                        def run_ocr_process():
-                            old_stdout = sys.stdout
-                            sys.stdout = QueueOutput(
-                                output_queue, output_buffer)
-                            # Since usage data per file seems unavailable from ocr_multithread,
-                            # we'll focus on capturing the string outputs.
-                            aggregated_usage = {  # Initialize but expect it to remain empty
-                                "prompt_tokens": 0,
-                                "candidates_tokens": 0,
-                                "total_tokens": 0
-                            }
-                            overall_success = True  # Assume success unless an error is caught
-                            main_output_message = ""
+                            # Run OCR with real-time output capture
+                            def run_ocr_process():
+                                old_stdout = sys.stdout
+                                sys.stdout = QueueOutput(
+                                    output_queue, output_buffer)
+                                # Since usage data per file seems unavailable from ocr_multithread,
+                                # we'll focus on capturing the string outputs.
+                                aggregated_usage = {  # Initialize but expect it to remain empty
+                                    "prompt_tokens": 0,
+                                    "candidates_tokens": 0,
+                                    "total_tokens": 0
+                                }
+                                overall_success = True  # Assume success unless an error is caught
+                                main_output_message = ""
 
-                            try:
-                                # Assuming bridge.ocr_multithread now returns a
-                                # list of strings
-                                st.write(f"Overwrite: {overwrite_multi}")
-                                individual_results_messages = bridge.ocr_multithread(
-                                    files=selected_files_for_ocr,
-                                    outputdir=st.session_state.get('modification_dir'),
-                                    jobs=jobs_multi,
-                                    calls_per_minute=calls_per_minute_multi,
-                                    dry_run=dry_run_multi,
-                                    system_prompt=system_prompt_multi_selected,
-                                    overwrite=overwrite_multi,
-                                    thinking_budget=thinking_budget
-                                )
-
-                                # The bridge.ocr_multithread might return a single dictionary for the whole
-                                # batch if it can provide a summary and global
-                                # usage.
-                                if isinstance(
-                                        individual_results_messages,
-                                        dict) and "usage" in individual_results_messages:
-                                    overall_success = individual_results_messages.get(
-                                        "success", True)
-                                    main_output_message = individual_results_messages.get(
-                                        "output", "Multithreaded process completed.")
-                                    usage_data_list = individual_results_messages.get(
-                                        'usage')
-                                    if usage_data_list and isinstance(
-                                            usage_data_list, list):
-                                        for usage_meta in usage_data_list:
-                                            if hasattr(
-                                                    usage_meta, 'prompt_token_count'):
-                                                aggregated_usage["prompt_tokens"] += getattr(
-                                                    usage_meta, 'prompt_token_count', 0)
-                                                aggregated_usage["candidates_tokens"] += getattr(
-                                                    usage_meta, 'candidates_token_count', 0)
-                                                aggregated_usage["total_tokens"] += getattr(
-                                                    usage_meta, 'total_token_count', 0)
-                                            elif isinstance(usage_meta, dict):
-                                                aggregated_usage["prompt_tokens"] += usage_meta.get(
-                                                    'prompt_token_count', 0)
-                                                aggregated_usage["candidates_tokens"] += usage_meta.get(
-                                                    'candidates_token_count', 0)
-                                                aggregated_usage["total_tokens"] += usage_meta.get(
-                                                    'total_token_count', 0)
-                                elif isinstance(individual_results_messages, list):
-                                    main_output_message = (
-                                        f"Multithreaded OCR process initiated for " f"{
-                                            len(selected_files_for_ocr)} files. Output below.")
-                                else:
-                                    main_output_message = (
-                                        "Multithreaded OCR process returned an unexpected data type."
+                                try:
+                                    # Assuming bridge.ocr_multithread now returns a
+                                    # list of strings
+                                    st.write(f"Overwrite: {overwrite_multi}")
+                                    individual_results_messages = bridge.ocr_multithread(
+                                        files=selected_files_for_ocr,
+                                        outputdir=st.session_state.get('modification_dir'),
+                                        jobs=jobs_multi,
+                                        calls_per_minute=calls_per_minute_multi,
+                                        dry_run=dry_run_multi,
+                                        system_prompt=system_prompt_multi_selected,
+                                        overwrite=overwrite_multi,
+                                        thinking_budget=thinking_budget
                                     )
-                                    overall_success = False
 
-                                # Ensure all pending stdout is flushed before
-                                # returning from the thread
-                                sys.stdout.flush()
+                                    # The bridge.ocr_multithread might return a single dictionary for the whole
+                                    # batch if it can provide a summary and global
+                                    # usage.
+                                    if isinstance(
+                                            individual_results_messages,
+                                            dict) and "usage" in individual_results_messages:
+                                        overall_success = individual_results_messages.get(
+                                            "success", True)
+                                        main_output_message = individual_results_messages.get(
+                                            "output", "Multithreaded process completed.")
+                                        usage_data_list = individual_results_messages.get(
+                                            'usage')
+                                        if usage_data_list and isinstance(
+                                                usage_data_list, list):
+                                            for usage_meta in usage_data_list:
+                                                if hasattr(
+                                                        usage_meta, 'prompt_token_count'):
+                                                    aggregated_usage["prompt_tokens"] += getattr(
+                                                        usage_meta, 'prompt_token_count', 0)
+                                                    aggregated_usage["candidates_tokens"] += getattr(
+                                                        usage_meta, 'candidates_token_count', 0)
+                                                    aggregated_usage["total_tokens"] += getattr(
+                                                        usage_meta, 'total_token_count', 0)
+                                                elif isinstance(usage_meta, dict):
+                                                    aggregated_usage["prompt_tokens"] += usage_meta.get(
+                                                        'prompt_token_count', 0)
+                                                    aggregated_usage["candidates_tokens"] += usage_meta.get(
+                                                        'candidates_token_count', 0)
+                                                    aggregated_usage["total_tokens"] += usage_meta.get(
+                                                        'total_token_count', 0)
+                                    elif isinstance(individual_results_messages, list):
+                                        main_output_message = (
+                                            f"Multithreaded OCR process initiated for " f"{
+                                                len(selected_files_for_ocr)} files. Output below.")
+                                    else:
+                                        main_output_message = (
+                                            "Multithreaded OCR process returned an unexpected data type."
+                                        )
+                                        overall_success = False
 
-                                return {
-                                    "success": overall_success,
-                                    "output": main_output_message,
-                                    "aggregated_usage": aggregated_usage
-                                }
-                            except Exception as e:
-                                error_msg = f"Error during OCR processing: {
-                                    str(e)}"
-                                # This print should go to the redirected stdout
-                                # (QueueOutput)
-                                print(error_msg)
-                                sys.stdout.flush()  # Ensure error message is flushed
-                                return {
-                                    "success": False,
-                                    "output": error_msg,
-                                    "aggregated_usage": aggregated_usage
-                                }
-                            finally:
-                                sys.stdout = old_stdout
+                                    # Ensure all pending stdout is flushed before
+                                    # returning from the thread
+                                    sys.stdout.flush()
 
-                        result_container = {"result": None}
+                                    return {
+                                        "success": overall_success,
+                                        "output": main_output_message,
+                                        "aggregated_usage": aggregated_usage
+                                    }
+                                except Exception as e:
+                                    error_msg = f"Error during OCR processing: {
+                                        str(e)}"
+                                    # This print should go to the redirected stdout
+                                    # (QueueOutput)
+                                    print(error_msg)
+                                    sys.stdout.flush()  # Ensure error message is flushed
+                                    return {
+                                        "success": False,
+                                        "output": error_msg,
+                                        "aggregated_usage": aggregated_usage
+                                    }
+                                finally:
+                                    sys.stdout = old_stdout
 
-                        def run_ocr_and_store_result():
-                            result_container["result"] = run_ocr_process()
+                            result_container = {"result": None}
 
-                        ocr_thread = threading.Thread(
-                            target=run_ocr_and_store_result)
-                        ocr_thread.start()
+                            def run_ocr_and_store_result():
+                                result_container["result"] = run_ocr_process()
 
-                        while ocr_thread.is_alive():
-                            update_terminal_display(
-                                output_queue, output_buffer, terminal_container)
-                            time.sleep(0.1)
+                            ocr_thread = threading.Thread(
+                                target=run_ocr_and_store_result)
+                            ocr_thread.start()
 
-                        ocr_thread.join()
-                        result = result_container["result"]
+                            while ocr_thread.is_alive():
+                                update_terminal_display(
+                                    output_queue, output_buffer, terminal_container)
+                                time.sleep(0.1)
 
-                        process_result(
-                            result,
-                            output_buffer,
-                            terminal_container,
-                            terminal_text,
-                            settings,
-                            process_type="OCR"
-                        )
+                            ocr_thread.join()
+                            result = result_container["result"]
 
-                    st.download_button(
-                        label="Download Terminal Output",
-                        data=terminal_text,
-                        file_name="ocr_terminal_output.txt",
-                        mime="text/plain")
+                            process_result(
+                                result,
+                                output_buffer,
+                                terminal_container,
+                                terminal_text,
+                                settings,
+                                process_type="OCR"
+                            )
+
+                        st.download_button(
+                            label="Download Terminal Output",
+                            data=terminal_text,
+                            file_name="ocr_terminal_output.txt",
+                            mime="text/plain")
 
                 # OCR Settings
                 with st.expander("OCR Settings"):
@@ -831,13 +839,14 @@ def show_gemini(bridge: GeminiBridge) -> None:
                             system_prompt = templates["system"].get(
                                 selected_system_prompt_ocr, ""
                             )
-                        result = bridge.ocr(
-                            files=selected_files_for_ocr,
-                            outputdir=st.session_state.get('modification_dir'),
-                            calls_per_minute=calls_per_minute_ocr,
-                            dry_run=dry_run_ocr,
-                            system_prompt=system_prompt
-                        )
+                        with st.spinner("Running OCR...", show_time=True):
+                            result = bridge.ocr(
+                                files=selected_files_for_ocr,
+                                outputdir=st.session_state.get('modification_dir'),
+                                calls_per_minute=calls_per_minute_ocr,
+                                dry_run=dry_run_ocr,
+                                system_prompt=system_prompt
+                            )
                         if result["success"]:
                             st.success(result["output"])
                         else:
@@ -924,132 +933,132 @@ def show_gemini(bridge: GeminiBridge) -> None:
                             disabled=True,
                             key="reocr_terminal_output_clear"
                         )
+                        with st.spinner("Running OCR...", show_time=True):
+                            # Create a queue for output
+                            output_queue = queue.Queue()
+                            # Create a buffer to store all output
+                            output_buffer = StringIO()
 
-                        # Create a queue for output
-                        output_queue = queue.Queue()
-                        # Create a buffer to store all output
-                        output_buffer = StringIO()
-
-                        # Run ReOCR with real-time output capture
-                        def run_reocr_process():
-                            old_stdout = sys.stdout
-                            sys.stdout = QueueOutput(
-                                output_queue, output_buffer)
-                            # Since usage data per file seems unavailable from reocr_multithread,
-                            # we'll focus on capturing the string outputs.
-                            aggregated_usage = {  # Initialize but expect it to remain empty
-                                "prompt_tokens": 0,
-                                "candidates_tokens": 0,
-                                "total_tokens": 0
-                            }
-                            overall_success = True  # Assume success unless an error is caught
-                            main_output_message = ""
-
-                            try:
-                                # Run reocr command
-                                result = bridge.reocr_multithread(
-                                    xml_files=loaded_files,
-                                    image_files=selected_files_for_ocr,
-                                    image_folder=None,
-                                    same_names=True,
-                                    additional_checks=None,
-                                    outputdir=st.session_state.get('modification_dir'),
-                                    system_prompt=system_prompt_multi_selected,
-                                    update_page=True,
-                                    jobs=jobs_multi,
-                                    calls_per_minute=calls_per_minute_multi,
-                                    thinking_budget=thinking_budget,
-                                    dry_run=dry_run_multi,
-                                    overwrite=overwrite_multi
-                                )
-
-                                # The bridge.reocr_multithread might return a single dictionary for the whole
-                                # batch if it can provide a summary and global
-                                # usage.
-                                if isinstance(
-                                        result, dict) and "usage" in result:
-                                    overall_success = result.get(
-                                        "success", True)
-                                    main_output_message = result.get(
-                                        "output", "Multithreaded process completed."
-                                    )
-                                    usage_data_list = result.get('usage')
-                                    if usage_data_list and isinstance(
-                                            usage_data_list, list):
-                                        for usage_meta in usage_data_list:
-                                            if hasattr(
-                                                    usage_meta, 'prompt_token_count'):
-                                                aggregated_usage["prompt_tokens"] += getattr(
-                                                    usage_meta, 'prompt_token_count', 0)
-                                                aggregated_usage["candidates_tokens"] += getattr(
-                                                    usage_meta, 'candidates_token_count', 0)
-                                                aggregated_usage["total_tokens"] += getattr(
-                                                    usage_meta, 'total_token_count', 0)
-                                            elif isinstance(usage_meta, dict):
-                                                aggregated_usage["prompt_tokens"] += usage_meta.get(
-                                                    'prompt_token_count', 0)
-                                                aggregated_usage["candidates_tokens"] += usage_meta.get(
-                                                    'candidates_token_count', 0)
-                                                aggregated_usage["total_tokens"] += usage_meta.get(
-                                                    'total_token_count', 0)
-                                else:
-                                    main_output_message = (
-                                        "Multithreaded ReOCR process returned an unexpected data type."
-                                    )
-                                    overall_success = False
-
-                                # Ensure all pending stdout is flushed before
-                                # returning from the thread
-                                sys.stdout.flush()
-
-                                return {
-                                    "success": overall_success,
-                                    "output": main_output_message,
-                                    "aggregated_usage": aggregated_usage
+                            # Run ReOCR with real-time output capture
+                            def run_reocr_process():
+                                old_stdout = sys.stdout
+                                sys.stdout = QueueOutput(
+                                    output_queue, output_buffer)
+                                # Since usage data per file seems unavailable from reocr_multithread,
+                                # we'll focus on capturing the string outputs.
+                                aggregated_usage = {  # Initialize but expect it to remain empty
+                                    "prompt_tokens": 0,
+                                    "candidates_tokens": 0,
+                                    "total_tokens": 0
                                 }
-                            except Exception as e:
-                                error_msg = f"Error during ReOCR processing: {
-                                    str(e)}"
-                                # This print should go to the redirected stdout
-                                # (QueueOutput)
-                                print(error_msg)
-                                sys.stdout.flush()  # Ensure error message is flushed
-                                return {
-                                    "success": False,
-                                    "output": error_msg,
-                                    "aggregated_usage": aggregated_usage
-                                }
-                            finally:
-                                sys.stdout = old_stdout
+                                overall_success = True  # Assume success unless an error is caught
+                                main_output_message = ""
 
-                        result_container = {"result": None}
+                                try:
+                                    # Run reocr command
+                                    result = bridge.reocr_multithread(
+                                        xml_files=loaded_files,
+                                        image_files=selected_files_for_ocr,
+                                        image_folder=None,
+                                        same_names=True,
+                                        additional_checks=None,
+                                        outputdir=st.session_state.get('modification_dir'),
+                                        system_prompt=system_prompt_multi_selected,
+                                        update_page=True,
+                                        jobs=jobs_multi,
+                                        calls_per_minute=calls_per_minute_multi,
+                                        thinking_budget=thinking_budget,
+                                        dry_run=dry_run_multi,
+                                        overwrite=overwrite_multi
+                                    )
 
-                        def run_reocr_and_store_result():
-                            result_container["result"] = run_reocr_process()
+                                    # The bridge.reocr_multithread might return a single dictionary for the whole
+                                    # batch if it can provide a summary and global
+                                    # usage.
+                                    if isinstance(
+                                            result, dict) and "usage" in result:
+                                        overall_success = result.get(
+                                            "success", True)
+                                        main_output_message = result.get(
+                                            "output", "Multithreaded process completed."
+                                        )
+                                        usage_data_list = result.get('usage')
+                                        if usage_data_list and isinstance(
+                                                usage_data_list, list):
+                                            for usage_meta in usage_data_list:
+                                                if hasattr(
+                                                        usage_meta, 'prompt_token_count'):
+                                                    aggregated_usage["prompt_tokens"] += getattr(
+                                                        usage_meta, 'prompt_token_count', 0)
+                                                    aggregated_usage["candidates_tokens"] += getattr(
+                                                        usage_meta, 'candidates_token_count', 0)
+                                                    aggregated_usage["total_tokens"] += getattr(
+                                                        usage_meta, 'total_token_count', 0)
+                                                elif isinstance(usage_meta, dict):
+                                                    aggregated_usage["prompt_tokens"] += usage_meta.get(
+                                                        'prompt_token_count', 0)
+                                                    aggregated_usage["candidates_tokens"] += usage_meta.get(
+                                                        'candidates_token_count', 0)
+                                                    aggregated_usage["total_tokens"] += usage_meta.get(
+                                                        'total_token_count', 0)
+                                    else:
+                                        main_output_message = (
+                                            "Multithreaded ReOCR process returned an unexpected data type."
+                                        )
+                                        overall_success = False
 
-                        reocr_thread = threading.Thread(
-                            target=run_reocr_and_store_result)
-                        reocr_thread.start()
+                                    # Ensure all pending stdout is flushed before
+                                    # returning from the thread
+                                    sys.stdout.flush()
 
-                        while reocr_thread.is_alive():
-                            update_terminal_display(
-                                output_queue, output_buffer, terminal_container)
-                            time.sleep(0.1)
+                                    return {
+                                        "success": overall_success,
+                                        "output": main_output_message,
+                                        "aggregated_usage": aggregated_usage
+                                    }
+                                except Exception as e:
+                                    error_msg = f"Error during ReOCR processing: {
+                                        str(e)}"
+                                    # This print should go to the redirected stdout
+                                    # (QueueOutput)
+                                    print(error_msg)
+                                    sys.stdout.flush()  # Ensure error message is flushed
+                                    return {
+                                        "success": False,
+                                        "output": error_msg,
+                                        "aggregated_usage": aggregated_usage
+                                    }
+                                finally:
+                                    sys.stdout = old_stdout
 
-                        reocr_thread.join()
-                        result = result_container["result"]
+                            result_container = {"result": None}
 
-                        process_result(
-                            result,
-                            output_buffer,
-                            terminal_container,
-                            terminal_text,
-                            settings,
-                            process_type="ReOCR"
-                        )
+                            def run_reocr_and_store_result():
+                                result_container["result"] = run_reocr_process()
 
-                    st.download_button(
-                        label="Download Terminal Output",
-                        data=terminal_text,
-                        file_name="reocr_terminal_output.txt",
-                        mime="text/plain")
+                            reocr_thread = threading.Thread(
+                                target=run_reocr_and_store_result)
+                            reocr_thread.start()
+
+                            while reocr_thread.is_alive():
+                                update_terminal_display(
+                                    output_queue, output_buffer, terminal_container)
+                                time.sleep(0.1)
+
+                            reocr_thread.join()
+                            result = result_container["result"]
+
+                            process_result(
+                                result,
+                                output_buffer,
+                                terminal_container,
+                                terminal_text,
+                                settings,
+                                process_type="ReOCR"
+                            )
+
+                        st.download_button(
+                            label="Download Terminal Output",
+                            data=terminal_text,
+                            file_name="reocr_terminal_output.txt",
+                            mime="text/plain")
