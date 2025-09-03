@@ -2,18 +2,19 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Optional, List, Any
+from typing import Any, List, Optional
 
 import lxml.etree as ET
 import numpy as np
 import shapely
 from shapely import affinity, concave_hull
-from shapely.errors import TopologicalError, GEOSException
-from shapely.geometry import LineString, LinearRing, Polygon, Point, MultiPoint, MultiLineString
+from shapely.errors import GEOSException, TopologicalError
+from shapely.geometry import (LinearRing, LineString, MultiLineString,
+                              MultiPoint, Point, Polygon)
 from shapely.ops import nearest_points, unary_union
 
 from pageplus.io.logger import logging
-from pageplus.models.basic_elements import Region, CoordElement
+from pageplus.models.basic_elements import CoordElement, Region
 
 
 @dataclass
@@ -22,7 +23,8 @@ class TextRegion(Region):
     textlines: Optional[List[Textline]] = field(default_factory=list)
 
     def __post_init__(self):
-        self.textlines = [Textline(e, self.ns, parent=self) for e in self.xml_element.iter(f"{{{self.ns}}}TextLine")]
+        self.textlines = [Textline(e, self.ns, parent=self)
+                          for e in self.xml_element.iter(f"{{{self.ns}}}TextLine")]
 
     def counter(self, level: str = "textlines") -> int:
         """
@@ -34,18 +36,21 @@ class TextRegion(Region):
         if level == "textlines":
             return len(self.textlines)
         if level == "words":
-            return sum(len(line.get_text().split()) for line in self.textlines if not line.is_text_empty())
+            return sum(len(line.get_text().split())
+                       for line in self.textlines if not line.is_text_empty())
         if level == "glyphs":
-            return sum(len(line.get_text()) for line in self.textlines if not line.is_text_empty())
+            return sum(len(line.get_text())
+                       for line in self.textlines if not line.is_text_empty())
 
         return 0
-    
+
     def delete_textlines(self, idx_list: list):
         """
         Deletes textlines from the region based on a list of indices.
         """
         for idx in sorted(idx_list, reverse=True):
-            self.textlines[idx].xml_element.getparent().remove(self.textlines[idx].xml_element)
+            self.textlines[idx].xml_element.getparent().remove(
+                self.textlines[idx].xml_element)
             self.textlines.pop(idx)
 
     def sort_baselines(self, mode: str = 'single_col'):
@@ -62,11 +67,13 @@ class TextRegion(Region):
             bl = textline.get_baseline_coordinates(returntype="linestring")
             if bl is None:
                 bl = Polygon(textline._compute_baseline())
-            if bl is None: continue
+            if bl is None:
+                continue
             sorted_textlines.append((idx, bl.centroid, bl))
         sorted_textlines = sorted(sorted_textlines, key=lambda x: x[1].y)
 
-        # More complex sorting considering the proximity of lines and their horizontal positions
+        # More complex sorting considering the proximity of lines and their
+        # horizontal positions
         for i in range(len(sorted_textlines) - 1):
             for j in range(i + 1, len(sorted_textlines)):
                 line1, line2 = sorted_textlines[i][2], sorted_textlines[j][2]
@@ -86,14 +93,24 @@ class TextRegion(Region):
                 self.xml_element.remove(textline.xml_element)
                 self.xml_element.append(textline.xml_element)
 
-    def _baselines_near_same_height(self, line1: LineString, line2: LineString, tolerance=5) -> bool:
+    def _baselines_near_same_height(
+            self,
+            line1: LineString,
+            line2: LineString,
+            tolerance=5) -> bool:
         """ Helper function to check if two lines are near the same height """
         # Calculate the distance between two centroids
         distance_cd = line1.centroid.x - line2.centroid.x
         line2 = affinity.translate(line2, xoff=distance_cd)
-        return line1.buffer(distance=tolerance).intersects(line2.buffer(distance=tolerance))
+        return line1.buffer(
+            distance=tolerance).intersects(
+            line2.buffer(
+                distance=tolerance))
 
-    def _should_swap_baselines(self, line1: LineString, line2: LineString) -> bool:
+    def _should_swap_baselines(
+            self,
+            line1: LineString,
+            line2: LineString) -> bool:
         """ Helper function to determine if two lines should be swapped based on their horizontal positions """
         return line2.bounds[0] < line1.bounds[2]
 
@@ -102,23 +119,34 @@ class TextRegion(Region):
         orig_sorted_lines = []
         # Sorting after y coordinates
         for idx, textline in enumerate(self.textlines):
-            mrr = textline.get_coordinates(returntype="linearring").minimum_rotated_rectangle
+            mrr = textline.get_coordinates(
+                returntype="linearring").minimum_rotated_rectangle
             orig_sorted_lines.append((idx, mrr.centroid, mrr))
         sorting_lines = sorted(orig_sorted_lines, key=lambda x: x[1].y)
         sl_idx = 0
-        while sl_idx < num_lines-1:
+        while sl_idx < num_lines - 1:
             for sl_next in range(1, 4):
-                if sl_idx+sl_next > num_lines-1: continue
-                rng = range(max(int(sorting_lines[sl_idx][2].bounds[1]), int(sorting_lines[sl_idx+sl_next][2].bounds[1])),
-                     min(int(sorting_lines[sl_idx][2].bounds[3]), int(sorting_lines[sl_idx+sl_next][2].bounds[3]))+1)
-                # Y coordinate difference to find lines which are nearly in the same height
-                if len(rng)*.25 > int(abs(((sorting_lines[sl_idx+sl_next][1].y - sorting_lines[sl_idx][1].y)))):
-                    logging.info(f"RO-Lineheight: In textregion {self.get_id()} the lines {self.textlines[sorting_lines[sl_idx][0]].get_id()} ({self.textlines[sorting_lines[sl_idx][0]].get_text()}) and {self.textlines[sorting_lines[sl_idx+sl_next][0]].get_id()} ({self.textlines[sorting_lines[sl_idx+sl_next][0]].get_text()}) at the same height")
-                    # Check if the second line is behind the first (x-coordindate)
-                    if sorting_lines[sl_idx+sl_next][1].bounds[0] < sorting_lines[sl_idx][2].bounds[0]:
-                        logging.info(f"RO-Lineswap: In textregion {self.get_id()} the lines {self.textlines[sorting_lines[sl_idx][0]].get_id()} and {self.textlines[sorting_lines[sl_idx+sl_next][0]].get_id()} got swapped.")
-                        sorting_lines[sl_idx], sorting_lines[sl_idx+sl_next] = sorting_lines[sl_idx+sl_next],\
-                            sorting_lines[sl_idx],
+                if sl_idx + sl_next > num_lines - 1:
+                    continue
+                rng = range(max(int(sorting_lines[sl_idx][2].bounds[1]),
+                                int(sorting_lines[sl_idx + sl_next][2].bounds[1])),
+                            min(int(sorting_lines[sl_idx][2].bounds[3]),
+                                int(sorting_lines[sl_idx + sl_next][2].bounds[3])) + 1)
+                # Y coordinate difference to find lines which are nearly in the
+                # same height
+                if len(
+                        rng) * .25 > int(abs(((sorting_lines[sl_idx + sl_next][1].y - sorting_lines[sl_idx][1].y)))):
+                    logging.info(
+                        f"RO-Lineheight: In textregion {self.get_id()} the lines {self.textlines[sorting_lines[sl_idx][0]].get_id()} ({self.textlines[sorting_lines[sl_idx][0]].get_text()}) and {self.textlines[sorting_lines[sl_idx + sl_next][0]].get_id()} ({self.textlines[sorting_lines[sl_idx + sl_next][0]].get_text()}) at the same height")
+                    # Check if the second line is behind the first
+                    # (x-coordindate)
+                    if sorting_lines[sl_idx +
+                                     sl_next][1].bounds[0] < sorting_lines[sl_idx][2].bounds[0]:
+                        logging.info(
+                            f"RO-Lineswap: In textregion {self.get_id()} the lines {self.textlines[sorting_lines[sl_idx][0]].get_id()} and {self.textlines[sorting_lines[sl_idx + sl_next][0]].get_id()} got swapped.")
+                        sorting_lines[sl_idx], sorting_lines[sl_idx +
+                                                             sl_next] = sorting_lines[sl_idx +
+                                                                                      sl_next], sorting_lines[sl_idx],
                         break
             else:
                 sl_idx += 1
@@ -129,7 +157,10 @@ class TextRegion(Region):
                 self.xml_element.remove(textline.xml_element)
                 self.xml_element.append(textline.xml_element)
 
-    def _textlines_near_same_height(self, line1: Polygon, line2: Polygon) -> bool:
+    def _textlines_near_same_height(
+            self,
+            line1: Polygon,
+            line2: Polygon) -> bool:
         """ Helper function to check if two lines are near the same height """
         # Align the centroids and check if one centroid is in the other polygon
         distance_cd = line1.centroid.x - line2.centroid.x
@@ -138,7 +169,10 @@ class TextRegion(Region):
             return False
         return line2.contains(line1.centroid) or line1.contains(line2.centroid)
 
-    def _should_swap_textlines(self, line1: LineString, line2: LineString) -> bool:
+    def _should_swap_textlines(
+            self,
+            line1: LineString,
+            line2: LineString) -> bool:
         """ Helper function to determine if two lines should be swapped based on their horizontal positions """
         return line2.bounds[0] < line1.bounds[2]
 
@@ -147,20 +181,27 @@ class TextRegion(Region):
         Merges text lines that are close to each other based on x and y difference thresholds.
         """
 
-        baseline_tuples = [line.get_baseline_coordinates(returntype="tuple") for line in self.textlines]
+        baseline_tuples = [line.get_baseline_coordinates(
+            returntype="tuple") for line in self.textlines]
 
         i = 1
         while i < len(self.textlines):
             current_baseline = baseline_tuples[i]
             previous_baseline = baseline_tuples[i - 1]
 
-            if self._can_merge_lines(current_baseline, previous_baseline, max_x_diff, max_y_diff):
+            if self._can_merge_lines(
+                    current_baseline,
+                    previous_baseline,
+                    max_x_diff,
+                    max_y_diff):
                 try:
-                    new_polygon, new_baseline = self._merge_line_polygons_and_baselines(i, previous_baseline,
-                                                                                        current_baseline)
-                    self.textlines[i].update_coordinates(new_polygon.exterior, inputtype="polygon")
+                    new_polygon, new_baseline = self._merge_line_polygons_and_baselines(
+                        i, previous_baseline, current_baseline)
+                    self.textlines[i].update_coordinates(
+                        new_polygon.exterior, inputtype="polygon")
                     self.textlines[i].update_baseline_coordinates(new_baseline)
-                    self.textlines[i].update_text(f"{self.textlines[i - 1].get_text()} {self.textlines[i].get_text()}")
+                    self.textlines[i].update_text(
+                        f"{self.textlines[i - 1].get_text()} {self.textlines[i].get_text()}")
                     self.delete_textlines([i - 1])
                     baseline_tuples[i] = new_baseline
                     baseline_tuples.pop(i - 1)
@@ -172,7 +213,12 @@ class TextRegion(Region):
             else:
                 i += 1
 
-    def _can_merge_lines(self, current_baseline, previous_baseline, max_x_diff, max_y_diff):
+    def _can_merge_lines(
+            self,
+            current_baseline,
+            previous_baseline,
+            max_x_diff,
+            max_y_diff):
         """
         Determines if two lines can be merged based on their baseline proximity.
         """
@@ -181,7 +227,11 @@ class TextRegion(Region):
         return abs(previous_baseline[-1][0] - current_baseline[0][0]) <= max_x_diff and \
             abs(previous_baseline[-1][1] - current_baseline[0][1]) <= max_y_diff
 
-    def _merge_line_polygons_and_baselines(self, line_index, previous_baseline, current_baseline):
+    def _merge_line_polygons_and_baselines(
+            self,
+            line_index,
+            previous_baseline,
+            current_baseline):
         """
         Merges the polygons and baselines of two lines.
         """
@@ -191,17 +241,22 @@ class TextRegion(Region):
                       line.get_coordinates(returntype='polygon').minimum_rotated_rectangle.exterior.coords[1:])]
         mean_width = np.median(widths)
         polygon_to_polygon_bridge = self._calculate_bridge_region(previous_baseline,
-                                                                  self.textlines[line_index - 1].get_coordinates(
-                                                                      'tuple'),
+                                                                  self.textlines[line_index - 1].get_coordinates('tuple'),
                                                                   current_baseline,
                                                                   self.textlines[line_index].get_coordinates('tuple'),
                                                                   mean_width)
-        new_polygon = self._unify_polygons(line_index, polygon_to_polygon_bridge)
+        new_polygon = self._unify_polygons(
+            line_index, polygon_to_polygon_bridge)
         new_baseline = previous_baseline + current_baseline
         return new_polygon, new_baseline
 
-    def _calculate_bridge_region(self, previous_baseline, previous_textline, current_baseline, current_textline,
-                                 mean_width):
+    def _calculate_bridge_region(
+            self,
+            previous_baseline,
+            previous_textline,
+            current_baseline,
+            current_textline,
+            mean_width):
         """
         Calculates a bridge region between two polygons based on their baselines and mean width.
         """
@@ -216,44 +271,73 @@ class TextRegion(Region):
         """
         Unifies the polygons of two text lines including the bridge polygon.
         """
-        previous_polygon = self.textlines[line_index - 1].get_coordinates(returntype='polygon')
-        current_polygon = self.textlines[line_index].get_coordinates(returntype='polygon')
+        previous_polygon = self.textlines[line_index -
+                                          1].get_coordinates(returntype='polygon')
+        current_polygon = self.textlines[line_index].get_coordinates(
+            returntype='polygon')
         return unary_union([previous_polygon, bridge_polygon, current_polygon])
 
     def get_mean_textline_centroid(self):
         """
         Gets the mean centroid of the textlines in the region.
         """
-        textline_polygons = [line.get_coordinates("polygon") for line in self.textlines]
-        return MultiPoint([poly.centroid for poly in textline_polygons if poly is not None]).centroid
+        textline_polygons = [line.get_coordinates(
+            "polygon") for line in self.textlines]
+        return MultiPoint(
+            [poly.centroid for poly in textline_polygons if poly is not None]).centroid
 
-    def split_region_by_textlinecoords(self, col: int = 2, center_mode: tuple = (3, (0, 2)), padding_region: int = 12,
-                                       min_mean_grp_distance: int = 500, subtract_small_from_big: bool = False) -> list:
+    def split_region_by_textlinecoords(
+            self,
+            col: int = 2,
+            center_mode: tuple = (
+                3,
+                (0,
+                 2)),
+            padding_region: int = 12,
+            min_mean_grp_distance: int = 500,
+            subtract_small_from_big: bool = False) -> list:
         """ Split a region by finding a mean value dividing the textlines """
         regions = [defaultdict(list) for _ in range(col)]
-        textline_polygons = [line.get_coordinates("polygon") for line in self.textlines]
-        x_center_textlines = [int(poly.centroid.x) for poly in textline_polygons]
+        textline_polygons = [line.get_coordinates(
+            "polygon") for line in self.textlines]
+        x_center_textlines = [int(poly.centroid.x)
+                              for poly in textline_polygons]
 
         if len(x_center_textlines) < center_mode[0]:
             return []
 
-        x_center_grps = np.array_split(np.array(sorted(x_center_textlines)), center_mode[0])
+        x_center_grps = np.array_split(
+            np.array(
+                sorted(x_center_textlines)),
+            center_mode[0])
         x_mean_grps = [np.mean(x_center_grps[idx]) for idx in center_mode[1]]
 
-        if len(x_mean_grps) < 1 or (len(x_mean_grps) > 1 and x_mean_grps[1] - x_mean_grps[0] < min_mean_grp_distance):
+        if len(x_mean_grps) < 1 or (
+                len(x_mean_grps) > 1 and x_mean_grps[1] -
+                x_mean_grps[0] < min_mean_grp_distance):
             return []
 
         x_mean = int(np.mean(x_mean_grps))
         for idx, x_center_textline in enumerate(x_center_textlines):
-            regions[x_center_textline < x_mean]['textlines'].append(self.textlines[idx])
-            regions[x_center_textline < x_mean]['coords'].extend(textline_polygons[idx].exterior.coords)
+            regions[x_center_textline < x_mean]['textlines'].append(
+                self.textlines[idx])
+            regions[x_center_textline < x_mean]['coords'].extend(
+                textline_polygons[idx].exterior.coords)
 
         for region in regions:
             region_polygon = Polygon(region['coords']).convex_hull
-            region_polygon.buffer(padding_region, cap_style="flat", join_style="bevel")
-            region['region_linearring'].append(LinearRing(shapely.geometry.polygon.orient(region_polygon,
-                                                                                          sign=1.0).exterior.coords))
-            region['region_coordstr'].append(self.convert_coordinates_polygon_to_str(region['region_linearring'][0]))
+            region_polygon.buffer(
+                padding_region,
+                cap_style="flat",
+                join_style="bevel")
+            region['region_linearring'].append(
+                LinearRing(
+                    shapely.geometry.polygon.orient(
+                        region_polygon,
+                        sign=1.0).exterior.coords))
+            region['region_coordstr'].append(
+                self.convert_coordinates_polygon_to_str(
+                    region['region_linearring'][0]))
         if subtract_small_from_big and len(regions) == 2:
             regions = self._subtract_overlapping_areas(regions)
         return regions
@@ -263,14 +347,16 @@ class TextRegion(Region):
         Subtracts overlapping areas between two regions.
         """
         big, small = (1, 0) if regions[0]['region_linearring'][0].minimum_rotated_rectangle.area < \
-                               regions[1]['region_linearring'][0].minimum_rotated_rectangle.area else (0, 1)
-        big_polygon, small_polygon = [Polygon(region['region_linearring'][0]) for region in
-                                      (regions[big], regions[small])]
+            regions[1]['region_linearring'][0].minimum_rotated_rectangle.area else (0, 1)
+        big_polygon, small_polygon = [
+            Polygon(
+                region['region_linearring'][0]) for region in (
+                regions[big], regions[small])]
         difference = big_polygon.difference(small_polygon)
 
         if isinstance(difference, (Polygon, LinearRing)):
-            regions[big]['region_linearring'][0] = difference.exterior if isinstance(difference,
-                                                                                     Polygon) else difference
+            regions[big]['region_linearring'][0] = difference.exterior if isinstance(
+                difference, Polygon) else difference
         elif isinstance(difference, MultiLineString):
             regions[big]['region_linearring'][0] = difference.convex_hull.exterior
 
@@ -284,7 +370,7 @@ class TextRegion(Region):
         """
         return any(textline.get_id() == id for textline in self.textlines)
 
-    def get_textline_by_id(self, id: str) -> Textline|None:
+    def get_textline_by_id(self, id: str) -> Textline | None:
         """
         Returns a textline if the text region contains a text line with the specified ID.
         """
@@ -293,13 +379,14 @@ class TextRegion(Region):
                 return textline
         return None
 
+
 @dataclass
 class Textline(CoordElement):
     baseline_polyline: Optional[list] = None
     orientation: Optional[str] = None
     parent: Optional[Region] = None
 
-    def get_confidence(self,  index: int = 0) -> None|float:
+    def get_confidence(self, index: int = 0) -> None | float:
         text_equivs = self.xml_element.findall(f"{{{self.ns}}}TextEquiv")
         for text_equiv in text_equivs:
             if str(text_equiv.attrib.get("index", 0)) == str(index):
@@ -320,7 +407,8 @@ class Textline(CoordElement):
             if returntype == "string":
                 return baseline.attrib['points']
             else:
-                coord_tuples = self.convert_coordinates_str_to_tuples(baseline.attrib['points'])
+                coord_tuples = self.convert_coordinates_str_to_tuples(
+                    baseline.attrib['points'])
                 if returntype == "tuple":
                     return coord_tuples
                 elif returntype == "points":
@@ -337,10 +425,15 @@ class Textline(CoordElement):
         if baseline is not None:
             baseline.set('points', coords_string)
         else:
-            ET.SubElement(self.xml_element, 'Baseline', {'points': coords_string})
+            ET.SubElement(
+                self.xml_element, 'Baseline', {
+                    'points': coords_string})
 
     # Text methods
-    def _ensure_and_update_unicode(self, parent_element: ET.Element, text: str) -> None:
+    def _ensure_and_update_unicode(
+            self,
+            parent_element: ET.Element,
+            text: str) -> None:
         """
         Helper function to find or create a Unicode sub-element and set its text.
         """
@@ -350,7 +443,11 @@ class Textline(CoordElement):
             unicode_element = ET.SubElement(parent_element, ns_unicode)
         unicode_element.text = text
 
-    def update_text(self, text: str, index: int = 0, update_lowest_index: bool = True) -> None:
+    def update_text(
+            self,
+            text: str,
+            index: int = 0,
+            update_lowest_index: bool = True) -> None:
         """
         Updates the text of an element's TextEquiv.
 
@@ -371,7 +468,7 @@ class Textline(CoordElement):
            (`update_lowest_index` is False OR (`update_lowest_index` is True but no
            existing TextEquiv had a parsable numerical index to update))), then a new
            TextEquiv is created with the specified `index` and `text`.
-        
+
         Args:
             text (str): The text to update.
             index (int, optional): The target index for the TextEquiv element. Defaults to 0.
@@ -381,59 +478,69 @@ class Textline(CoordElement):
                                                  existing index. Defaults to True.
         """
         ns_text_equiv = f"{{{self.ns}}}TextEquiv"
-        str_target_index = str(index) # Convert target index to string once for comparisons
+        # Convert target index to string once for comparisons
+        str_target_index = str(index)
 
-        text_equivs = list(self.xml_element.findall(ns_text_equiv)) # Get all once
+        text_equivs = list(self.xml_element.findall(
+            ns_text_equiv))  # Get all once
 
-        # 1. If no TextEquiv elements exist, create one with the *requested* index
+        # 1. If no TextEquiv elements exist, create one with the *requested*
+        # index
         if not text_equivs:
             new_text_equiv = ET.SubElement(self.xml_element, ns_text_equiv)
             new_text_equiv.set("index", str_target_index)
             self._ensure_and_update_unicode(new_text_equiv, text)
             return
 
-        # 2. Try to find and update existing TextEquiv with matching *requested* index
+        # 2. Try to find and update existing TextEquiv with matching
+        # *requested* index
         for te in text_equivs:
             current_te_index_str = te.attrib.get("index")
             # Normalize for comparison: treat missing index as "0" for matching purposes
             # This aligns with a common interpretation of a "default" index.
             effective_index_for_match = "0" if current_te_index_str is None else current_te_index_str
-            
+
             if effective_index_for_match == str_target_index:
                 self._ensure_and_update_unicode(te, text)
                 if te.attrib.get('conf', None) is not None:
                     te.attrib.pop("conf")
                 return
-        
-        # 3. If no matching *requested* index was found AND update_lowest_index is True
+
+        # 3. If no matching *requested* index was found AND update_lowest_index
+        # is True
         if update_lowest_index:
             lowest_indexed_element_to_update = None
-            min_numerical_value_found = float('inf') # Initialize with a very large number
+            # Initialize with a very large number
+            min_numerical_value_found = float('inf')
 
             for te in text_equivs:
                 try:
-                    # For finding the "lowest", treat missing or empty 'index' as "0"
+                    # For finding the "lowest", treat missing or empty 'index'
+                    # as "0"
                     idx_str_for_numerical = te.attrib.get("index")
-                    if not idx_str_for_numerical: # Handles None or empty string ""
+                    if not idx_str_for_numerical:  # Handles None or empty string ""
                         idx_str_for_numerical = "0"
-                    
+
                     current_numerical_idx = int(idx_str_for_numerical)
 
                     if current_numerical_idx < min_numerical_value_found:
                         min_numerical_value_found = current_numerical_idx
                         lowest_indexed_element_to_update = te
                 except ValueError:
-                    # If 'index' attribute is present, non-empty, but not a valid integer (e.g., "abc"), skip it.
-                    pass 
-            
+                    # If 'index' attribute is present, non-empty, but not a
+                    # valid integer (e.g., "abc"), skip it.
+                    pass
+
             if lowest_indexed_element_to_update is not None:
                 # Update the text of this lowest-indexed element.
                 # DO NOT change its 'index' attribute.
-                self._ensure_and_update_unicode(lowest_indexed_element_to_update, text)
-                if lowest_indexed_element_to_update.attrib.get('conf', None) is not None:
+                self._ensure_and_update_unicode(
+                    lowest_indexed_element_to_update, text)
+                if lowest_indexed_element_to_update.attrib.get(
+                        'conf', None) is not None:
                     lowest_indexed_element_to_update.attrib.pop("conf")
                 return
-            
+
         new_text_equiv = ET.SubElement(self.xml_element, ns_text_equiv)
         new_text_equiv.set("index", str_target_index)
         self._ensure_and_update_unicode(new_text_equiv, text)
@@ -450,8 +557,8 @@ class Textline(CoordElement):
             return False
 
         # Remove adjacent duplicates
-        baseline_tuples = [baseline_tuples[0]] + [x for idx, x in enumerate(baseline_tuples[1:]) if
-                                                  x != baseline_tuples[idx]]
+        baseline_tuples = [baseline_tuples[0]] + [x for idx,
+                                                  x in enumerate(baseline_tuples[1:]) if x != baseline_tuples[idx]]
         if len(baseline_tuples) == 1:
             logging.warning(f"{self.get_id()}: Baseline has just one point")
             return False
@@ -461,8 +568,10 @@ class Textline(CoordElement):
             baseline_linestring = LineString(baseline_tuples)
 
             if not textline_polygon.intersects(baseline_linestring):
-                logging.warning(f"{self.get_id()}: Baseline is outside of the textregion "
-                                f"{self.get_parent_element().attrib['id']}.")
+                logging.warning(
+                    f"{
+                        self.get_id()}: Baseline is outside of the textregion " f"{
+                        self.get_parent_element().attrib['id']}.")
                 return False
 
             new_baseline_tuples, pts_outside, pts_replaced = [], [], []
@@ -473,15 +582,18 @@ class Textline(CoordElement):
                     pts_outside.append(point)
                     if update:
                         pt_distance = textline_polygon.distance(pt)
-                        pred_distance = Point(new_baseline_tuples[-1]).distance(pt) if new_baseline_tuples else float(
-                            'inf')
-                        succ_distance = Point(baseline_tuples[idx + 1]).distance(pt) if idx != len(
-                            baseline_tuples) - 1 else float('inf')
+                        pred_distance = Point(
+                            new_baseline_tuples[-1]).distance(pt) if new_baseline_tuples else float('inf')
+                        succ_distance = Point(baseline_tuples[idx + 1]).distance(
+                            pt) if idx != len(baseline_tuples) - 1 else float('inf')
 
-                        # Replace with nearest point if it's closer than predecessor and successor
+                        # Replace with nearest point if it's closer than
+                        # predecessor and successor
                         if pt_distance < pred_distance and pt_distance < succ_distance:
-                            nearest_pt = nearest_points(pt, textline_polygon)[1]
-                            pts_replaced.append([point, [int(nearest_pt.x), int(nearest_pt.y)]])
+                            nearest_pt = nearest_points(
+                                pt, textline_polygon)[1]
+                            pts_replaced.append(
+                                [point, [int(nearest_pt.x), int(nearest_pt.y)]])
                             point = (int(nearest_pt.x), int(nearest_pt.y))
                         else:
                             pts_replaced.append([point, None])
@@ -489,17 +601,23 @@ class Textline(CoordElement):
                 new_baseline_tuples.append(point)
 
             if pts_outside:
-                logging.warning(f"{self.get_id()}: Some points of the baseline are outside of the textregion "
-                                f"{self.get_parent_element().attrib['id']}. Points outside {pts_outside}")
+                logging.warning(
+                    f"{
+                        self.get_id()}: Some points of the baseline are outside of the textregion " f"{
+                        self.get_parent_element().attrib['id']}. Points outside {pts_outside}")
                 if not update:
                     return False
                 else:
-                    logging.warning(f"{self.get_id()}: Some points got deleted or replaced"
-                                    f"{self.get_parent_element().attrib['id']}. Points outside {pts_replaced}")
+                    logging.warning(
+                        f"{
+                            self.get_id()}: Some points got deleted or replaced" f"{
+                            self.get_parent_element().attrib['id']}. Points outside {pts_replaced}")
 
         except TopologicalError:
             logging.warning(
-                f"{self.get_id()}: Baseline or parentregion {self.get_parent_element().attrib['id']} is invalid.")
+                f"{
+                    self.get_id()}: Baseline or parentregion {
+                    self.get_parent_element().attrib['id']} is invalid.")
             return False
         if update:
             self.update_baseline_coordinates(baseline_tuples)
@@ -513,21 +631,34 @@ class Textline(CoordElement):
         textline = self.get_coordinates(returntype='polygon')
         bbox = textline.minimum_rotated_rectangle
 
-        # If the minimum rotated rectangle is a line, it represents the baseline
+        # If the minimum rotated rectangle is a line, it represents the
+        # baseline
         if isinstance(bbox, LineString):
             return list(bbox.coords)
 
         coords = list(bbox.exterior.coords)
-        factor = 2 if 'mid' else 1.25
-        # Calculate the baseline as the midline between the two longest sides of the bounding box
-        lines = sorted(sorted([LineString([c1, c2]) if c1[1] < c2[1] else LineString([c2, c1]) for c1, c2 in zip(coords[:-1], coords[1:])],
-                              key=lambda x: x.length, reverse=False)[:2],
-                       key=lambda x: round((x.xy[0][1] + x.xy[1][1]) / 2), reverse=False)
-        baseline_tuples = [list(line.interpolate((line.length) / 1.25).coords)[0] for line in lines]
+        # factor = 2 if 'mid' else 1.25
+        # Calculate the baseline as the midline between the two longest sides
+        # of the bounding box
+        lines = sorted(sorted([LineString([c1,
+                                           c2]) if c1[1] < c2[1] else LineString([c2,
+                                                                                  c1]) for c1,
+                               c2 in zip(coords[:-1],
+                                         coords[1:])],
+                              key=lambda x: x.length,
+                              reverse=False)[:2],
+                       key=lambda x: round((x.xy[0][1] + x.xy[1][1]) / 2),
+                       reverse=False)
+        baseline_tuples = [
+            list(
+                line.interpolate(
+                    (line.length) /
+                    1.25).coords)[0] for line in lines]
         return baseline_tuples
 
     @staticmethod
-    def find_nearest_intersection_polygon_linestring(polygon: Polygon, line: LineString, poi: tuple) -> tuple:
+    def find_nearest_intersection_polygon_linestring(
+            polygon: Polygon, line: LineString, poi: tuple) -> tuple:
         """
         Finds the nearest intersection point between a polygon and a linestring to a point of interest (poi).
         """
@@ -544,7 +675,7 @@ class Textline(CoordElement):
             closest_point = min([(Point(poi).distance(Point(geom.coords[0])), geom.coords[0])
                                  for geom in intersections.geoms], key=lambda x: x[0])[1]
             return tuple(map(int, closest_point))
-        except:
+        except BaseException:
             pass
 
         return poi
@@ -555,15 +686,17 @@ class Textline(CoordElement):
         Currently, only horizontal mode ('x') is implemented.
         """
         textline_linearring = self.get_coordinates(returntype='linearring')
-        baseline_linestring = self.get_baseline_coordinates(returntype='linestring')
+        baseline_linestring = self.get_baseline_coordinates(
+            returntype='linestring')
 
         if textline_linearring is None or baseline_linestring is None:
             return
 
         if mode == "x":
-            xoff = round(((baseline_linestring.bounds[0] - textline_linearring.bounds[0]) +
-                          (baseline_linestring.bounds[2] - textline_linearring.bounds[2])) / 2)
-            textline_linearring = self._translate(textline_linearring, xoff=xoff, yoff=0, zoff=0)
+            xoff = round(((baseline_linestring.bounds[0] - textline_linearring.bounds[0]) + (
+                baseline_linestring.bounds[2] - textline_linearring.bounds[2])) / 2)
+            textline_linearring = self._translate(
+                textline_linearring, xoff=xoff, yoff=0, zoff=0)
             self.update_coordinates(textline_linearring)
 
     def translate_textlinepolygon(self, xoff=0, yoff=0) -> None:
@@ -586,9 +719,11 @@ class Textline(CoordElement):
         """
         Recomputes the textline polygon based on the baseline, using a buffer around the baseline.
         """
-        baseline_linestring = self.get_baseline_coordinates(returntype='linestring')
+        baseline_linestring = self.get_baseline_coordinates(
+            returntype='linestring')
         if baseline_linestring:
-            textline_linearring = baseline_linestring.buffer(buffersize).minimum_rotated_rectangle
+            textline_linearring = baseline_linestring.buffer(
+                buffersize).minimum_rotated_rectangle
             self.update_coordinates(textline_linearring)
 
     def extend_baseline(self, create_missing: bool = True) -> None:
@@ -596,20 +731,28 @@ class Textline(CoordElement):
         Extends the baseline to the minimum and maximum x values of the textline bounding box.
         """
         textline_polygon = self.get_coordinates(returntype='polygon')
-        baseline_linestring = self.get_baseline_coordinates(returntype='linestring')
+        baseline_linestring = self.get_baseline_coordinates(
+            returntype='linestring')
 
         try:
-            if baseline_linestring is None or not textline_polygon.intersects(baseline_linestring):
+            if baseline_linestring is None or not textline_polygon.intersects(
+                    baseline_linestring):
                 if not create_missing and baseline_linestring is None:
                     return
                 baseline_coords = self._compute_baseline()
             else:
-                baseline_coords = self.get_baseline_coordinates(returntype='tuple')
+                baseline_coords = self.get_baseline_coordinates(
+                    returntype='tuple')
 
-            extended_baseline = [self.find_nearest_intersection_polygon_linestring(
-                textline_polygon, LineString(((textline_polygon.bounds[0],
-                                               baseline_coords[0][1]), baseline_coords[0])),
-                (textline_polygon.bounds[0], baseline_coords[0][1]))]
+            extended_baseline = [
+                self.find_nearest_intersection_polygon_linestring(
+                    textline_polygon,
+                    LineString(
+                        ((textline_polygon.bounds[0],
+                          baseline_coords[0][1]),
+                         baseline_coords[0])),
+                    (textline_polygon.bounds[0],
+                     baseline_coords[0][1]))]
 
             # Extend the baseline with intermediate points
             if baseline_coords[1:-1]:
@@ -617,7 +760,8 @@ class Textline(CoordElement):
                 extended_baseline.extend(
                     [coord for coord in baseline_coords[1:-1] if mr_textline_polygon.contains(Point(coord))])
 
-            # Extend the last baseline coordinate to the maximum x value of the textline bounding box
+            # Extend the last baseline coordinate to the maximum x value of the
+            # textline bounding box
             extended_baseline.append(self.find_nearest_intersection_polygon_linestring(textline_polygon,
                                                                                        LineString(
                                                                                            ((textline_polygon.bounds[2],
@@ -625,8 +769,11 @@ class Textline(CoordElement):
                                                                                             baseline_coords[-1])),
                                                                                        (textline_polygon.bounds[2],
                                                                                         baseline_coords[-1][1])))
-            coords = [(int(x[0]), int(x[1])) for x in extended_baseline if len(x) > 1]
+            coords = [(int(x[0]), int(x[1]))
+                      for x in extended_baseline if len(x) > 1]
             if coords:
                 self.update_baseline_coordinates(coords)
         except GEOSException:
-            logging.warning(f"The baseline of textline {self.get_id()} could not be extended.")
+            logging.warning(
+                f"The baseline of textline {
+                    self.get_id()} could not be extended.")

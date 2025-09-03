@@ -7,10 +7,12 @@ from typing import Any
 import lxml.etree as ET
 import numpy as np
 import shapely
-from shapely import affinity, normalize, line_interpolate_point, remove_repeated_points, simplify, is_valid_reason
-from shapely.errors import TopologicalError, EmptyPartError
-from shapely.geometry import LineString, LinearRing, Polygon, Point, MultiPoint, MultiPolygon, GeometryCollection
-from shapely.ops import nearest_points, unary_union, split
+from shapely import (affinity, is_valid_reason, line_interpolate_point,
+                     normalize, remove_repeated_points, simplify)
+from shapely.errors import EmptyPartError, TopologicalError
+from shapely.geometry import (GeometryCollection, LinearRing, LineString,
+                              MultiPoint, MultiPolygon, Point, Polygon)
+from shapely.ops import nearest_points, split, unary_union
 
 from pageplus.io.logger import logging
 from pageplus.utils.converter import custom_to_dict, dict_to_custom
@@ -38,7 +40,7 @@ class CoordElement:
 
     def get_width_height(self, method: str = "mrr") -> tuple:
         """ Returns the width and height of the XML element. """
-        rect = self.get_coordinates(returntype="mrr")  
+        rect = self.get_coordinates(returntype="mrr")
         if rect is not None:
             if method == "mrr":
                 minx, miny, maxx, maxy = rect.bounds
@@ -49,10 +51,10 @@ class CoordElement:
                 coords = list(rect.exterior.coords)
                 side1 = math.dist(coords[0], coords[1])
                 side2 = math.dist(coords[1], coords[2])
-                width, height = sorted([side1, side2]) 
+                width, height = sorted([side1, side2])
             return width, height
         return 0, 0
-    
+
     def get_tag(self) -> str:
         """ Returns the structure tag of the element. """
         try:
@@ -63,10 +65,12 @@ class CoordElement:
                 customdict = custom_to_dict(custom)
                 return customdict.get('structure', {}).get('type', '')
         except Exception as e:
-            logging.error(f"Error getting tag for element {self.xml_element.attrib['id']}: {e}")
+            logging.error(
+                f"Error getting tag for element {
+                    self.xml_element.attrib['id']}: {e}")
         return ''
 
-    def set_tag(self, tag:str) -> None:
+    def set_tag(self, tag: str) -> None:
         """ Set the structure tag of the element. """
         if "type" in self.xml_element.attrib:
             if tag == '':
@@ -95,7 +99,13 @@ class CoordElement:
         Retrieves coordinates in various formats based on the 'returntype' parameter.
         Supported return types are 'string', 'tuple', 'points', 'linearring', 'mrr', 'polygon'.
         """
-        valid_types = ["string", "tuple", "points", "linearring", "mrr", "polygon"]
+        valid_types = [
+            "string",
+            "tuple",
+            "points",
+            "linearring",
+            "mrr",
+            "polygon"]
         if returntype not in valid_types:
             return None
 
@@ -114,12 +124,15 @@ class CoordElement:
             return MultiPoint(coord_tuples)
 
         if len(coord_tuples) < 3:
-            logging.warning(f"The region {self.get_id()} has less than 3 coords.")
+            logging.warning(
+                f"The region {
+                    self.get_id()} has less than 3 coords.")
             return None
 
         if returntype == "linearring":
             coord_tuples = self._ensure_closed_ring(coord_tuples)
-            return LinearRing(coord_tuples) if len(coord_tuples) > 3 else Polygon(coord_tuples).exterior
+            return LinearRing(coord_tuples) if len(
+                coord_tuples) > 3 else Polygon(coord_tuples).exterior
 
         if returntype == "mrr":
             return Polygon(coord_tuples).minimum_rotated_rectangle
@@ -134,7 +147,8 @@ class CoordElement:
         coords = list(self.get_coordinates(returntype='mrr').exterior.coords)
 
         # Find the longest edge
-        edge_vectors = [(coords[i + 1][0] - coords[i][0], coords[i + 1][1] - coords[i][1]) for i in range(4)]
+        edge_vectors = [(coords[i + 1][0] - coords[i][0],
+                         coords[i + 1][1] - coords[i][1]) for i in range(4)]
         edge_lengths = [np.hypot(dx, dy) for dx, dy in edge_vectors]
 
         # Use the longest or shortest edge to find the angle
@@ -150,7 +164,8 @@ class CoordElement:
 
     def _ensure_closed_ring(self, coord_tuples):
         """ Ensures that the list of coordinate tuples forms a closed ring. """
-        return coord_tuples + [coord_tuples[0]] if coord_tuples[0] != coord_tuples[-1] else coord_tuples
+        return coord_tuples + \
+            [coord_tuples[0]] if coord_tuples[0] != coord_tuples[-1] else coord_tuples
 
     def get_language(self) -> Any | None:
         """ Returns the language. """
@@ -169,7 +184,7 @@ class CoordElement:
         formatted according to the 'inputtype'.
         """
         if inputtype == "polygon":
-            #self.fit_into_parent(data)
+            # self.fit_into_parent(data)
             coordstr = self.convert_coordinates_polygon_to_str(data)
         elif inputtype == "tuple":
             coordstr = self.convert_coordinates_tuples_to_str(data)
@@ -177,7 +192,9 @@ class CoordElement:
             coordstr = data
         else:
             return
-        coordstr = " ".join(self._remove_adjacent_duplicates(coordstr.split(' ')))
+        coordstr = " ".join(
+            self._remove_adjacent_duplicates(
+                coordstr.split(' ')))
         coords = self.xml_element.find(f'{{{self.ns}}}Coords')
         coords.set('points', coordstr)
 
@@ -197,7 +214,8 @@ class CoordElement:
         """
         Converts a list of coordinate tuples (x, y) to a string representation.
         """
-        return ' '.join([f"{int(x)},{int(y)}" for x, y in coords_tuples]).strip()
+        return ' '.join([f"{int(x)},{int(y)}" for x,
+                        y in coords_tuples]).strip()
 
     @staticmethod
     def convert_coordinates_polygon_to_str(polygon: Polygon) -> str:
@@ -205,7 +223,8 @@ class CoordElement:
         Converts a Polygon object to a string representation of its coordinates.
         """
         polygon = polygon.exterior if isinstance(polygon, Polygon) else polygon
-        return ' '.join([f"{int(x)},{int(y)}" for x, y in polygon.coords]).strip() if polygon else ''
+        return ' '.join([f"{int(x)},{int(y)}" for x,
+                        y in polygon.coords]).strip() if polygon else ''
 
     # Text Methods
     def get_text(self):
@@ -213,9 +232,11 @@ class CoordElement:
         text_equivs = self.xml_element.findall(f"{{{self.ns}}}TextEquiv")
         for text_equiv in text_equivs:
             if str(text_equiv.attrib.get("index", 0)) == "0":
-                return "".join(text_equiv.find(f"{{{self.ns}}}Unicode").itertext()).strip()
+                return "".join(text_equiv.find(
+                    f"{{{self.ns}}}Unicode").itertext()).strip()
             if str(text_equiv.attrib.get("index", 1)) == "1":
-                return "".join(text_equiv.find(f"{{{self.ns}}}Unicode").itertext()).strip()
+                return "".join(text_equiv.find(
+                    f"{{{self.ns}}}Unicode").itertext()).strip()
         return None
 
     def is_text_empty(self) -> bool:
@@ -230,7 +251,8 @@ class CoordElement:
     def validate_text(self) -> bool:
         """ Validates if the text content of the XML element is not empty. """
         if self.is_text_empty():
-            logging.warning(f"{self.get_parent_element().attrib['id']}: Text is empty.")
+            logging.warning(
+                f"{self.get_parent_element().attrib['id']}: Text is empty.")
             return False
         return True
 
@@ -263,29 +285,35 @@ class CoordElement:
         """
         coord_tuples = self.get_coordinates(returntype="tuple")
         if not coord_tuples or len(coord_tuples) < 4:
-            logging.warning(f"{self.get_id()}: Region is missing or has insufficient coord points.")
+            logging.warning(
+                f"{self.get_id()}: Region is missing or has insufficient coord points.")
             return False
 
         region_polygon = LinearRing(coord_tuples)
         if not region_polygon.is_valid:
             reason = is_valid_reason(region_polygon)
             if 'Ring Self-intersection' in reason:
-                logging.warning(f"{self.get_id()}: Region is not valid. Error: {reason}\nWe recommend to use the repair function to delete the self-intersection part.")
+                logging.warning(
+                    f"{self.get_id()}: Region is not valid. Error: {reason}\nWe recommend to use the repair function to delete the self-intersection part.")
             else:
-                logging.warning(f"{self.get_id()}: Region is not valid. Error: {reason}")
+                logging.warning(
+                    f"{self.get_id()}: Region is not valid. Error: {reason}")
             return False
 
         parent_coords = self.get_parent_element().find(f"{{{self.ns}}}Coords")
         if parent_coords is not None:
-            parent_coords_tuples = CoordElement.convert_coordinates_str_to_tuples(parent_coords.attrib['points'])
+            parent_coords_tuples = CoordElement.convert_coordinates_str_to_tuples(
+                parent_coords.attrib['points'])
             if len(parent_coords_tuples) <= 2:
                 logging.warning(
                     f"{self.get_parent_element().attrib['id']}: Parent region has insufficient coord points.")
                 return False
 
             parent_polygon = Polygon(parent_coords_tuples)
-            if not parent_polygon.is_valid or region_polygon.disjoint(parent_polygon):
-                logging.warning(f"{self.get_id()}: Region is invalid or outside of the parent region.")
+            if not parent_polygon.is_valid or region_polygon.disjoint(
+                    parent_polygon):
+                logging.warning(
+                    f"{self.get_id()}: Region is invalid or outside of the parent region.")
                 return False
 
         return True
@@ -294,38 +322,47 @@ class CoordElement:
     @staticmethod
     def _remove_adjacent_duplicates(lst):
         """ Removes adjacent duplicate elements from the list. """
-        result = [lst[0]] + [lst[i] for i in range(1, len(lst)) if lst[i] != lst[i - 1]]
+        result = [lst[0]] + [lst[i]
+                             for i in range(1, len(lst)) if lst[i] != lst[i - 1]]
         # Check if the first and last item are the same (for closed shapes)
         if len(result) > 1 and result[0] == result[-1]:
             result.pop()
         return result
 
     @staticmethod
-    def split_overlapping_linearrings(fst_lr: LinearRing, snd_lr: LinearRing) -> tuple[LinearRing, LinearRing]:
+    def split_overlapping_linearrings(
+            fst_lr: LinearRing, snd_lr: LinearRing) -> tuple[LinearRing, LinearRing]:
         """
         Splits two overlapping LinearRings into separate non-overlapping rings.
         """
 
-        def centerline_linestrings(fst_ls: LineString, snd_ls: LineString) -> LineString:
+        def centerline_linestrings(
+                fst_ls: LineString,
+                snd_ls: LineString) -> LineString:
             # Calculates a centerline between two LineStrings
-            more_pts, less_pts = (fst_ls, snd_ls) if len(fst_ls.coords) > len(snd_ls.coords) else (snd_ls, fst_ls)
+            more_pts, less_pts = (
+                fst_ls, snd_ls) if len(
+                fst_ls.coords) > len(
+                snd_ls.coords) else (
+                snd_ls, fst_ls)
             centerline_pts = []
             for pt in more_pts.coords:
                 pt = Point(pt)
                 pt, nearest_pt = nearest_points(pt, less_pts)
-                mid_pt = line_interpolate_point(LineString([pt, nearest_pt]), pt.distance(nearest_pt) / 2)
+                mid_pt = line_interpolate_point(LineString(
+                    [pt, nearest_pt]), pt.distance(nearest_pt) / 2)
                 centerline_pts.append(normalize(mid_pt))
             return LineString(centerline_pts)
 
-        def centerlines_between_overlapping_linearrings(fst_lr: LinearRing, snd_lr: LinearRing) -> tuple[
-            LineString, LineString]:
+        def centerlines_between_overlapping_linearrings(
+                fst_lr: LinearRing, snd_lr: LinearRing) -> tuple[LineString, LineString]:
             # Determines centerlines between two overlapping LinearRings
             fst_ls, snd_ls = LineString(), LineString()
             if snd_lr.intersects(fst_lr) or not fst_lr.within(snd_lr):
-                fst_ls = sorted([pt for pt in remove_repeated_points(fst_lr).coords if snd_lr.contains(Point(pt))],
-                                key=lambda x: x[0])
-                snd_ls = sorted([pt for pt in remove_repeated_points(snd_lr).coords if fst_lr.contains(Point(pt))],
-                                key=lambda x: x[0])
+                fst_ls = sorted([pt for pt in remove_repeated_points(
+                    fst_lr).coords if snd_lr.contains(Point(pt))], key=lambda x: x[0])
+                snd_ls = sorted([pt for pt in remove_repeated_points(
+                    snd_lr).coords if fst_lr.contains(Point(pt))], key=lambda x: x[0])
 
                 if not fst_ls or not snd_ls:
                     return LineString(), LineString()
@@ -335,25 +372,41 @@ class CoordElement:
                     snd_ls = snd_ls[:-1] if snd_ls[0] == snd_ls[-1] else snd_ls
 
                 try:
-                    centerline = centerline_linestrings(LineString(fst_ls), LineString(snd_ls))
-                    fst_ls = LineString([fst_ls[0], *centerline.coords, fst_ls[-1]])
-                    snd_ls = LineString([snd_ls[0], *centerline.coords, snd_ls[-1]])
-                except:
+                    centerline = centerline_linestrings(
+                        LineString(fst_ls), LineString(snd_ls))
+                    fst_ls = LineString(
+                        [fst_ls[0], *centerline.coords, fst_ls[-1]])
+                    snd_ls = LineString(
+                        [snd_ls[0], *centerline.coords, snd_ls[-1]])
+                except BaseException:
                     return LineString(), LineString()
 
             return fst_ls, snd_ls
 
-        fst_ls, snd_ls = centerlines_between_overlapping_linearrings(fst_lr, snd_lr)
+        fst_ls, snd_ls = centerlines_between_overlapping_linearrings(
+            fst_lr, snd_lr)
         if fst_ls.is_empty or snd_ls.is_empty:
             return fst_lr, snd_lr
 
-        fst_lr = sorted(split(Polygon(fst_lr), fst_ls).geoms, key=lambda x: x.area, reverse=True)[0].exterior
-        snd_lr = sorted(split(Polygon(snd_lr), snd_ls).geoms, key=lambda x: x.area, reverse=True)[0].exterior
+        fst_lr = sorted(
+            split(
+                Polygon(fst_lr),
+                fst_ls).geoms,
+            key=lambda x: x.area,
+            reverse=True)[0].exterior
+        snd_lr = sorted(
+            split(
+                Polygon(snd_lr),
+                snd_ls).geoms,
+            key=lambda x: x.area,
+            reverse=True)[0].exterior
 
         return fst_lr, snd_lr
 
     @staticmethod
-    def fit_first_into_second_linearring(fst_lr: LinearRing, snd_lr: LinearRing) -> LinearRing:
+    def fit_first_into_second_linearring(
+            fst_lr: LinearRing,
+            snd_lr: LinearRing) -> LinearRing:
         """
         Fits the first LinearRing within the second one, adjusting it to fit inside.
         """
@@ -369,7 +422,8 @@ class CoordElement:
                     raise EmptyPartError
 
                 if intersection.geom_type == 'MultiPolygon':
-                    intersection = max(intersection.geoms, key=lambda x: x.area)
+                    intersection = max(
+                        intersection.geoms, key=lambda x: x.area)
 
                 if intersection.geom_type == 'Polygon':
                     return intersection.exterior
@@ -386,13 +440,16 @@ class CoordElement:
         """
         coords = self.get_coordinates(returntype="linearring")
         if parent_coords is None or not isinstance(parent_coords, LinearRing):
-            parent_element = self.get_parent_element().find(f"{{{self.ns}}}Coords")
+            parent_element = self.get_parent_element().find(
+                f"{{{self.ns}}}Coords")
             if parent_element is not None and parent_element.attrib['points'] != '0,0 0,0':
                 parent_coords = Polygon(
-                    CoordElement.convert_coordinates_str_to_tuples(parent_element.attrib['points'])).exterior
+                    CoordElement.convert_coordinates_str_to_tuples(
+                        parent_element.attrib['points'])).exterior
             else:
                 return
-        fitted_coords = CoordElement.fit_first_into_second_linearring(coords, parent_coords)
+        fitted_coords = CoordElement.fit_first_into_second_linearring(
+            coords, parent_coords)
         self.update_coordinates(fitted_coords)
 
     def simplify(self, tolerance: int = 1):
@@ -427,48 +484,73 @@ class CoordElement:
         coords = self.get_coordinates(returntype="linearring")
         if coords is None:
             return
-        buffered_coords = CoordElement._buffer(coords, distance, direction, simplify, rectangle)
+        buffered_coords = CoordElement._buffer(
+            coords, distance, direction, simplify, rectangle)
         self.update_coordinates(buffered_coords)
 
     @staticmethod
-    def _buffer(polygon: LinearRing, distance: int = 8,
-                direction: str = "horizontal", simplify: bool = False, rectangle: bool = False) -> LinearRing:
+    def _buffer(
+            polygon: LinearRing,
+            distance: int = 8,
+            direction: str = "horizontal",
+            simplify: bool = False,
+            rectangle: bool = False) -> LinearRing:
         """
         Applies a buffer to a LinearRing and optionally modifies it based on specified parameters.
         """
         if distance != 0:
-            padded_polygon = polygon.buffer(distance, cap_style="square", join_style="bevel")
+            padded_polygon = polygon.buffer(
+                distance, cap_style="square", join_style="bevel")
         else:
             padded_polygon = polygon
         if direction in ["width", "horizontal"]:
             try:
-                coords = affinity.scale(polygon.minimum_rotated_rectangle, xfact=0.9, yfact=0.9).exterior.coords
+                coords = affinity.scale(
+                    polygon.minimum_rotated_rectangle,
+                    xfact=0.9,
+                    yfact=0.9).exterior.coords
                 lines = sorted([LineString([c1, c2]) for c1, c2 in zip(coords[:-1], coords[1:])],
-                            key=lambda x: x.length if direction == "width" else abs(x.xy[0][0] - x.xy[0][1]),
-                            reverse=False)
-                scaled_lines = [affinity.scale(line, xfact=10, yfact=10, origin='centroid') for line in lines]
-                upper_lower_bound = Polygon(list(scaled_lines[2].coords) + list(scaled_lines[3].coords))
+                               key=lambda x: x.length if direction == "width" else abs(x.xy[0][0] - x.xy[0][1]),
+                               reverse=False)
+                scaled_lines = [
+                    affinity.scale(
+                        line,
+                        xfact=10,
+                        yfact=10,
+                        origin='centroid') for line in lines]
+                upper_lower_bound = Polygon(
+                    list(
+                        scaled_lines[2].coords) +
+                    list(
+                        scaled_lines[3].coords))
                 padded_polygon = padded_polygon.intersection(upper_lower_bound)
                 if isinstance(padded_polygon, GeometryCollection):
-                    logging.warning(f"Cutting upper and lower bound produced multiple areas")
+                    logging.warning(
+                        "Cutting upper and lower bound produced multiple areas")
                     return polygon
-                extensions = [sorted(list(split(padded_polygon, line).geoms), key=lambda x: x.area, reverse=False)[0]
-                            for line in scaled_lines[:2]]
+                extensions = [sorted(list(split(padded_polygon,
+                                                line).geoms),
+                                     key=lambda x: x.area,
+                                     reverse=False)[0] for line in scaled_lines[:2]]
                 padded_polygon = unary_union(extensions + [Polygon(polygon)])
-            except:
+            except BaseException:
                 return polygon
-            padded_polygon = padded_polygon.convex_hull.exterior if \
-                isinstance(padded_polygon, MultiPolygon) else padded_polygon.exterior
+            padded_polygon = padded_polygon.convex_hull.exterior if isinstance(
+                padded_polygon, MultiPolygon) else padded_polygon.exterior
 
         if rectangle:
             return padded_polygon.minimum_rotated_rectangle
 
         if simplify:
-            padded_polygon = padded_polygon.simplify(tolerance=0.95, preserve_topology=False)
+            padded_polygon = padded_polygon.simplify(
+                tolerance=0.95, preserve_topology=False)
         padded_polygon = padded_polygon.convex_hull if simplify else padded_polygon
 
         if not isinstance(padded_polygon, LinearRing):
-            return LinearRing(shapely.geometry.polygon.orient(padded_polygon, sign=1.0).exterior.coords)
+            return LinearRing(
+                shapely.geometry.polygon.orient(
+                    padded_polygon,
+                    sign=1.0).exterior.coords)
         else:
             return padded_polygon
 
@@ -481,7 +563,11 @@ class CoordElement:
         self.update_coordinates(tl, inputtype='polygon')
 
     @staticmethod
-    def _translate(poly: Polygon, xoff: int = 0, yoff: int = 0, zoff: int = 0) -> Polygon:
+    def _translate(
+            poly: Polygon,
+            xoff: int = 0,
+            yoff: int = 0,
+            zoff: int = 0) -> Polygon:
         """
         Translates a LinearRing by specified x, y, and z offsets.
         """

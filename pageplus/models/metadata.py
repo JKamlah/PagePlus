@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
-from typing import Optional, List
 from datetime import datetime
+from typing import Optional
 
 
 @dataclass
@@ -31,4 +31,4 @@ class Metadata:
             last_change=datetime.fromisoformat(data["last_change"]),
             comments=data.get("comments"),
             user_defined=data.get("user_defined", {})
-        ) 
+        )
