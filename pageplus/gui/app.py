@@ -1,3 +1,22 @@
+from pageplus.gui.views.gemini import show_gemini
+from pageplus.gui.views.modification import show_modification
+from pageplus.gui.views.settings import show_settings
+from pageplus.gui.views.export import show_export
+from pageplus.gui.views.validation import show_validation
+from pageplus.gui.views.analysis import show_analysis
+from pageplus.gui.views.workspace import show_workspace
+from pageplus.gui.views.load_files import LoadFilesPage
+from pageplus.gui.utils.settings import Settings
+from pageplus.gui.cli_bridges.gemini import GeminiBridge
+from pageplus.gui.cli_bridges import (
+    CLIBridge,
+    AnalysisBridge,
+    ExportBridge,
+    SettingsBridge,
+    ValidationBridge,
+    WorkspaceBridge,
+    ModificationBridge,
+)
 import streamlit as st
 from pathlib import Path
 import logging
@@ -8,29 +27,9 @@ import base64
 
 from pageplus.utils.logger import setup_logger, configure_external_logging
 
-setup_logger()
+logger = setup_logger()
 # Configure external logging
 configure_external_logging()
-
-from pageplus.gui.cli_bridges import (
-    CLIBridge,
-    AnalysisBridge,
-    ExportBridge,
-    SettingsBridge,
-    ValidationBridge,
-    WorkspaceBridge,
-    ModificationBridge,
-)
-from pageplus.gui.cli_bridges.gemini import GeminiBridge
-from pageplus.gui.utils.settings import Settings
-from pageplus.gui.views.load_files import LoadFilesPage
-from pageplus.gui.views.workspace import show_workspace
-from pageplus.gui.views.analysis import show_analysis
-from pageplus.gui.views.validation import show_validation
-from pageplus.gui.views.export import show_export
-from pageplus.gui.views.settings import show_settings
-from pageplus.gui.views.modification import show_modification
-from pageplus.gui.views.gemini import show_gemini
 
 
 # Initialize settings
@@ -76,7 +75,8 @@ def load_previous_files() -> List[Path]:
         if STORAGE_FILE.exists():
             with open(STORAGE_FILE, 'r') as f:
                 file_paths = json.load(f)
-                return [Path(path) for path in file_paths if Path(path).exists()]
+                return [Path(path)
+                        for path in file_paths if Path(path).exists()]
     except Exception as e:
         logger.error(f"Error loading previous files: {str(e)}")
     return []
@@ -106,7 +106,7 @@ def main():
     # Initialize session state
     if 'loaded_files' not in st.session_state:
         st.session_state.loaded_files = load_previous_files()
-    
+
     # Initialize bridges
     if 'bridges' not in st.session_state:
         st.session_state.bridges = {
@@ -136,9 +136,9 @@ def main():
     page = st.sidebar.radio(
         "Select Page",
         ["✨ Home",
-         "📂 Input",  
-         "🔍 Analytics", 
-         "✅ Validation", 
+         "📂 Input",
+         "🔍 Analytics",
+         "✅ Validation",
          "🛠️ Modification",
          "🌟 Gemini",
          "📤 Export",
@@ -197,21 +197,21 @@ def show_home():
     st.header("✨ Welcome to PagePlus ✨")
     st.write("""
     This is the GUI interface for PagePlus, a PAGE-XML file multi-tool.
-    
-    Use the sidebar to navigate between different sections:  
-    📂 Input: Load PAGE-XML files to process  
-    🔍 Analytics: Analyze the content of PAGE-XML files  
-    ✅ Validation: Validate PAGE-XML files  
-    🛠️ Modification: Modify processed documents  
-    🖋️ OCR: Do OCR on PAGE-XML files with several OCR engines  
-    🤖 LLM: Perform different tasks on PAGE-XML files with LLMs  
-    🌟 Gemini: Use Gemini to process images and validate PAGE-XML output  
-    📚 METS Tools: Work with METS/MODS files  
-    📤 Export: Export PAGE-XML files to different formats (ALTO, PDF, Text)  
-    🗂️ Workspace: Manage workspaces  
-    ⚙️ Settings: Configure application settings  
+
+    Use the sidebar to navigate between different sections:
+    📂 Input: Load PAGE-XML files to process
+    🔍 Analytics: Analyze the content of PAGE-XML files
+    ✅ Validation: Validate PAGE-XML files
+    🛠️ Modification: Modify processed documents
+    🖋️ OCR: Do OCR on PAGE-XML files with several OCR engines
+    🤖 LLM: Perform different tasks on PAGE-XML files with LLMs
+    🌟 Gemini: Use Gemini to process images and validate PAGE-XML output
+    📚 METS Tools: Work with METS/MODS files
+    📤 Export: Export PAGE-XML files to different formats (ALTO, PDF, Text)
+    🗂️ Workspace: Manage workspaces
+    ⚙️ Settings: Configure application settings
     """)
 
 
 if __name__ == "__main__":
-    main() 
+    main()
