@@ -82,7 +82,7 @@ class API:
 
     @base_url.setter
     def base_url(self, url: Annotated[str, typer.Argument(
-            help="URL to eScriptorium")]) -> None:
+            help="URL to the service")]) -> None:
         """
         Write the URL of the environment instance (e.g. https://www.escriptorium.fr) to the .env file
         Returns:
@@ -99,6 +99,39 @@ class API:
             print("[green]The url updated successfully.[green]")
         except Exception as e:
             print(f"[red]Failed to update the url: {e}[red]")
+
+    @property
+    def instance_name(self) -> str:
+        """
+        Name of actual instance
+        Returns:
+        None
+        """
+        return get_key(
+            find_dotenv(),
+            self.prefix +
+            self.prefix_provider() +
+            "INSTANCE_NAME")
+
+    @instance_name.setter
+    def instance_name(self, url: Annotated[str, typer.Argument(
+            help="URL to eScriptorium")]) -> None:
+        """
+        Name of actual instance
+        Returns:
+        None
+        """
+        try:
+            dotfile = find_dotenv()
+            set_key(
+                dotfile,
+                self.prefix +
+                self.prefix_provider() +
+                "INSTANCE_NAME",
+                url)
+            print("[green]The instance name updated successfully.[green]")
+        except Exception as e:
+            print(f"[red]Failed to update the instance name: {e}[red]")
 
     @property
     def credentials(self) -> tuple[str, str]:

@@ -29,7 +29,7 @@ if (spec := util.find_spec('escriptorium_connector')) is None:
         to install escriptorium-connector by Bronson Brown-deVost!
         """
         subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "-I", "escriptorium-connector"])
+            [sys.executable, "-m", "pip", "install", "-I", "git+https://github.com/JKamlah/escriptorium_python_connector.git"])
 
 else:
     from escriptorium_connector import EscriptoriumConnector
@@ -54,12 +54,12 @@ else:
         Updates escriptorium-connector by Bronson Brown-deVost!
         """
         subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "-I", "escriptorium-connector"])
+            [sys.executable, "-m", "pip", "install", "-I", "git+https://github.com/JKamlah/escriptorium_python_connector.git"])
 
     # CONSTANTS #
     class DataFilter(str, Enum):
         """
-        Filter options of the data for escriptorium
+        Filter options of the data for eScriptorium
         """
         PROJECT = "Project"
         DOCUMENT = "Document"
@@ -76,14 +76,25 @@ else:
     # SETTINGS #
     @app.command(rich_help_panel="Settings")
     def set_base_url(base_url: Annotated[str, typer.Argument(
-            help="URL to Transkribus")]) -> None:
+            help="URL to eScriptorium")]) -> None:
         """
-        Write the URL of the Transkribus instance if it not refers to the official url
+        Write the URL of the eScriptorium instance if it not refers to the official url
         https://transkribus.eu/TrpServer/rest to the .env file
         Returns:
         None
         """
         es_api.base_url = base_url
+
+    @app.command(rich_help_panel="Settings")
+    def set_instance_name(instance_name: Annotated[str, typer.Argument(
+            help="URL to Transkribus")]) -> None:
+        """
+        Set the instance name of the eScriptorium instance
+        Returns:
+        None
+        """
+        es_api.instance_name = instance_name
+
 
     @app.command(rich_help_panel="Settings")
     def set_credentials(name: Annotated[str,
@@ -116,6 +127,8 @@ else:
         Callback function to validate the workspace option against the dynamic list,
         ensuring case-insensitive comparison.
         """
+        if Path(value).exists():
+            return Path(value)
         return es_workspace.validate(value)
 
     @app.command(rich_help_panel="Workspace")
@@ -204,7 +217,8 @@ else:
             es_api.base_url,
             *es_api.credentials,
             es_api.api_key,
-            es_api.api_base_url)
+            es_api.api_base_url,
+            instance_name=es_api.instance_name)
         if len(filter_by) != len(search_term):
             print("Please provide for each filter a search term")
             return
@@ -212,18 +226,18 @@ else:
         with Status("Searching for documents") as status:
             try:
                 documents = escr.get_documents()
-            except BaseException:
+            except BaseException as e:
                 print("[red]Missing login information: Ensure that the URL, username, and password or "
                       "API URL and key are correctly configured.[/red]")
                 return
 
-        print(
-            "[bold green]eScriptorium Document Search Report[/bold green] - [white]Version 1.0[/white]")
+        print("[bold green]eScriptorium Document Search Report[/bold green] - [white]Version 1.0[/white]")
         print(f"Total documents found: {documents.count}")
         count = documents.count
         flag = 0 if case_sensitive else re.IGNORECASE
         if filter_by is not None:
             for idx, document in enumerate(documents.results[::-1]):
+                print(document)
                 for f, s in zip(filter_by, search_term):
                     if not (
                         (f == "Project" and re.match(
@@ -333,7 +347,8 @@ else:
             es_api.base_url,
             *es_api.credentials,
             es_api.api_key,
-            es_api.api_base_url)
+            es_api.api_base_url,
+            instance_name=es_api.instance_name)
 
         parts = escr.get_document_parts(document_pk).results
         parts_json = escr.http.get(
@@ -342,8 +357,7 @@ else:
 
         with Status("Downloading transcription") as status:
             zipped_pagexmls_binary = escr.download_part_pagexml_transcription(
-                document_pk, parts_pk, transcription_pk)
-
+                document_pk, parts_pk, transcription_pk)        
         zipped_pagexmls = zipfile.ZipFile(
             BytesIO(zipped_pagexmls_binary)) if zipped_pagexmls_binary else None
 
@@ -443,14 +457,16 @@ else:
             es_api.base_url,
             *es_api.credentials,
             es_api.api_key,
-            es_api.api_base_url)
+            es_api.api_base_url,
+            instance_name=es_api.instance_name)
         overwrite = Bool2OnOff.get(overwrite)
 
         # Create a BytesIO object to hold the zip file in memory
         file_data = BytesIO()
-        if es_workspace.prefix_ws + \
-                workspace in filter_envs(es_workspace.prefix).keys():
-            wsfolder = Path(envs[es_workspace.prefix_ws + workspace])
+        if Path(workspace).exists() or (es_workspace.prefix_ws + \
+                workspace in filter_envs(es_workspace.prefix).keys()):
+
+            wsfolder = Path(envs[es_workspace.prefix_ws + workspace]) if not Path(workspace).exists() else Path(workspace)
             metadata = json.loads(wsfolder.joinpath(
                 'metadata.pageplus.json').open('r').read())
             metadata = metadata.get(
