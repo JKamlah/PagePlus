@@ -6,6 +6,8 @@ import threading
 import time
 from io import StringIO
 from pathlib import Path
+import subprocess
+from typing import List
 
 import pandas as pd
 import streamlit as st
@@ -223,6 +225,38 @@ def save_prompt_templates(templates: dict) -> None:
     storage_file.parent.mkdir(parents=True, exist_ok=True)
     with open(storage_file, 'w') as f:
         json.dump(templates, f, indent=4)
+
+
+def _run_picker_script(command: List[str]) -> List[str]:
+    """Run the picker script as a subprocess and return the output."""
+    try:
+        process = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        # The script prints the selected paths as a JSON string to stdout
+        selected_paths = json.loads(process.stdout.strip())
+        return selected_paths
+    except subprocess.CalledProcessError as e:
+        st.error(f"File picker failed: {e.stderr}")
+    except json.JSONDecodeError:
+        st.error("File picker returned invalid data.")
+    except Exception as e:
+        st.error(f"An unexpected error occurred: {e}")
+    return []
+
+
+def pick_files(initial_dir: str = None, filetypes: List = None) -> List[str]:
+    """Use a subprocess to open a native file picker."""
+    picker_script_path = Path(__file__).parent.parent / "utils" / "picker.py"
+    command = [sys.executable, str(picker_script_path), "--files"]
+    if initial_dir:
+        command.extend(["--initial-dir", str(initial_dir)])
+    if filetypes:
+        command.extend(["--file-types", json.dumps(filetypes)])
+    return _run_picker_script(command)
 
 
 def show_gemini(bridge: GeminiBridge) -> None:
@@ -456,19 +490,26 @@ def show_gemini(bridge: GeminiBridge) -> None:
             ["Directory", "Files"],
             horizontal=True
         )
-
-        if input_type == "Directory":
-            st.write("Select Image Extensions to Search")
-            selected_extensions = st.multiselect(
+        selected_extensions = st.multiselect(
                 "Image Extensions",
                 options=['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'],
                 default=['.jpg', '.jpeg', '.png', '.tiff', '.tif']
             )
+        if input_type == "Directory":
+            st.write("Select Image Extensions to Search")
+
             if st.button(
                 "Select Image Directory",
                     key="select_image_dir_button"):
-                selected_dir = select_directory(
-                    initial_dir=get_loaded_workspace_dir())
+                picker_script_path = Path(__file__).parent.parent / "utils" / "picker.py"
+                command = [sys.executable, str(picker_script_path)]
+                initial_dir = get_loaded_workspace_dir()
+                if initial_dir:
+                    command.extend(["--initial-dir", str(initial_dir)])
+                
+                selected_paths = _run_picker_script(command)
+                selected_dir = selected_paths[0] if selected_paths else None
+                
                 if selected_dir:
                     if selected_extensions:
                         selected_files = [
@@ -498,25 +539,21 @@ def show_gemini(bridge: GeminiBridge) -> None:
             if st.button(
                 "Select Image Files",
                     key="select_image_files_button"):
-                selected_files = select_files(
+                
+                file_types = [
+                    ("Image Files", " ".join(f"*{ext}" for ext in selected_extensions)),
+                    ("All files", "*")
+                ]
+                selected_paths = pick_files(
                     initial_dir=get_loaded_workspace_dir(),
-                    filetypes=[
-                        ("All image files",
-                         "*.jpg *.jpeg *.png *.bmp *.tiff *.tif"),
-                        ("JPEG files",
-                         "*.jpg *.jpeg"),
-                        ("PNG files",
-                         "*.png"),
-                        ("BMP files",
-                         "*.bmp"),
-                        ("TIFF files",
-                         "*.tiff *.tif")])
-                if selected_files:
+                    filetypes=file_types
+                )
+                if selected_paths:
                     st.session_state.modification_input = {
                         "type": "files",
-                        "files": selected_files
+                        "files": selected_paths
                     }
-                    st.success(f"Selected {len(selected_files)} files.")
+                    st.success(f"Selected {len(selected_paths)} files.")
                     st.rerun()
 
         if 'modification_input' in st.session_state:
@@ -541,7 +578,7 @@ def show_gemini(bridge: GeminiBridge) -> None:
                     }
                     for f in st.session_state.modification_input['files']
                 ])
-                st.dataframe(files_df, use_container_width=True)
+                st.dataframe(files_df, width='stretch')
             else:
                 # For file input, show list of selected files
                 files_df = pd.DataFrame([
@@ -553,7 +590,7 @@ def show_gemini(bridge: GeminiBridge) -> None:
                     }
                     for f in st.session_state.modification_input['files']
                 ])
-                st.dataframe(files_df, use_container_width=True)
+                st.dataframe(files_df, width='stretch')
 
             selected_files_for_ocr = st.session_state.modification_input["files"]
 
@@ -565,9 +602,11 @@ def show_gemini(bridge: GeminiBridge) -> None:
             if st.button(
                 "Select Output Directory",
                     key="select_output_dir_button"):
-                selected_paths = select_directory()
+                picker_script_path = Path(__file__).parent.parent / "utils" / "picker.py"
+                command = [sys.executable, str(picker_script_path)]
+                selected_paths = _run_picker_script(command)
                 if selected_paths:
-                    st.session_state.modification_dir = selected_paths
+                    st.session_state.modification_dir = selected_paths[0]
                 elif selected_paths is not None:
                     st.info("Directory selection cancelled.")
 

@@ -32,8 +32,10 @@ google-genai = "^1.32.0"
 # GUI-related packages
 streamlit = { version = "^1.49.1", optional = true }
 
-[tool.poetry.extras]
-gui = ["streamlit"]
+[project.optional-dependencies]
+gui = ["streamlit>=1.49.1,<2", "pyqt6>=6.7.0,<7"]
+
+[project.scripts]
 
 
 [build-system]

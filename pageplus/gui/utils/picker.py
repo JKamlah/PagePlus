@@ -1,11 +1,11 @@
-"""File and directory picker utilities using tkinter."""
+"""File and directory picker utilities using PyQt6."""
 import argparse
 import json
 import sys
-import tkinter as tk
 from pathlib import Path
-from tkinter import filedialog
 from typing import List, Tuple
+
+from PyQt6.QtWidgets import QApplication, QFileDialog
 
 from pageplus.utils.workspace import Environments, Workspace
 
@@ -16,74 +16,90 @@ def get_loaded_workspace_dir() -> Path:
     workspace_names = ws.names()
     loaded_workspace = ws.loaded() if ws.loaded(
     ) and ws.loaded() in workspace_names else None
+    if not loaded_workspace:
+        return Path.home()
     return Path(ws.path(loaded_workspace))
 
 
 def select_directory(initial_dir: str = None):
     """Opens a directory selection dialog and returns the selected path."""
-    root = tk.Tk()
-    root.withdraw()  # Hide the main Tkinter window
-    root.attributes("-topmost", True)  # Try to bring dialog to front
+    app = QApplication.instance() or QApplication(sys.argv)
     if not initial_dir:
         initial_dir = str(Path.home())
-    directory = filedialog.askdirectory(
-        mustexist=True,
-        title="Select Directory",
-        initialdir=initial_dir
+    directory = QFileDialog.getExistingDirectory(
+        None,
+        "Select Directory",
+        str(initial_dir),  # Ensure initial_dir is a string
     )
-    root.destroy()
     return directory if directory else None
 
 
-def select_files(initial_dir: str = None, filetypes: List[Tuple[str, str]] = [
-                 ("XML files", "*.xml"), ("All files", "*.*")]):
-    """Opens a file selection dialog for XML files and returns selected paths."""
-    root = tk.Tk()
-    root.withdraw()  # Hide the main Tkinter window
-    root.attributes("-topmost", True)
+def select_files(initial_dir: str = None, filetypes: List[Tuple[str, str]] = None):
+    """Opens a file selection dialog and returns selected paths."""
+    if filetypes is None:
+        filetypes = [("XML files", "*.xml"), ("All files", "*.*")]
+
+    app = QApplication.instance() or QApplication(sys.argv)
     if not initial_dir:
-        initial_dir = str(Path.home())  # Try to bring dialog to front
-    files = filedialog.askopenfilenames(
-        title="Select PAGE XML Files",
-        filetypes=filetypes,
-        initialdir=initial_dir
+        initial_dir = str(Path.home())
+
+    # Format filetypes for PyQt6
+    filter_str = ";;".join([f"{name} ({patterns})" for name, patterns in filetypes])
+
+    files, _ = QFileDialog.getOpenFileNames(
+        None,
+        "Select PAGE XML Files",
+        str(initial_dir),  # Ensure initial_dir is a string
+        filter_str
     )
-    root.destroy()
-    # askopenfilenames returns a tuple, convert to list
-    return list(files) if files else []
+    return files if files else []
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Tkinter File/Directory Picker"
+        description="PyQt6 File/Directory Picker"
     )
     parser.add_argument(
         '--files',
         action='store_true',
         help="Select files instead of a directory"
     )
+    parser.add_argument(
+        '--initial-dir',
+        type=str,
+        default=None,
+        help="The initial directory to open the dialog in."
+    )
+    parser.add_argument(
+        '--file-types',
+        type=str,
+        default=None,
+        help='A JSON string representing the file types to filter, e.g., \'[[\"Image files\", \"*.jpg *.png\"]]\''
+    )
     args = parser.parse_args()
 
     selected_paths = None
     try:
+        file_types_list = json.loads(args.file_types) if args.file_types else None
         if args.files:
-            selected_paths = select_files()  # Returns a list
+            selected_paths = select_files(
+                initial_dir=args.initial_dir,
+                filetypes=file_types_list
+            )  # Returns a list
             if not selected_paths:  # User cancelled
-                print("[]", file=sys.stdout)  # Output empty JSON list
-                sys.exit(0)  # Exit successfully even on cancel
+                print("[]", file=sys.stdout)
+                sys.exit(0)
         else:
-            selected_dir = select_directory()  # Returns a string or None
+            selected_dir = select_directory(initial_dir=args.initial_dir)  # Returns a string or None
             if selected_dir:
                 selected_paths = [selected_dir]  # Wrap single dir in a list
             else:  # User cancelled
-                print("[]", file=sys.stdout)  # Output empty JSON list
-                sys.exit(0)  # Exit successfully even on cancel
+                print("[]", file=sys.stdout)
+                sys.exit(0)
 
-        # Print the selected paths as a JSON list to stdout
         print(json.dumps(selected_paths), file=sys.stdout)
         sys.exit(0)
 
     except Exception as e:
-        # Print error message to stderr for Streamlit to potentially capture
         print(f"Error in picker script: {str(e)}", file=sys.stderr)
-        sys.exit(1)  # Indicate failure with non-zero exit code
+        sys.exit(1)

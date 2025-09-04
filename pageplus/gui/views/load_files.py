@@ -1,6 +1,9 @@
 """Page XML file loading utilities."""
+import subprocess
+import sys
 from pathlib import Path
 from typing import List
+import json
 
 import streamlit as st
 
@@ -21,13 +24,46 @@ class LoadFilesPage:
         if "show_add_workspace" not in st.session_state:
             st.session_state.show_add_workspace = False
 
+    def _run_picker_script(self, command: List[str]) -> List[str]:
+        """Run the picker script as a subprocess and return the output."""
+        try:
+            process = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            # The script prints the selected paths as a JSON string to stdout
+            selected_paths = json.loads(process.stdout.strip())
+            return selected_paths
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Picker script failed: {e.stderr}")
+            st.error(f"File picker failed: {e.stderr}")
+        except json.JSONDecodeError:
+            logging.error("Failed to decode JSON from picker script.")
+            st.error("File picker returned invalid data.")
+        except Exception as e:
+            logging.error(f"An unexpected error occurred with the picker: {e}")
+            st.error(f"An unexpected error occurred: {e}")
+        return []
+
     def pick_directory(self, initial_dir: str = None) -> List[str]:
         """Use a subprocess to open a native directory picker."""
-        return select_directory(initial_dir)
+        picker_script_path = Path(__file__).parent.parent / "utils" / "picker.py"
+        command = [sys.executable, str(picker_script_path)]
+        if initial_dir:
+            command.extend(["--initial-dir", str(initial_dir)])
+        # The picker script returns a list with a single directory path
+        paths = self._run_picker_script(command)
+        return paths[0] if paths else None
 
     def pick_files(self, initial_dir: str = None) -> List[str]:
         """Use a subprocess to open a native file picker."""
-        return select_files(initial_dir)
+        picker_script_path = Path(__file__).parent.parent / "utils" / "picker.py"
+        command = [sys.executable, str(picker_script_path), "--files"]
+        if initial_dir:
+            command.extend(["--initial-dir", str(initial_dir)])
+        return self._run_picker_script(command)
 
     def show(self):
         """Display the Load Files page."""
@@ -127,7 +163,7 @@ class LoadFilesPage:
             ]
             st.dataframe(
                 data=display_data,
-                use_container_width=True
+                width='stretch'
             )
             st.success(
                 f"Total: {len(st.session_state.loaded_files)} files loaded."

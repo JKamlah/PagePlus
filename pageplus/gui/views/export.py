@@ -1,10 +1,60 @@
 from pathlib import Path
+from typing import List
+import json
+import logging
+import subprocess
+import sys
 
 import streamlit as st
 
 from pageplus.cli.export import ReadingOrderMode
-from pageplus.gui.utils.picker import (get_loaded_workspace_dir,
-                                       select_directory, select_files)
+from pageplus.gui.utils.picker import get_loaded_workspace_dir
+
+
+def _run_picker_script(command: List[str]) -> List[str]:
+    """Run the picker script as a subprocess and return the output."""
+    try:
+        process = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        # The script prints the selected paths as a JSON string to stdout
+        selected_paths = json.loads(process.stdout.strip())
+        return selected_paths
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Picker script failed: {e.stderr}")
+        st.error(f"File picker failed: {e.stderr}")
+    except json.JSONDecodeError:
+        logging.error("Picker script returned invalid data.")
+        st.error("File picker returned invalid data.")
+    except Exception as e:
+        logging.error(f"An unexpected error occurred with the picker: {e}")
+        st.error(f"An unexpected error occurred: {e}")
+    return []
+
+
+def pick_directory(initial_dir: str = None) -> str:
+    """Use a subprocess to open a native directory picker."""
+    picker_script_path = Path(__file__).parent.parent / "utils" / "picker.py"
+    command = [sys.executable, str(picker_script_path)]
+    if initial_dir:
+        command.extend(["--initial-dir", str(initial_dir)])
+    # The picker script returns a list with a single directory path
+    paths = _run_picker_script(command)
+    return paths[0] if paths else None
+
+
+def pick_files(initial_dir: str = None, filetypes: List = None) -> List[str]:
+    """Use a subprocess to open a native file picker."""
+    # Note: The filetypes argument is not yet passed to the subprocess picker.
+    # This would require adding support for it in picker.py.
+    picker_script_path = Path(__file__).parent.parent / "utils" / "picker.py"
+    command = [sys.executable, str(picker_script_path), "--files"]
+    if initial_dir:
+        command.extend(["--initial-dir", str(initial_dir)])
+    return _run_picker_script(command)
 
 
 def show_export(bridge):
@@ -28,7 +78,7 @@ def show_export(bridge):
     st.write(
         "Output directory: The default is to create a new folder in the input directory.")
     if st.button("Select Output Directory"):
-        selected_paths = select_directory()
+        selected_paths = pick_directory(initial_dir=get_loaded_workspace_dir())
         if selected_paths:
             st.session_state.export_dir = selected_paths
         elif selected_paths is not None:
@@ -84,7 +134,7 @@ def show_export(bridge):
                 )
                 if st.button("Select Image Directory",
                              key="select_pdf_image_dir_button"):
-                    selected_dir = select_directory(
+                    selected_dir = pick_directory(
                         initial_dir=get_loaded_workspace_dir()
                     )
                     if selected_dir:
@@ -115,7 +165,7 @@ def show_export(bridge):
             else:  # Files
                 if st.button("Select Image Files",
                              key="select_pdf_image_files_button"):
-                    selected_files = select_files(
+                    selected_files = pick_files(
                         initial_dir=get_loaded_workspace_dir(),
                         filetypes=[
                             ("All image files",
