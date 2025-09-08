@@ -17,7 +17,7 @@ from pageplus.io.logger import logging
 from pageplus.utils.fs import collect_xml_files, determine_output_path, transform_inputs, transform_output
 from pageplus.models.page import Page
 from pageplus.utils.converter import strings_to_enum
-from pageplus.utils.constants import TextLevel
+from pageplus.utils.constants import TextLevel, PcGtsVersion
 
 app = typer.Typer()
 
@@ -1609,6 +1609,72 @@ def fit_into_parent(
             logging.info(
                 f'Wrote modified xml file to output directory: {fout}')
             page.save_xml(fout)
+
+
+@app.command()
+def set_page_version(inputs: Annotated[List[str], typer.Argument(exists=True,
+                                                                  help="Direct input of directories containing XML files.", callback=transform_inputs)] = None,
+                     outputdir: Annotated[Optional[str], typer.Option(
+                         help="Filename of the output directory. If not specified, input files will be overwritten.",
+                         callback=transform_output)] = None,
+                     version: Annotated[PcGtsVersion, typer.Option(help="Target PAGE XML version")] = PcGtsVersion.V2019_07_15,
+                     dry_run: Annotated[bool, typer.Option(help="If True, no files will be modified.")] = False,
+                     validate: Annotated[bool, typer.Option(help="If True, validate compatibility before conversion.")] = True) -> None:
+    """
+    Updates the PAGE XML version (xmlns and schemaLocation) of the input files.
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        print("[red]No XML files found in input directories.[/red]")
+        return
+
+    print(f"[bold green]Updating PAGE XML version to {version.value}[/bold green]")
+    print(f"Found {len(xml_files)} XML files to process.")
+
+    for xml_file in track(xml_files, description="Processing files..."):
+        try:
+            page = Page(xml_file)
+            
+            # Validate compatibility if requested
+            if validate:
+                validation_result = page.validate_version_compatibility(version)
+                
+                if validation_result["errors"]:
+                    print(f"[red]ERROR: Cannot convert {xml_file.name} to {version.value}[/red]")
+                    for error in validation_result["errors"]:
+                        print(f"  [red]• {error}[/red]")
+                    continue
+                
+                if validation_result["warnings"]:
+                    print(f"[yellow]WARNING: {xml_file.name} has compatibility issues with {version.value}[/yellow]")
+                    for warning in validation_result["warnings"]:
+                        print(f"  [yellow]• {warning}[/yellow]")
+                
+                compatibility_score = validation_result["compatibility_score"]
+                if compatibility_score < 50:
+                    print(f"[red]Compatibility score: {compatibility_score}% - conversion may result in data loss[/red]")
+                elif compatibility_score < 80:
+                    print(f"[yellow]Compatibility score: {compatibility_score}% - some features may be affected[/yellow]")
+                else:
+                    print(f"[green]Compatibility score: {compatibility_score}% - conversion should be safe[/green]")
+            
+            if dry_run:
+                print(f"[yellow]DRY RUN: Would update {xml_file.name} to version {version.value}[/yellow]")
+                continue
+                
+            # Update the PAGE version
+            page.update_pcgts_version(version)
+            
+            # Determine output path
+            fout = xml_file if outputdir is None else determine_output_path(xml_file, outputdir)
+            
+            # Save the updated file
+            page.save_xml(fout)
+            print(f"[green]Updated {xml_file.name} to version {version.value}[/green]")
+            
+        except Exception as e:
+            print(f"[red]Error processing {xml_file.name}: {str(e)}[/red]")
+            logging.error(f"Error processing {xml_file.name}: {str(e)}")
 
 
 if __name__ == "__main__":

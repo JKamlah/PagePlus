@@ -7,7 +7,8 @@ from pageplus.cli.modification import (delete_text, delete_textlines,
                                        pseudolinepolygon, reassign_ids,
                                        rectangularize, remove_empty,
                                        remove_tag, repair, repair_dummy_region,
-                                       replace_tag, sort, sort_and_merge,
+                                       replace_tag, set_page_version,
+                                       sort, sort_and_merge,
                                        sort_regions, top_tier_textregion,
                                        translate_lines)
 from pageplus.gui.cli_bridges.base import CLIBridge
@@ -518,6 +519,45 @@ class ModificationBridge(CLIBridge):
             return {
                 "success": True,
                 "output": "Regions sorted successfully"
+            }
+        except Exception as e:
+            return {"success": False, "output": str(e)}
+
+    def set_page_version(
+        self,
+        files: List[str],
+        version: str,
+        outputdir: Optional[str] = None,
+        dry_run: bool = False,
+        validate: bool = True
+    ) -> Dict[str, Any]:
+        """Update PAGE XML version (xmlns and schemaLocation) of input files."""
+        try:
+            from pageplus.utils.constants import PcGtsVersion
+            
+            # Convert string to enum
+            version_enum = None
+            for v in PcGtsVersion:
+                if v.value == version:
+                    version_enum = v
+                    break
+            
+            if version_enum is None:
+                return {
+                    "success": False,
+                    "output": f"Invalid version: {version}. Valid versions: {[v.value for v in PcGtsVersion]}"
+                }
+            
+            set_page_version(
+                inputs=files,
+                version=version_enum,
+                outputdir=outputdir,
+                dry_run=dry_run,
+                validate=validate
+            )
+            return {
+                "success": True,
+                "output": f"PAGE XML version updated to {version} successfully"
             }
         except Exception as e:
             return {"success": False, "output": str(e)}

@@ -33,7 +33,7 @@ def repair(
 
 
 @app.command()
-def filegrps(
+def show_filegrps(
         mets: Annotated[str,
                         typer.Argument(
                             exists=True,

@@ -8,7 +8,7 @@ from enum import Enum
 from importlib import util
 from pathlib import Path
 from shutil import rmtree
-from typing import List
+from typing import List, Optional
 
 import requests
 import typer
@@ -16,6 +16,9 @@ from rich import print
 from rich.status import Status
 from rich.table import Table
 from typing_extensions import Annotated, Optional
+
+from pageplus.utils.converter import parse_page_ranges
+from pageplus.utils.fs import transform_inputs, collect_xml_files
 
 app = typer.Typer()
 
@@ -31,33 +34,24 @@ if (spec := util.find_spec('transkribus_utils')) is None:
         subprocess.check_call([sys.executable, "-m", "pip", "install", "-I",
                                "git+https://github.com/JKamlah/PagePlus-transkribus-utils"])
 
-    def validate_workspace(
-            ctx: typer.Context,
-            param: typer.CallbackParam,
-            value: str) -> str:
-        """
-        Callback function to validate the workspace option against the dynamic list,
-        ensuring case-insensitive comparison.
-        """
-        return Workspace().validate(value)
-
 else:
     import logging
 
+    import pandas as pd
     from transkribus_utils.transkribus_utils import PagePlusTranskribusUtils
     from dotenv import load_dotenv, find_dotenv, get_key, set_key, dotenv_values
 
     from pageplus.utils.constants import Environments, WorkState
     from pageplus.utils.envs import str_to_env
     from pageplus.utils.workspace import Workspace
-    from pageplus.utils.api import API
+    from pageplus.utils.api import TranskribusAPI
 
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("urllib3").setLevel(logging.WARNING)
 
     # CONSTANTS #
-    ts_workspace = Workspace(Environments.TRANSKRIBUS)
-    ts_api = API(Environments.TRANSKRIBUS)
+    ts_workspace = Workspace(Environments.PAGEPLUS)
+    ts_api = TranskribusAPI(Environments.TRANSKRIBUS)
 
     class DataFilter(str, Enum):
         """
@@ -98,7 +92,7 @@ else:
 
     # PACKAGE #
     @app.command(rich_help_panel="Package")
-    def update_package() -> None:
+    def install() -> None:
         """
         Updates PagePlus-transkribus-utils based on acdh-transkribus-utils
         by Peter Andorfer, Matthias Schlögl, Carl Friedrich Haak!
@@ -139,78 +133,6 @@ else:
         """
         ts_api.show_settings()
 
-    # WORKSPACE #
-    def validate_workspace(
-            ctx: typer.Context,
-            param: typer.CallbackParam,
-            value: str) -> str:
-        """
-        Callback function to validate the workspace option against the dynamic list,
-        ensuring case-insensitive comparison.
-        """
-        return ts_workspace.validate(value)
-
-    @app.command(rich_help_panel="Workspace")
-    def show_workspaces() -> None:
-        """
-        Print all workspaces
-        Returns:
-        None
-        """
-        ts_workspace.show()
-
-    @app.command(rich_help_panel="Workspace")
-    def load_workspace(workspace: Annotated[str, typer.Argument(
-            help="Set environmental name", callback=validate_workspace)]) -> None:
-        """
-        Set default workspace
-        Returns:
-        None
-        """
-        ts_workspace.load(workspace)
-
-    @app.command(rich_help_panel="Workspace")
-    def update_workspaces() -> None:
-        """
-        Check if the workspaces still exist and updates the dotenv
-        Returns:
-        None
-        """
-        ts_workspace.update()
-
-    @app.command(rich_help_panel="Workspace")
-    def delete_workspace(workspace: Annotated[str, typer.Argument(
-            help="Set environmental name", callback=validate_workspace)]) -> None:
-        """
-        Deletes an existing workspace
-        Returns:
-        None
-        """
-        ts_workspace.delete(workspace)
-
-    @app.command(rich_help_panel="Workspace")
-    def copy_workspace(destination_path: Annotated[Path,
-                                                   typer.Argument(help="Path to the output directory where the text files will be saved")],
-                       workspace: Annotated[str,
-                                            typer.Argument(help="Workspace name pointing to an existing path",
-                                                           callback=validate_workspace)] = None,
-                       new_workspace: Annotated[str,
-                                                typer.Option(help="If set a new workspace is created.")] = "") -> None:
-        """
-        Copy pages of from a workspace path to another location
-        Returns:
-        None
-        """
-        ts_workspace.copy(destination_path, workspace, new_workspace)
-
-    @app.command(rich_help_panel="Workspace")
-    def open_workspace(workspace: Annotated[
-        str, typer.Argument(help="Workspace name pointing to an existing path",
-                            callback=validate_workspace)] = None) -> None:
-        """
-        Open a workspace folder in the file explorer, works for Windows, macOS, and Linux.
-        """
-        ts_workspace.open(workspace)
 
     # DOCUMENTS #
     def valid_filter(filter_by: list, search_term: list) -> bool:
@@ -260,7 +182,7 @@ else:
                                                    "is limited to: Number of minimum pages.")],
 
                        case_sensitive: Annotated[Optional[bool], typer.Option(
-                           help="De-/Activate case sensitivity for the regex search")] = False) -> None:
+                           help="De-/Activate case sensitivity for the regex search")] = False) -> Optional["pd.DataFrame"]:
         """
         Print your collection (collid), document (id), pages, pagestatus, role
         Returns:
@@ -277,8 +199,7 @@ else:
 
         if not valid_filter(filter_by, search_term):
             return
-
-        tsclient = PagePlusTranskribusUtils(*ts_api.credentials)
+        tsclient = PagePlusTranskribusUtils(*ts_api.credentials, transkribus_base_url=ts_api.api_base_url)
 
         with Status("Searching for documents") as status:
             try:
@@ -344,35 +265,24 @@ else:
                           f"{document.get('role')}")
             collection = f"{document.get('col_name')} ({document.get('col_id')})"
         print(table)
+        # Create a pandas DataFrame from the results
+        data = {
+            "Collection (ID)": [f"{doc.get('col_name')} ({doc.get('col_id')})" for doc in documents],
+            "Document (ID)": [f"{doc.get('doc_name')} ({doc.get('doc_id')})" for doc in documents],
+            "Pages": [doc.get('pages') for doc in documents],
+            "PageStatus": [
+                f"New: {doc.get('doc_md').get('nrOfNew', 0)}, "
+                f"InProgress: {doc.get('doc_md').get('nrOfInProgress', 0)}, "
+                f"Done: {doc.get('doc_md').get('nrOfDone', 0)}, "
+                f"Final: {doc.get('doc_md').get('nrOfFinal', 0)}, "
+                f"GT: {doc.get('doc_md').get('nrOfGT', 0)}"
+                for doc in documents
+            ],
+            "Role": [doc.get('role') for doc in documents]
+        }
+        df = pd.DataFrame(data)
+        return df
 
-    @app.command(rich_help_panel="Document")
-    def load_local_document(inputdir: Annotated[Path,
-                                                typer.Argument(help="Path to the output directory where the text files will be saved")],
-                            workspace: Annotated[str,
-                                                 typer.Argument(help="Set environmental name")],
-                            overwrite_workspace: Annotated[bool,
-                                                           typer.Option(help="Overwrite environmental name")] = False,
-                            loading: Annotated[bool,
-                                               typer.Option(help="Load the created workspace as default")] = True):
-        """
-        Set an environmental variable to an existing folder
-        Returns:
-        None
-        """
-        # TODO: Validationcheck missing
-        load_dotenv()
-        if workspace in ts_workspace.names() and not overwrite_workspace:
-            print(f"[red bold]Warning:[/red bold] The environment variable {workspace} already exists."
-                  " Please set [green]overwrite-workspace[/green] "
-                  "to True, if you want to overwrite the workspace.")
-        if inputdir.is_dir():
-            set_key(find_dotenv(), ts_workspace.prefix_ws +
-                    workspace, str(inputdir.absolute()))
-            if loading:
-                load_workspace(ts_workspace.prefix_ws + workspace)
-        else:
-            print(
-                "[red]Warning:[/red] The inputdir does not point to an existing folder.")
 
     @app.command(rich_help_panel="Document")
     def load_document(collection_id: Annotated[int,
@@ -495,28 +405,17 @@ else:
                       f"You can load it with the load local documents function.")
         set_key(dotfile, ws_absolute, str(wsfolder.absolute()))
         if loading:
-            load_workspace(workspace)
+            ts_workspace.load(workspace)
         print(
             f"The data was successfully stored in: [bold purple]{str(wsfolder.absolute())}[/bold purple]")
         print(
             f"And be access via the Transkribus workspace: [bold green]{workspace}[/bold green]")
 
     @app.command(rich_help_panel="Document")
-    def update_document(workspace: Annotated[str,
-                                             typer.Argument(help="An environmental name pointing to an existing path",
-                                                            callback=validate_workspace)] = None,
-                        workstate: Annotated[Optional[WorkState],
-                                             typer.Option('--workstate',
-                                                          '-s',
-                                                          help="Choose the documents inside this folder with "
-                                                          "'original', or the 'modified' scripts inside "
-                                                          "a subfolder.",
-                                                          case_sensitive=False)] = "original",
-                        use_metadata: Annotated[bool,
-                                                typer.Option(help="Use information from metadata")] = True,
+    def update_document(inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None,
                         collection_id: Annotated[int,
-                                                 typer.Option("--document-pk",
-                                                              "-d",
+                                                 typer.Option("--collection-pk",
+                                                              "-c",
                                                               help="Document's primary key (pk). (Not necessary if "
                                                               "environmental is used, but can also overwrite)")] = None,
                         document_id: Annotated[int,
@@ -561,42 +460,31 @@ else:
         tsclient = PagePlusTranskribusUtils(*ts_api.credentials)
 
         page_names = []
-        if ts_workspace.prefix_ws + workspace in envs.keys():
-            wsfolder = Path(envs[ts_workspace.prefix_ws + workspace])
-            if use_metadata:
-                metadata = json.loads(wsfolder.joinpath(
-                    'metadata.pageplus.json').open('r').read())
-                collection_id = metadata[ts_workspace.env]['collection']['colId']
-                document_id = metadata[ts_workspace.env]['collection']['document']['docId']
-                page_names = [p["fileName"] for p in metadata[ts_workspace.env]
-                              ['collection']['document']['page'].values()]
-                wsfolder = wsfolder.joinpath(
-                    envs.get(Environments.PAGEPLUS.as_prefix_workstate(workstate), ''))
-        else:
-            return
-        if not pages:
-            pages = sorted([file for file in wsfolder.glob(
-                '*.xml') if file.is_file() and file.name.lower not in ['metadata.xml', 'mets.xml']])
-            pages = list(range(1, len(pages) + 1))
+        # Create a BytesIO object to hold the zip file in memory
+        xml_files = collect_xml_files(map(Path, inputs))
+        # Raise error if no xml files are found
+        if not xml_files:
+            raise FileNotFoundError('No xml files found in input directory')
+        
+        pages = parse_page_ranges(pages)
 
         with Status("Updating document") as updating_status:
-            for page in pages:
-                if page_names:
-                    page_name = page_names[page - 1]
-                else:
-                    fulldoc_md = tsclient.get_fulldoc_md(
-                        collection_id, document_id, page)
-                    page_name = fulldoc_md.get(
-                        "fileName", "") if fulldoc_md else ""
-                page_path = Path(wsfolder).joinpath(page_name)
+            page_names = {}
+            if pages:
+                for page in pages:
+                    page_names = {tsclient.get_fulldoc_md(collection_id, document_id, page).get("file_name", ""): page}
+            else:
+                page_names = {doc.get("file_name"): idx+1 for idx, doc in enumerate(tsclient.get_doc_overview_md(collection_id, document_id).get("pages", []))}
+            xml_files = [xml_file for xml_file in xml_files if xml_file.name in page_names.keys()]
+            for page_path in xml_files:
                 if page_path.is_file():
-                    print(collection_id, document_id, page, overwrite,
+                    print(collection_id, document_id, page_names[page_path.name], overwrite,
                           status, note, parent, nr_is_page_id, tool_name)
                     tsclient.update_transcription(
                         page_path.absolute(),
                         collection_id,
                         document_id,
-                        page,
+                        page_names[page_path.name],
                         overwrite,
                         status,
                         note,
@@ -641,13 +529,7 @@ else:
         TAG_PROPERTY_LINK = "Tags"
 
     @app.command(rich_help_panel="Document")
-    def to_prima(workspace: Annotated[str, typer.Argument(help="Environmental name pointing to an existing path",
-                                                          callback=validate_workspace)] = None,
-                 workstate: Annotated[Optional[WorkState],
-                                      typer.Option('--workstate', '-s',
-                                                   help="Choose the documents inside this folder with "
-                                                   "'original', or the 'modified' scripts inside the subfolder.",
-                                                   case_sensitive=False)] = "original",
+    def to_prima(inputs: Annotated[List[str], typer.Argument(exists=True, help="Paths to the XML files to be checked.", callback=transform_inputs)] = None,
                  convert: Annotated[
                      ConvertOptions, typer.Option(help="Convert options (recommended just convert all)")] = "All",
                  outputdir: Annotated[Path, typer.Option('--outputdir', '-o',
@@ -666,19 +548,12 @@ else:
 
         load_dotenv()
         envs = dotenv_values()
-        wsfolder = Path(
-            get_key(
-                find_dotenv(),
-                ts_workspace.prefix_ws +
-                workspace)).joinpath(
-            envs.get(
-                Environments.PAGEPLUS.as_prefix_workstate(workstate),
-                ''))
-        outputdir = wsfolder if outputdir is None else Path(outputdir)
+        xml_files = collect_xml_files(map(Path, inputs))
+        outputdir = Path(outputdir) if outputdir is not None else Path(outputdir)
         outputdir.mkdir(parents=True, exist_ok=True)
-        if wsfolder.exists() and outputdir is not None:
+        if xml_files.exists() and outputdir is not None:
             with Status("Translating from Transkribus variant of PAGE to standard-conformant PAGE") as status:
-                for xml_file in collect_xml_files(iter([wsfolder])):
+                for xml_file in xml_files:
                     tree = parse_xml(xml_file)[0]
                     ttp = TranskribusToPrima(tree)
                     ttp.convert_metadata() if convert.ALL or convert.METADATA else None

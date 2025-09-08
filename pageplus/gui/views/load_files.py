@@ -7,7 +7,7 @@ import json
 
 import streamlit as st
 
-from pageplus.gui.utils.picker import select_directory, select_files
+from pageplus.gui.utils.picker import pick_directory, pick_files
 from pageplus.io.logger import logging
 from pageplus.utils.constants import Environments
 from pageplus.utils.fs import collect_xml_files
@@ -24,47 +24,6 @@ class LoadFilesPage:
         if "show_add_workspace" not in st.session_state:
             st.session_state.show_add_workspace = False
 
-    def _run_picker_script(self, command: List[str]) -> List[str]:
-        """Run the picker script as a subprocess and return the output."""
-        try:
-            process = subprocess.run(
-                command,
-                capture_output=True,
-                text=True,
-                check=True
-            )
-            # The script prints the selected paths as a JSON string to stdout
-            selected_paths = json.loads(process.stdout.strip())
-            return selected_paths
-        except subprocess.CalledProcessError as e:
-            logging.error(f"Picker script failed: {e.stderr}")
-            st.error(f"File picker failed: {e.stderr}")
-        except json.JSONDecodeError:
-            logging.error("Failed to decode JSON from picker script.")
-            st.error("File picker returned invalid data.")
-        except Exception as e:
-            logging.error(f"An unexpected error occurred with the picker: {e}")
-            st.error(f"An unexpected error occurred: {e}")
-        return []
-
-    def pick_directory(self, initial_dir: str = None) -> List[str]:
-        """Use a subprocess to open a native directory picker."""
-        picker_script_path = Path(__file__).parent.parent / "utils" / "picker.py"
-        command = [sys.executable, str(picker_script_path)]
-        if initial_dir:
-            command.extend(["--initial-dir", str(initial_dir)])
-        # The picker script returns a list with a single directory path
-        paths = self._run_picker_script(command)
-        return paths[0] if paths else None
-
-    def pick_files(self, initial_dir: str = None) -> List[str]:
-        """Use a subprocess to open a native file picker."""
-        picker_script_path = Path(__file__).parent.parent / "utils" / "picker.py"
-        command = [sys.executable, str(picker_script_path), "--files"]
-        if initial_dir:
-            command.extend(["--initial-dir", str(initial_dir)])
-        return self._run_picker_script(command)
-
     def show(self):
         """Display the Load Files page."""
         st.title("📂 Load Files")
@@ -76,7 +35,7 @@ class LoadFilesPage:
         # Select directory
         with col1:
             if st.button("Add Directory", key="add_dir"):
-                selected_paths = self.pick_directory()
+                selected_paths = pick_directory()
                 if selected_paths:
                     self.load_xml_files(
                         [Path(selected_paths)],
@@ -88,7 +47,7 @@ class LoadFilesPage:
         # Select individual files
         with col2:
             if st.button("Add Files", key="add_files"):
-                selected_paths = self.pick_files()
+                selected_paths = pick_files()
                 if selected_paths:
                     self.load_xml_files(
                         [Path(p) for p in selected_paths],
@@ -127,7 +86,7 @@ class LoadFilesPage:
         # Select directory
         with col2:
             if st.button("Add Directory", key="add_ws_dir"):
-                selected_paths = self.pick_directory(
+                selected_paths = pick_directory(
                     initial_dir=Path(workspace.path(selected_workspace)))
                 if selected_paths:
                     self.load_xml_files(
@@ -140,7 +99,7 @@ class LoadFilesPage:
         # Select individual files
         with col3:
             if st.button("Add Files", key="add_ws_files"):
-                selected_paths = self.pick_files(
+                selected_paths = pick_files(
                     initial_dir=Path(workspace.path(selected_workspace)))
                 if selected_paths:
                     self.load_xml_files(

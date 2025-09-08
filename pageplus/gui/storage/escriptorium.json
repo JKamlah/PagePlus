@@ -1,0 +1,44 @@
+{
+    "pks": {
+        "LayoutGT-Separator-Extension-v2": {
+            "document": {
+                "name": "LayoutGT-Separator-Extension-v2",
+                "pk": 1883
+            },
+            "transcription": {
+                "name": "",
+                "pk": 6268
+            }
+        },
+        "Book1": {
+            "document": {
+                "name": "Book1",
+                "pk": 2257
+            },
+            "transcription": {
+                "name": "kraken:german_print",
+                "pk": 6906
+            }
+        },
+        "Quadrate_Junge": {
+            "document": {
+                "name": "Quadrate_Junge",
+                "pk": 1911
+            },
+            "transcription": {
+                "name": "kraken:german_handwriting_20230512",
+                "pk": 6340
+            }
+        },
+        "Goethe": {
+            "document": {
+                "name": "Goethe",
+                "pk": 2502
+            },
+            "transcription": {
+                "name": "kraken:Lalamohara_20241206",
+                "pk": 7893
+            }
+        }
+    }
+}

@@ -12,8 +12,14 @@ from pageplus.gui.views.validation import show_validation
 from pageplus.gui.views.analysis import show_analysis
 from pageplus.gui.views.workspace import show_workspace
 from pageplus.gui.views.load_files import LoadFilesPage
+from pageplus.gui.views.escriptorium import show_escriptorium
+from pageplus.gui.views.transkribus import show_transkribus
+from pageplus.gui.views.mets import show_mets
 from pageplus.gui.utils.settings import Settings
 from pageplus.gui.cli_bridges.gemini import GeminiBridge
+from pageplus.gui.cli_bridges.escriptorium import EscriptoriumBridge
+from pageplus.gui.cli_bridges.transkribus import TranskribusBridge
+from pageplus.gui.cli_bridges.mets import MetsBridge
 from pageplus.gui.cli_bridges import (
     CLIBridge,
     AnalysisBridge,
@@ -29,7 +35,6 @@ from typing import List
 import json
 import dotenv
 import base64
-
 
 # Initialize settings
 settings = Settings()
@@ -117,6 +122,9 @@ def main():
             'workspace': WorkspaceBridge(),
             'modification': ModificationBridge(),
             'gemini': GeminiBridge(),
+            'escriptorium': EscriptoriumBridge(),
+            'transkribus': TranskribusBridge(),
+            'mets': MetsBridge(),
         }
 
     # Initialize pages
@@ -136,6 +144,9 @@ def main():
         "Select Page",
         ["✨ Home",
          "📂 Input",
+         "📜 eScriptorium",
+         "🐇 Transkribus",
+         "📚 METS",
          "🔍 Analytics",
          "✅ Validation",
          "🛠️ Modification",
@@ -152,6 +163,12 @@ def main():
         load_page.show()
         st.session_state.loaded_files = load_page.get_loaded_files()
         save_loaded_files(st.session_state.loaded_files)
+    elif page == "📜 eScriptorium":
+        show_escriptorium(st.session_state.bridges['escriptorium'])
+    elif page == "🐇 Transkribus":
+        show_transkribus(st.session_state.bridges['transkribus'])
+    elif page == "📚 METS":
+        show_mets(st.session_state.bridges['mets'])
     elif page == "🔍 Analytics":
         if not st.session_state.loaded_files:
             st.warning("Please load files first in the 'Input' page.")
@@ -196,16 +213,19 @@ def show_home():
     st.header("✨ Welcome to PagePlus ✨")
     st.write("""
     This is the GUI interface for PagePlus, a PAGE-XML file multi-tool.
+    Disclaimer: A lot of the functionality is still under development and results should be checked carefully.
     
     Use the sidebar to navigate between different sections:  
-    📂 Input: Load PAGE-XML files to process  
+    📂 Input: Load PAGE-XML files to process
+    📜 eScriptorium: Work with eScriptorium
+    🐇 Transkribus: Work with Transkribus
+    📚 METS Tools: Work with METS/MODS files  
     🔍 Analytics: Analyze the content of PAGE-XML files  
     ✅ Validation: Validate PAGE-XML files  
     🛠️ Modification: Modify processed documents  
     🖋️ OCR: Do OCR on PAGE-XML files with several OCR engines  
     🤖 LLM: Perform different tasks on PAGE-XML files with LLMs  
     🌟 Gemini: Use Gemini to process images and validate PAGE-XML output  
-    📚 METS Tools: Work with METS/MODS files  
     📤 Export: Export PAGE-XML files to different formats (ALTO, PDF, Text)  
     🗂️ Workspace: Manage workspaces  
     ⚙️ Settings: Configure application settings  

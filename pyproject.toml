@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pageplus"
-version = "0.1.0"
+version = "1.0.0"
 description = ""
 authors = ["JKamlah <jan.kamlah@uni-mannheim.de>"]
 readme = "README.md"
@@ -31,12 +31,10 @@ google-genai = "^1.32.0"
 
 # GUI-related packages
 streamlit = { version = "^1.49.1", optional = true }
+pyqt6 = { version = ">=6.7.0,<7", optional = true }
 
-[project.optional-dependencies]
-gui = ["streamlit>=1.49.1,<2", "pyqt6>=6.7.0,<7"]
-
-[project.scripts]
-
+[tool.poetry.extras]
+gui = ["streamlit", "pyqt6"]
 
 [build-system]
 requires = ["poetry-core"]

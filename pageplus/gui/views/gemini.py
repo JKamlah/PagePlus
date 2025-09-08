@@ -7,16 +7,17 @@ import time
 from io import StringIO
 from pathlib import Path
 import subprocess
-from typing import List
+from typing import List, TYPE_CHECKING
 
 import pandas as pd
 import streamlit as st
 
 from pageplus.gui.cli_bridges.gemini import GeminiBridge
 from pageplus.gui.utils.output_transform import rich_table_to_dataframe
-from pageplus.gui.utils.picker import (get_loaded_workspace_dir,
-                                       select_directory, select_files)
+from pageplus.gui.utils.picker import pick_files
 from pageplus.gui.utils.settings import Settings
+from pageplus.utils.constants import Environments
+from pageplus.utils.workspace import Workspace
 
 
 def strip_ansi_codes(text_to_clean):
@@ -227,41 +228,17 @@ def save_prompt_templates(templates: dict) -> None:
         json.dump(templates, f, indent=4)
 
 
-def _run_picker_script(command: List[str]) -> List[str]:
-    """Run the picker script as a subprocess and return the output."""
-    try:
-        process = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        # The script prints the selected paths as a JSON string to stdout
-        selected_paths = json.loads(process.stdout.strip())
-        return selected_paths
-    except subprocess.CalledProcessError as e:
-        st.error(f"File picker failed: {e.stderr}")
-    except json.JSONDecodeError:
-        st.error("File picker returned invalid data.")
-    except Exception as e:
-        st.error(f"An unexpected error occurred: {e}")
-    return []
+def get_loaded_workspace_dir() -> Path:
+    """Get the path of the loaded workspace directory."""
+    loaded_workspace = st.session_state.get("loaded_workspace")
+    if loaded_workspace:
+        return Path(loaded_workspace)
+    return Path.cwd()
 
 
-def pick_files(initial_dir: str = None, filetypes: List = None) -> List[str]:
-    """Use a subprocess to open a native file picker."""
-    picker_script_path = Path(__file__).parent.parent / "utils" / "picker.py"
-    command = [sys.executable, str(picker_script_path), "--files"]
-    if initial_dir:
-        command.extend(["--initial-dir", str(initial_dir)])
-    if filetypes:
-        command.extend(["--file-types", json.dumps(filetypes)])
-    return _run_picker_script(command)
-
-
-def show_gemini(bridge: GeminiBridge) -> None:
+def show_gemini(bridge: "GeminiBridge") -> None:
     """Show Gemini view."""
-    st.title("Gemini")
+    st.title("✨ Gemini")
 
     # Initialize session state variables
     if not st.session_state.loaded_files:
@@ -507,7 +484,10 @@ def show_gemini(bridge: GeminiBridge) -> None:
                 if initial_dir:
                     command.extend(["--initial-dir", str(initial_dir)])
                 
-                selected_paths = _run_picker_script(command)
+                selected_paths = pick_files(
+                    initial_dir=initial_dir,
+                    filetypes=[("Image Files", " ".join(f"*{ext}" for ext in selected_extensions))]
+                )
                 selected_dir = selected_paths[0] if selected_paths else None
                 
                 if selected_dir:
@@ -604,7 +584,10 @@ def show_gemini(bridge: GeminiBridge) -> None:
                     key="select_output_dir_button"):
                 picker_script_path = Path(__file__).parent.parent / "utils" / "picker.py"
                 command = [sys.executable, str(picker_script_path)]
-                selected_paths = _run_picker_script(command)
+                selected_paths = pick_files(
+                    initial_dir=get_loaded_workspace_dir(),
+                    filetypes=[("All files", "*")]
+                )
                 if selected_paths:
                     st.session_state.modification_dir = selected_paths[0]
                 elif selected_paths is not None:

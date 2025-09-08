@@ -1,53 +1,14 @@
 import logging
-from pathlib import Path
-from typing import List
-import json
-import subprocess
-import sys
 
 import streamlit as st
 
+from pageplus.gui.utils.picker import pick_directory
 from pageplus.utils.constants import Environments
 from pageplus.utils.workspace import Workspace
 
 # Silence watchdog debug messages
 logging.getLogger('watchdog.observers.inotify_buffer').setLevel(
     logging.WARNING)
-
-
-def _run_picker_script(command: List[str]) -> List[str]:
-    """Run the picker script as a subprocess and return the output."""
-    try:
-        process = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        # The script prints the selected paths as a JSON string to stdout
-        selected_paths = json.loads(process.stdout.strip())
-        return selected_paths
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Picker script failed: {e.stderr}")
-        st.error(f"File picker failed: {e.stderr}")
-    except json.JSONDecodeError:
-        logging.error("Picker script returned invalid data.")
-        st.error("File picker returned invalid data.")
-    except Exception as e:
-        logging.error(f"An unexpected error occurred with the picker: {e}")
-        st.error(f"An unexpected error occurred: {e}")
-    return []
-
-
-def pick_directory(initial_dir: str = None) -> str:
-    """Use a subprocess to open a native directory picker."""
-    picker_script_path = Path(__file__).parent.parent / "utils" / "picker.py"
-    command = [sys.executable, str(picker_script_path)]
-    if initial_dir:
-        command.extend(["--initial-dir", str(initial_dir)])
-    # The picker script returns a list with a single directory path
-    paths = _run_picker_script(command)
-    return paths[0] if paths else None
 
 
 def show_workspace(cli_bridge):

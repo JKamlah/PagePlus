@@ -307,8 +307,6 @@ def collect_xml_files(inputpaths: Iterator[Path | str], exclude: Tuple[str, ...]
                 is_page_xml(inputpath)):
             xml_files.append(inputpath)
         elif inputpath.is_dir():
-            print([xml_file for xml_file in inputpath.glob('*.xml') if
-                   xml_file.name not in exclude])
             xml_files.extend([xml_file for xml_file in inputpath.glob(
                 '*.xml') if xml_file.name not in exclude and is_page_xml(xml_file)])
         else:

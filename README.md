@@ -20,6 +20,11 @@ PagePlus includes several commands to perform operations such as:
 
 To install PagePlus, you will need Python 3.11+ and [Poetry](https://python-poetry.org/) installed on your system. 
 
+For the GUI you need to have Tkinter installed on you system. On Debian-based systems, you can install it with:
+```sh
+sudo apt-get install python3-tk
+```
+
 1.  Clone the repository or download the source code:
     ```sh
     git clone https://github.com/your-username/pageplus.git

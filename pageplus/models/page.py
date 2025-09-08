@@ -13,7 +13,10 @@ from pageplus.io.writer import write_xml
 from pageplus.models.basic_elements import CoordElement, Region
 from pageplus.models.table_elements import TableRegion
 from pageplus.models.text_elements import TextRegion
+from pageplus.utils.constants import PcGtsVersion
+from pageplus.utils.validation import validate_version_compatibility
 
+from typing import Dict, Any
 
 @dataclass
 class Regions:
@@ -36,6 +39,84 @@ class Page:
         if self.tree is None or self.root is None:
             self.tree, self.root, self.ns = self._open_xml(self.filename)
         self.load_regions()
+
+    def update_pcgts_version(self, version: PcGtsVersion):
+        """
+        Updates the PcGts xmlns and schemaLocation to a specific version.
+        Args:
+            version (PcGtsVersion): The target PAGE XML version.
+        """
+        if self.root is None:
+            return
+
+        version_str = version.value
+        
+        if self.ns.rsplit('/', 1)[1] == version_str:
+            print(f"Page already has the correct version: {version_str}")
+            return
+
+        new_ns = f"http://schema.primaresearch.org/PAGE/gts/pagecontent/{version_str}"
+        new_schema_location = f"{new_ns} {new_ns}/pagecontent.xsd"
+
+        # Create a new root element with the correct namespace
+        new_root = ET.Element("PcGts", nsmap={None: new_ns, "xsi": "http://www.w3.org/2001/XMLSchema-instance"})
+        
+        # Copy all attributes from the old root, but update the namespace-related ones
+        for attr_name, attr_value in self.root.attrib.items():
+            if attr_name == "xmlns":
+                # Skip the old xmlns, we'll set the new one via nsmap
+                continue
+            elif attr_name == "{http://www.w3.org/2001/XMLSchema-instance}schemaLocation":
+                # Update schemaLocation
+                new_root.set("{http://www.w3.org/2001/XMLSchema-instance}schemaLocation", new_schema_location)
+            else:
+                # Copy other attributes as-is
+                new_root.set(attr_name, attr_value)
+        
+        # Set the schemaLocation if it wasn't already set
+        if "{http://www.w3.org/2001/XMLSchema-instance}schemaLocation" not in new_root.attrib:
+            new_root.set("{http://www.w3.org/2001/XMLSchema-instance}schemaLocation", new_schema_location)
+        
+        # Copy all children from the old root to the new one, updating their namespaces
+        for child in self.root:
+            self._copy_element_with_new_namespace(child, new_root, new_ns)
+        
+        # Replace the old root with the new one in the tree
+        self.tree._setroot(new_root)
+        self.root = new_root
+        self.ns = new_ns
+
+    def _copy_element_with_new_namespace(self, source_element, parent_element, new_ns):
+        """
+        Recursively copy an element and all its children, updating namespaces.
+        """
+        # Get the local name (without namespace prefix)
+        local_name = ET.QName(source_element).localname
+        
+        # Create new element with the new namespace
+        new_element = ET.SubElement(parent_element, f"{{{new_ns}}}{local_name}")
+        
+        # Copy attributes
+        for attr_name, attr_value in source_element.attrib.items():
+            new_element.set(attr_name, attr_value)
+        
+        # Copy text content
+        if source_element.text:
+            new_element.text = source_element.text
+        
+        # Copy tail content
+        if source_element.tail:
+            new_element.tail = source_element.tail
+        
+        # Recursively copy children
+        for child in source_element:
+            self._copy_element_with_new_namespace(child, new_element, new_ns)
+
+    def validate_version_compatibility(self, version: PcGtsVersion) -> Dict[str, Any]:
+        """
+        Validates the compatibility of the PAGE XML version.
+        """
+        return validate_version_compatibility(self.root, version)
 
     def load_regions(self):
         text_region_xpath = f"{{{self.ns}}}TextRegion"

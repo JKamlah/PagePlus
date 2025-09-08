@@ -181,6 +181,7 @@ class CoordElement:
         """
         if inputtype == "polygon":
             # self.fit_into_parent(data)
+            data = remove_repeated_points(data, tolerance=0)
             coordstr = self.convert_coordinates_polygon_to_str(data)
         elif inputtype == "tuple":
             coordstr = self.convert_coordinates_tuples_to_str(data)
@@ -188,9 +189,7 @@ class CoordElement:
             coordstr = data
         else:
             return
-        coordstr = " ".join(
-            self._remove_adjacent_duplicates(
-                coordstr.split(' ')))
+        coordstr = " ".join(self._remove_adjacent_duplicates(coordstr.split(' ')))
         coords = self.xml_element.find(f'{{{self.ns}}}Coords')
         coords.set('points', coordstr)
 
@@ -316,8 +315,7 @@ class CoordElement:
     @staticmethod
     def _remove_adjacent_duplicates(lst):
         """ Removes adjacent duplicate elements from the list. """
-        result = [lst[0]] + [lst[i]
-                             for i in range(1, len(lst)) if lst[i] != lst[i - 1]]
+        result = [lst[0]] + [lst[i] for i in range(1, len(lst)) if lst[i] != lst[i - 1]]
         # Check if the first and last item are the same (for closed shapes)
         if len(result) > 1 and result[0] == result[-1]:
             result.pop()

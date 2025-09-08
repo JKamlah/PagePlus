@@ -14,7 +14,7 @@ def show_modification(bridge: ModificationBridge) -> None:
         st.warning("Please load files first in the 'Input' page.")
         return
 
-    st.title("Modification")
+    st.title("🛠️ Modification")
 
     # Get available files from session state
     selected_files = [str(f) for f in st.session_state.loaded_files]
@@ -43,6 +43,7 @@ def show_modification(bridge: ModificationBridge) -> None:
     tab_names = ["Text-Content Operations",
                  "Text-Layout Operations",
                  "Other Layout Operations",
+                 "Format&Metadata",
                  "Batch Operations"]
     tabs = st.tabs(tab_names)
 
@@ -678,6 +679,45 @@ def show_modification(bridge: ModificationBridge) -> None:
                 else:
                     st.error(result["output"])
 
-    with tabs[3]:  # Batch Operations
+    with tabs[3]:  # Format&Metadata
+        st.subheader("Format&Metadata Operations")
+        
+        # Set PAGE Version
+        with st.expander("Set PAGE Version"):
+            st.write("Updates the PAGE XML version (xmlns and schemaLocation) of the input files.")
+            
+            from pageplus.utils.constants import PcGtsVersion
+            
+            version_options = [v.value for v in PcGtsVersion]
+            selected_version = st.selectbox(
+                "Target PAGE XML Version",
+                options=version_options,
+                index=len(version_options) - 1,  # Default to latest version
+                help="Select the target PAGE XML version for conversion.",
+                key="set_page_version_version"
+            )
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                dry_run = st.checkbox("Dry run", key="set_page_version_dry_run")
+            with col2:
+                validate = st.checkbox("Validate compatibility", value=True, key="set_page_version_validate",
+                                     help="Check for compatibility issues before conversion")
+            
+            if st.button("Set PAGE Version"):
+                with st.spinner("Updating PAGE XML version..."):
+                    result = bridge.set_page_version(
+                        files=selected_files,
+                        version=selected_version,
+                        dry_run=dry_run,
+                        validate=validate,
+                        outputdir=st.session_state.get('modification_dir')
+                    )
+                if result["success"]:
+                    st.success(result["output"])
+                else:
+                    st.error(result["output"])
+
+    with tabs[4]:  # Batch Operations
         st.subheader("Batch Operations")
         st.info("Batch operations coming soon...")

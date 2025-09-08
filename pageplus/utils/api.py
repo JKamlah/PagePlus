@@ -101,39 +101,6 @@ class API:
             print(f"[red]Failed to update the url: {e}[red]")
 
     @property
-    def instance_name(self) -> str:
-        """
-        Name of actual instance
-        Returns:
-        None
-        """
-        return get_key(
-            find_dotenv(),
-            self.prefix +
-            self.prefix_provider() +
-            "INSTANCE_NAME")
-
-    @instance_name.setter
-    def instance_name(self, url: Annotated[str, typer.Argument(
-            help="URL to eScriptorium")]) -> None:
-        """
-        Name of actual instance
-        Returns:
-        None
-        """
-        try:
-            dotfile = find_dotenv()
-            set_key(
-                dotfile,
-                self.prefix +
-                self.prefix_provider() +
-                "INSTANCE_NAME",
-                url)
-            print("[green]The instance name updated successfully.[green]")
-        except Exception as e:
-            print(f"[red]Failed to update the instance name: {e}[red]")
-
-    @property
     def credentials(self) -> tuple[str, str]:
         """
         Get the credentials
@@ -226,16 +193,10 @@ class API:
     def valid_login(self) -> bool:
         envs = dotenv_values()
         check = all(
-            [envs.get(self.prefix + self.prefix_provider() + 'URL', None),
-             envs.get(self.prefix + self.prefix_provider() + 'USERNAME', None),
-             envs.get(self.prefix + self.prefix_provider() + 'PASSWORD', None)])
-        check_api = all([envs.get(self.prefix +
-                                  self.prefix_provider() +
-                                  'API_KEY', None), any([envs.get(self.prefix +
-                                                                  self.prefix_provider() +
-                                                                  'URL', None), envs.get(self.prefix +
-                                                                                         self.prefix_provider() +
-                                                                                         'API_URL', None)])])
+            [self.base_url,
+             self.credentials[0],
+             self.credentials[1]])
+        check_api = all([self.api_key, self.api_base_url])
         if not check and not check_api:
             print(
                 "[red bold]Missing login information:[/red bold] [red]Ensure that the URL, username, and password or "
@@ -262,3 +223,268 @@ class API:
          (var, key) in filter_envs(self.prefix + self.prefix_provider()).items() if not
          (var.startswith(self.prefix_ws) or var.startswith(self.prefix_loaded_ws) or var.replace(self.prefix + self.prefix_provider(), '').startswith('_'))]
         print(table)
+
+@dataclass
+class EscriptoriumAPI(API):
+    environment: Environments = Environments.ESCRIPTORIUM
+
+    def __post_init__(self):
+        self.env = self.environment.value
+        self.prefix = self.environment.as_prefix()
+        self.prefix_ws = self.environment.as_prefix_workspace()
+        self.prefix_loaded_ws = self.environment.as_prefix_loaded_workspace()
+
+    @property
+    def instance_name(self) -> str:
+        """
+        Name of actual instance
+        Returns:
+        None
+        """
+        return get_key(
+            find_dotenv(),
+            self.prefix +
+            self.prefix_provider() +
+            "INSTANCE_NAME")
+
+    @instance_name.setter
+    def instance_name(self, url: Annotated[str, typer.Argument(
+            help="URL to eScriptorium")]) -> None:
+        """
+        Name of actual instance
+        Returns:
+        None
+        """
+        try:
+            dotfile = find_dotenv()
+            set_key(
+                dotfile,
+                self.prefix +
+                self.prefix_provider() +
+                "INSTANCE_NAME",
+                url)
+            print("[green]The instance name updated successfully.[green]")
+        except Exception as e:
+            print(f"[red]Failed to update the instance name: {e}[red]")
+
+    @property
+    def document_pk(self) -> int:
+        """
+        ID of the document
+        Returns:
+        None
+        """
+        return get_key(
+            find_dotenv(),
+            self.prefix +
+            self.prefix_provider() +
+            "DOCUMENT_PK")
+
+    @document_pk.setter
+    def document_pk(self, url: Annotated[str, typer.Argument(
+            help="Document pk")]) -> None:
+        """
+        ID of the document
+        Returns:
+        None
+        """
+        try:
+            dotfile = find_dotenv()
+            set_key(
+                dotfile,
+                self.prefix +
+                self.prefix_provider() +
+                "DOCUMENT_PK",
+                url)
+            print("[green]The document pk updated successfully.[green]")
+        except Exception as e:
+            print(f"[red]Failed to update the document pk: {e}[red]")
+
+
+    @property
+    def transcription_pk(self) -> int:
+        """
+        ID of the transcription
+        Returns:
+        None
+        """
+        return get_key(
+            find_dotenv(),
+            self.prefix +
+            self.prefix_provider() +
+            "TRANSCRIPTION_PK")
+
+    @transcription_pk.setter
+    def transcription_pk(self, url: Annotated[str, typer.Argument(
+            help="Transcription pk")]) -> None:
+        """
+        ID of the transcription
+        Returns:
+        None
+        """
+        try:
+            dotfile = find_dotenv()
+            set_key(
+                dotfile,
+                self.prefix +
+                self.prefix_provider() +
+                "TRANSCRIPTION_PK",
+                url)
+            print("[green]The transcription pk updated successfully.[green]")
+        except Exception as e:
+            print(f"[red]Failed to update the transcription pk: {e}[red]")
+
+
+@dataclass
+class TranskribusAPI(API):
+    environment: Environments = Environments.ESCRIPTORIUM
+
+    def __post_init__(self):
+        self.env = self.environment.value
+        self.prefix = self.environment.as_prefix()
+        self.prefix_ws = self.environment.as_prefix_workspace()
+        self.prefix_loaded_ws = self.environment.as_prefix_loaded_workspace()
+
+
+    @property
+    def provider(self) -> str:
+        """
+        Get provider
+        Returns:
+        None
+        """
+        return ''
+
+    @property
+    def base_url(self) -> str:
+        """
+        Get  base url
+        WARNING: Currently
+        Returns:
+        str
+        """
+        dotfile = find_dotenv()
+        key = get_key(
+            dotfile,
+            self.prefix +
+            self.prefix_provider() +
+            "BASE_URL")
+        return key if key else "https://transkribus.eu/TrpServer/rest"
+
+    @base_url.setter
+    def base_url(self, url: str) -> None:
+        """
+        Set if url differs from api and api-key should be used
+        WARNING: Currently
+        Returns:
+        None
+        """
+        dotfile = find_dotenv()
+        set_key(
+            dotfile,
+            self.prefix +
+            self.prefix_provider() +
+            "BASE_URL",
+            url)
+        print("[green]Base URL for the API was updated successfully.[green]")
+
+
+    @property
+    def api_base_url(self) -> str:
+        """
+        Get api base url
+        WARNING: Currently
+        Returns:
+        str
+        """
+        dotfile = find_dotenv()
+        key = get_key(
+            dotfile,
+            self.prefix +
+            self.prefix_provider() +
+            "API_BASE")
+        return key if key else "https://transkribus.eu/TrpServer/rest"
+
+    @api_base_url.setter
+    def api_base_url(self, url: str) -> None:
+        """
+        Set if api url differs from base-url/api and api-key should be used
+        WARNING: Currently
+        Returns:
+        None
+        """
+        dotfile = find_dotenv()
+        set_key(
+            dotfile,
+            self.prefix +
+            self.prefix_provider() +
+            "API_BASE",
+            url)
+        print("[green]Base URL for the API was updated successfully.[green]")
+
+    @property
+    def document_id(self) -> int:
+        """
+        ID of the document
+        Returns:
+        None
+        """
+        return get_key(
+            find_dotenv(),
+            self.prefix +
+            self.prefix_provider() +
+            "DOCUMENT_ID")
+
+    @document_id.setter
+    def document_id(self, url: Annotated[str, typer.Argument(
+            help="Document id")]) -> None:
+        """
+        ID of the document
+        Returns:
+        None
+        """
+        try:
+            dotfile = find_dotenv()
+            set_key(
+                dotfile,
+                self.prefix +
+                self.prefix_provider() +
+                "DOCUMENT_ID",
+                url)
+            print("[green]The document pk updated successfully.[green]")
+        except Exception as e:
+            print(f"[red]Failed to update the document pk: {e}[red]")
+
+
+    @property
+    def transcription_id(self) -> int:
+        """
+        ID of the transcription
+        Returns:
+        None
+        """
+        return get_key(
+            find_dotenv(),
+            self.prefix +
+            self.prefix_provider() +
+            "TRANSCRIPTION_ID")
+
+    @transcription_id.setter
+    def transcription_id(self, url: Annotated[str, typer.Argument(
+            help="Transcription id")]) -> None:
+        """
+        ID of the transcription
+        Returns:
+        None
+        """
+        try:
+            dotfile = find_dotenv()
+            set_key(
+                dotfile,
+                self.prefix +
+                self.prefix_provider() +
+                "TRANSCRIPTION_ID",
+                url)
+            print("[green]The transcription pk updated successfully.[green]")
+        except Exception as e:
+            print(f"[red]Failed to update the transcription pk: {e}[red]")

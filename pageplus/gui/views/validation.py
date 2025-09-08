@@ -32,7 +32,7 @@ def show_validation(bridge: ValidationBridge) -> None:
         st.warning("Please load files first in the 'Input' page.")
         return
 
-    st.title("Validation")
+    st.title("✅ Validation")
 
     # Info text about validation
     with st.expander("About Validation", expanded=False):

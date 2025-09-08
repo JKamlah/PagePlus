@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from enum import Enum
+from typing import List
 
 from typing_extensions import Iterable, Type
 
@@ -50,3 +51,23 @@ def dict_to_custom(d):
         inner_values = "; ".join(f"{k}:{v}" for k, v in values.items()) + ";"
         result.append(f"{key} {{{inner_values}}}")
     return " ".join(result)
+
+
+def parse_page_ranges(pages: List[str]) -> List[int]:
+    """Parse a list of strings into a list of page numbers.
+    Strings can be single numbers or ranges (e.g., '10-13').
+    """
+    parsed_pages = []
+    if pages is None:
+        return None
+        
+    for page_str in pages:
+        if page_str.isdigit():
+            parsed_pages.append(int(page_str))
+        elif '-' in page_str:
+            parts = page_str.split('-')
+            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+                start, end = int(parts[0]), int(parts[1])
+                if start <= end:
+                    parsed_pages.extend(range(start, end + 1))
+    return sorted(list(set(parsed_pages)))  # Return sorted unique pages
