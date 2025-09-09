@@ -12,6 +12,7 @@ pageplus/gui/storage/loaded_files.json
 pageplus/gui/storage/escriptorium.json
 pageplus/gui/storage/mets.json
 pageplus/gui/storage/transkribus.json
+pageplus/gui/storage/gemini.json
 pageplus/utils/pdf/fonts/
 pageplus/cli/visualize.py
 tests/

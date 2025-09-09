@@ -216,8 +216,14 @@ def load_prompt_templates() -> dict:
     storage_file = Path(__file__).parent.parent / "storage" / "gemini.json"
     if storage_file.exists():
         with open(storage_file, 'r') as f:
-            return json.load(f)
-    return {"system": {}, "user": {}}
+            user_templates = json.load(f)
+    else:
+        user_templates = {"OCR": {"system": {}, "user": {}}, "ReOCR": {"system": {}, "user": {}}}
+    storage_file = Path(__file__).parent.parent / "storage" / "gemini_pp_templates.json"
+    if storage_file.exists():
+        with open(storage_file, 'r') as f:
+            user_templates.update(json.load(f))
+    return user_templates
 
 
 def save_prompt_templates(templates: dict) -> None:
@@ -400,65 +406,58 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                         )
 
     with tabs[1]:  # Prompt Editor
-        st.subheader("Prompt Editor")
+        st.header("Prompt Editor")
 
         # Load templates
         templates = load_prompt_templates()
+        main_tasks = list(templates.keys())
 
-        # Prompt type selection
-        prompt_type = st.radio("Prompt Type", ["system", "user"])
+        # Main task selection
+        selected_main_task = st.selectbox(
+            "Select Task Category",
+            options=main_tasks,
+            key="gemini_main_task_selector"
+        )
 
-        # Template selection and editing
-        col1, col2 = st.columns([1, 2])
+        if selected_main_task:
+            system_prompts = templates.get(selected_main_task, {}).get("system", {})
+            user_prompts = templates.get(selected_main_task, {}).get("user", {})
+            prompt_names = list(system_prompts.keys())
 
-        with col1:
-            # List existing templates
-            st.write("Existing Templates")
-            template_names = list(templates[prompt_type].keys())
-            selected_template = st.selectbox(
-                "Select Template",
-                ["New Template"] + template_names,
-                key=f"template_select_{prompt_type}"
-            )
-
-            # Template name input
-            if selected_template == "New Template":
-                template_name = st.text_input(
-                    "Template Name",
-                    key=f"new_template_name_{prompt_type}"
+            col1, col2 = st.columns(2)
+            with col1:
+                selected_prompt_name = st.selectbox(
+                    "Select System Prompt to Edit",
+                    options=prompt_names,
+                    key="gemini_select_prompt_to_edit"
                 )
-            else:
-                template_name = selected_template
-
-            # Delete template button
-            if selected_template != "New Template":
-                if st.button("Delete Template", key=f"delete_{prompt_type}"):
-                    del templates[prompt_type][selected_template]
-                    save_prompt_templates(templates)
-                    st.rerun()
-
-        with col2:
-            # Template content editor
-            if selected_template == "New Template":
-                template_content = st.text_area(
-                    "Template Content",
-                    height=300,
-                    key=f"new_template_content_{prompt_type}"
-                )
-            else:
-                template_content = st.text_area(
-                    "Template Content",
-                    value=templates[prompt_type].get(selected_template, ""),
-                    height=300,
-                    key=f"template_content_{prompt_type}"
+            with col2:
+                new_prompt_name = st.text_input(
+                    "Or create new prompt named",
+                    key="gemini_new_prompt_name"
                 )
 
-            # Save template button
-            if template_name and template_content:
-                if st.button("Save Template", key=f"save_{prompt_type}"):
-                    templates[prompt_type][template_name] = template_content
-                    save_prompt_templates(templates)
-                    st.success("Template saved successfully!")
+            # Determine which name to use
+            final_prompt_name = new_prompt_name if new_prompt_name else selected_prompt_name
+
+            # Display prompt for editing
+            if final_prompt_name:
+                current_prompt_text = system_prompts.get(final_prompt_name, "")
+                edited_prompt = st.text_area(
+                    f"Editing: {final_prompt_name}",
+                    value=current_prompt_text,
+                    height=400,
+                    key=f"editor_{final_prompt_name}"
+                )
+
+                if st.button("Save Prompt", key="gemini_save_prompt"):
+                    if edited_prompt:
+                        templates[selected_main_task]["system"][final_prompt_name] = edited_prompt
+                        save_prompt_templates(templates)
+                        st.success(f"Prompt '{final_prompt_name}' saved successfully for task '{selected_main_task}'.")
+                        st.rerun()
+                    else:
+                        st.warning("Prompt cannot be empty.")
 
     with tabs[2]:  # I/O
         # Input selection
@@ -617,7 +616,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
 
                     # System prompt selection
                     st.write("System Prompt")
-                    system_prompts_multi = list(templates["system"].keys())
+                    system_prompts_multi = list(templates["OCR"]["system"].keys())
                     selected_system_multi = "Default"
                     if system_prompts_multi:
                         selected_system_multi = st.selectbox(
@@ -628,7 +627,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                         if selected_system_multi != "Default":
                             st.text_area(
                                 "Selected System Prompt",
-                                value=templates["system"].get(
+                                value=templates["OCR"]["system"].get(
                                     selected_system_multi,
                                     ""),
                                 disabled=True,
@@ -667,7 +666,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                             key="run_multithreaded_ocr_button"):
                         system_prompt_multi_selected = None
                         if selected_system_multi != "Default":
-                            system_prompt_multi_selected = templates["system"].get(
+                            system_prompt_multi_selected = templates["OCR"]["system"].get(
                                 selected_system_multi, "")
 
                         # Clear terminal
@@ -817,7 +816,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
 
                     # System prompt selection
                     st.write("System Prompt")
-                    system_prompts_ocr = list(templates["system"].keys())
+                    system_prompts_ocr = list(templates["OCR"]["system"].keys())
                     selected_system_prompt_ocr = "Default"
                     if system_prompts_ocr:
                         selected_system_prompt_ocr = st.selectbox(
@@ -828,7 +827,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                         if selected_system_prompt_ocr != "Default":
                             st.text_area(
                                 "Selected System Prompt OCR",
-                                value=templates["system"].get(
+                                value=templates["OCR"]["system"].get(
                                     selected_system_prompt_ocr, ""
                                 ),
                                 disabled=True,
@@ -846,7 +845,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                     if st.button("Run OCR", key="run_ocr_button"):
                         system_prompt = None
                         if selected_system_prompt_ocr != "Default":
-                            system_prompt = templates["system"].get(
+                            system_prompt = templates["OCR"]["system"].get(
                                 selected_system_prompt_ocr, ""
                             )
                         with st.spinner("Running OCR...", show_time=True):
@@ -873,7 +872,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
 
                     # System prompt selection
                     st.write("System Prompt")
-                    system_prompts_multi = list(templates["system"].keys())
+                    system_prompts_multi = list(templates["ReOCR"]["system"].keys())
                     selected_system_multi = "Default"
                     if system_prompts_multi:
                         selected_system_multi = st.selectbox(
@@ -884,7 +883,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                         if selected_system_multi != "Default":
                             st.text_area(
                                 "Selected System Prompt",
-                                value=templates["system"].get(
+                                value=templates["ReOCR"]["system"].get(
                                     selected_system_multi,
                                     ""),
                                 disabled=True,
@@ -931,7 +930,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                             key="run_multithreaded_reocr_button"):
                         system_prompt_multi_selected = None
                         if selected_system_multi != "Default":
-                            system_prompt_multi_selected = templates["system"].get(
+                            system_prompt_multi_selected = templates["ReOCR"]["system"].get(
                                 selected_system_multi, "")
 
                         # Clear terminal
