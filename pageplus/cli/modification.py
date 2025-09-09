@@ -1,4 +1,5 @@
 from collections import Counter
+from datetime import datetime
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import List, Optional
@@ -1528,8 +1529,7 @@ def top_tier_textregion(
             textline_coords = []
             for line in top_tier_region.textlines:
                 textline_coords.extend(
-                    line.get_coordinates(
-                        returntype="tuple"))
+                    line.get_coordinates(returntype="tuple"))
             if textline_coords:
                 # Create convex hull from textline coordinates
                 from shapely.geometry import MultiPoint
@@ -1672,6 +1672,53 @@ def set_page_version(inputs: Annotated[List[str], typer.Argument(exists=True,
             page.save_xml(fout)
             print(f"[green]Updated {xml_file.name} to version {version.value}[/green]")
             
+        except Exception as e:
+            print(f"[red]Error processing {xml_file.name}: {str(e)}[/red]")
+            logging.error(f"Error processing {xml_file.name}: {str(e)}")
+
+
+@app.command()
+def set_metadata(inputs: Annotated[List[str], typer.Argument(exists=True,
+                                                                  help="Direct input of directories containing XML files.", callback=transform_inputs)] = None,
+                     outputdir: Annotated[Optional[str], typer.Option(
+                         help="Filename of the output directory. If not specified, input files will be overwritten.",
+                         callback=transform_output)] = None,
+                     creator: Annotated[str, typer.Option(help="Creator of the metadata")] = None,
+                     created: Annotated[datetime, typer.Option(help="Created date of the metadata")] = None,
+                     last_change: Annotated[datetime, typer.Option(help="Last change date of the metadata")] = None,
+                     comments: Annotated[str, typer.Option(help="Comments of the metadata")] = None,
+                     user_defined: Annotated[dict, typer.Option(help="User defined metadata")] = None,
+                     new: Annotated[bool, typer.Option(help="If True, a new metadata is created (old metadata is overwritten).")] = False,
+                     default: Annotated[bool, typer.Option(help="If True, a default metadata is created.")] = False,
+                     dry_run: Annotated[bool, typer.Option(help="If True, no files will be modified.")] = False) -> None:
+    """
+    Updates the PAGE XML metadata of the input files.
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        print("[red]No XML files found in input directories.[/red]")
+        return
+
+    print(f"[bold green]Updating PAGE XML metadata[/bold green]")
+    print(f"Found {len(xml_files)} XML files to process.")
+    print(f" New: {new}")
+    for xml_file in track(xml_files, description="Processing files..."):
+        try:
+            page = Page(xml_file)
+            if default:
+                page.set_metadata(None, new)
+            else:
+                metadata = page.get_metadata()
+                metadata.creator = creator if creator is not None else metadata.creator
+                metadata.created = created if created is not None else metadata.created
+                metadata.last_change = last_change if last_change is not None else metadata.last_change
+                metadata.comments = comments if comments is not None else metadata.comments
+                metadata.user_defined = user_defined if user_defined is not None else metadata.user_defined
+                page.set_metadata(metadata, new)
+            if not dry_run:
+                fout = xml_file if outputdir is None else determine_output_path(xml_file, outputdir)
+                page.save_xml(fout)
+            print(f"[green]Updated {xml_file.name} to metadata[/green]")
         except Exception as e:
             print(f"[red]Error processing {xml_file.name}: {str(e)}[/red]")
             logging.error(f"Error processing {xml_file.name}: {str(e)}")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter, defaultdict
+from datetime import datetime
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -13,8 +14,10 @@ from pageplus.io.writer import write_xml
 from pageplus.models.basic_elements import CoordElement, Region
 from pageplus.models.table_elements import TableRegion
 from pageplus.models.text_elements import TextRegion
+from pageplus.models.metadata import Metadata
 from pageplus.utils.constants import PcGtsVersion
 from pageplus.utils.validation import validate_version_compatibility
+
 
 from typing import Dict, Any
 
@@ -117,6 +120,31 @@ class Page:
         Validates the compatibility of the PAGE XML version.
         """
         return validate_version_compatibility(self.root, version)
+
+    def get_metadata(self) -> Metadata:
+        """
+        Gets the metadata of the PAGE XML file by reading its child elements.
+        """
+        metadata_element = self.root.find(f"{{{self.ns}}}Metadata")
+        return Metadata.from_xml(metadata_element, self.ns)
+
+    def set_metadata(self, metadata: Metadata = None, new: bool = False):
+        """
+        Sets the metadata of the PAGE XML file as child elements.
+        If no metadata is provided, a default metadata is created.
+        """
+        if metadata is None:
+            metadata = Metadata(
+                creator="PagePlus",
+                created=datetime.now(),
+                last_change=datetime.now(),
+                comments="")
+
+        metadata_element = self.root.find(f"{{{self.ns}}}Metadata")
+        if metadata_element is None:
+            metadata_element = ET.SubElement(self.root, f"{{{self.ns}}}Metadata")
+
+        metadata.update_xml_element(metadata_element, self.ns, new)
 
     def load_regions(self):
         text_region_xpath = f"{{{self.ns}}}TextRegion"

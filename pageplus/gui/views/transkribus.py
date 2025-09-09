@@ -283,7 +283,7 @@ def show_transkribus(bridge: TranskribusBridge):
 
         if saved_ids_download:
             selected_saved_id_download = st.selectbox(
-                "Load Saved Configuration",
+                "Load saved configuration",
                 options=[""] + saved_ids_download,
                 key="saved_id_selector_download"
             )
@@ -308,11 +308,11 @@ def show_transkribus(bridge: TranskribusBridge):
         col1, col2 = st.columns(2)
         with col1:
             load_images = st.checkbox("Load Images", key="transkribus_load_images")
-            overwrite_ws = st.checkbox("Overwrite Existing Workspace", key="transkribus_overwrite_ws")
+            overwrite_ws = st.checkbox("Overwrite existing workspace", key="transkribus_overwrite_ws")
         with col2:
-            loading = st.checkbox("Load as Default Workspace", key="transkribus_loading", value=True)
+            loading = st.checkbox("Load as default workspace", key="transkribus_loading", value=True)
 
-        workspace = st.text_input("Workspace Name", value="MAIN", key="transkribus_load_workspace")
+        workspace = st.text_input("Workspace name", value="MAIN", key="transkribus_load_workspace")
 
         st.text_input("Folder path (optional)",
                       value=st.session_state.get("transkribus_folderpath", ""),
@@ -384,9 +384,9 @@ def show_transkribus(bridge: TranskribusBridge):
                                          key="transkribus_update_doc_id")
         pages_up = st.text_input("Pages (optional, e.g., 1, 5, 10-15)", key="transkribus_update_pages",
                                  help="Restricts upload to specific page numbers. If empty, all selected files will be uploaded based on their filenames.")
-        status_up = st.selectbox("Set Page Status", [status.value for status in PageStatus],
+        status_up = st.selectbox("Set Page status", [status.value for status in PageStatus],
                                  key="transkribus_update_status")
-        overwrite_up = st.checkbox("Overwrite Existing Transcription", value=True, key="transkribus_overwrite_up")
+        overwrite_up = st.checkbox("Overwrite existing transcription", value=True, key="transkribus_overwrite_up")
         version_update = st.checkbox("Set XML-Version (2013-07-15) on the fly", value=False, key="transkribus_version_update")
         note_up = st.text_area("Note (optional)", key="transkribus_note_up")
 

@@ -78,15 +78,12 @@ class TextRegion(Region):
             for j in range(i + 1, len(sorted_textlines)):
                 line1, line2 = sorted_textlines[i][2], sorted_textlines[j][2]
                 if self._baselines_near_same_height(line1, line2):
-                    logging.info(
-                        f"RO-Lineheight: In textregion {self.get_id()} the lines {self.textlines[sorted_textlines[i][0]].get_id()} ({self.textlines[sorted_textlines[i][0]].get_text()}) and {self.textlines[sorted_textlines[j][0]].get_id()} ({self.textlines[sorted_textlines[j][0]].get_text()}) at the same height")
+                    logging.info(f"RO-Lineheight: In textregion {self.get_id()} the lines {self.textlines[sorted_textlines[i][0]].get_id()} ({self.textlines[sorted_textlines[i][0]].get_text()}) and {self.textlines[sorted_textlines[j][0]].get_id()} ({self.textlines[sorted_textlines[j][0]].get_text()}) at the same height")
                     if self._should_swap_baselines(line1, line2):
-                        logging.info(
-                            f"RO-Lineswap: In textregion {self.get_id()} the lines {self.textlines[sorted_textlines[i][0]].get_id()} and {self.textlines[sorted_textlines[j][0]].get_id()} got swapped.")
+                        logging.info(f"RO-Lineswap: In textregion {self.get_id()} the lines {self.textlines[sorted_textlines[i][0]].get_id()} and {self.textlines[sorted_textlines[j][0]].get_id()} got swapped.")
                     sorted_textlines[i], sorted_textlines[j] = sorted_textlines[j], sorted_textlines[i]
-
         # Apply the final sorting
-        new_sorting = [idx for idx, _ in sorted_textlines]
+        new_sorting = [idx for idx, _, *_ in sorted_textlines]
         if new_sorting != sorted(new_sorting):
             self.textlines = [self.textlines[idx] for idx in new_sorting]
             for textline in self.textlines:
@@ -407,8 +404,7 @@ class Textline(CoordElement):
             if returntype == "string":
                 return baseline.attrib['points']
             else:
-                coord_tuples = self.convert_coordinates_str_to_tuples(
-                    baseline.attrib['points'])
+                coord_tuples = self.convert_coordinates_str_to_tuples(baseline.attrib['points'])
                 if returntype == "tuple":
                     return coord_tuples
                 elif returntype == "points":

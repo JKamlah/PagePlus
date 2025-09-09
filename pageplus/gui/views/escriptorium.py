@@ -67,7 +67,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
     settings = Settings()
 
     # Operation tabs
-    tab_names = ["Settings", "Find Documents", "Download Documents", "Update Document"]
+    tab_names = ["Settings", "Find Documents", "Download Document", "Update Document"]
     tabs = st.tabs(tab_names)
 
     with tabs[0]:  # Settings
@@ -327,8 +327,8 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
                 st.session_state.escriptorium_doc_pk = doc_pk
                 st.session_state.escriptorium_trans_pk = trans_pk
 
-    with tabs[2]:  # Download Documents
-        st.subheader("Download Documents")
+    with tabs[2]:  # Download Document
+        st.subheader("Download Document")
 
         # --- Selector for Saved PKs ---
         pks_data_download = load_escriptorium_pks()

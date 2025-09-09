@@ -180,9 +180,12 @@ class CoordElement:
         formatted according to the 'inputtype'.
         """
         if inputtype == "polygon":
-            # self.fit_into_parent(data)
-            data = remove_repeated_points(data, tolerance=0)
-            coordstr = self.convert_coordinates_polygon_to_str(data)
+            removed_repeated_data = remove_repeated_points(data, tolerance=2)
+            if len(removed_repeated_data) < 3:
+                removed_repeated_data = remove_repeated_points(data, tolerance=0)
+            if len(removed_repeated_data) < 3:
+                removed_repeated_data = data
+            coordstr = self.convert_coordinates_polygon_to_str(removed_repeated_data)
         elif inputtype == "tuple":
             coordstr = self.convert_coordinates_tuples_to_str(data)
         elif inputtype == "string":

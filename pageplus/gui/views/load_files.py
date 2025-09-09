@@ -83,31 +83,39 @@ class LoadFilesPage:
                         )
                     elif selected_paths is not None:
                         st.info("Workspace is empty.")
+                else:
+                    st.info("Please select a workspace first.")
         # Select directory
         with col2:
             if st.button("Add Directory", key="add_ws_dir"):
-                selected_paths = pick_directory(
-                    initial_dir=Path(workspace.path(selected_workspace)))
-                if selected_paths:
-                    self.load_xml_files(
-                        [Path(selected_paths)],
-                        from_directory=True
-                    )
-                elif selected_paths is not None:
-                    st.info("Directory selection cancelled.")
+                if selected_workspace:
+                    selected_paths = pick_directory(
+                        initial_dir=Path(workspace.path(selected_workspace)))
+                    if selected_paths:
+                        self.load_xml_files(
+                            [Path(selected_paths)],
+                            from_directory=True
+                        )
+                    elif selected_paths is not None:
+                        st.info("Directory selection cancelled.")
+                else:
+                    st.info("Please select a workspace first.")
 
         # Select individual files
         with col3:
             if st.button("Add Files", key="add_ws_files"):
-                selected_paths = pick_files(
-                    initial_dir=Path(workspace.path(selected_workspace)))
-                if selected_paths:
-                    self.load_xml_files(
-                        [Path(p) for p in selected_paths],
-                        from_directory=False
-                    )
-                elif selected_paths is not None:
-                    st.info("File selection cancelled.")
+                if selected_workspace:
+                    selected_paths = pick_files(
+                        initial_dir=Path(workspace.path(selected_workspace)))
+                    if selected_paths:
+                        self.load_xml_files(
+                            [Path(p) for p in selected_paths],
+                            from_directory=False
+                        )
+                    else:
+                        st.info("File selection cancelled.")
+                else:
+                    st.info("Please select a workspace first.")
 
         # Show loaded files
         st.subheader("Loaded Files")

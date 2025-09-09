@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
+import lxml.etree as ET
+
 
 @dataclass
 class Metadata:
@@ -12,23 +14,60 @@ class Metadata:
     comments: Optional[str] = None
     user_defined: dict = field(default_factory=dict)
 
-    def to_dict(self) -> dict:
-        """Convert metadata to dictionary."""
-        return {
-            "creator": self.creator,
-            "created": self.created.isoformat(),
-            "last_change": self.last_change.isoformat(),
-            "comments": self.comments,
-            "user_defined": self.user_defined
-        }
-
     @classmethod
-    def from_dict(cls, data: dict) -> 'Metadata':
-        """Create metadata from dictionary."""
+    def from_xml(cls, metadata_element: Optional[ET.Element], ns: str) -> 'Metadata':
+        """Create metadata from an XML element by reading its child elements."""
+        if metadata_element is None:
+            return cls(
+                creator="PagePlus",
+                created=datetime.now(),
+                last_change=datetime.now(),
+                comments="",
+            )
+
+        def get_text_from_child(tag):
+            child = metadata_element.find(f"{{{ns}}}{tag}")
+            return child.text if child is not None and child.text else None
+
+        creator = get_text_from_child("Creator") or "Unknown"
+        created_text = get_text_from_child("Created")
+        last_change_text = get_text_from_child("LastChange")
+        comments = get_text_from_child("Comments") or ""
+
+        try:
+            created = datetime.fromisoformat(created_text.replace("Z", "+00:00"))
+        except (ValueError, TypeError, AttributeError):
+            created = datetime.now()
+
+        try:
+            last_change = datetime.fromisoformat(last_change_text.replace("Z", "+00:00"))
+        except (ValueError, TypeError, AttributeError):
+            last_change = datetime.now()
+
         return cls(
-            creator=data["creator"],
-            created=datetime.fromisoformat(data["created"]),
-            last_change=datetime.fromisoformat(data["last_change"]),
-            comments=data.get("comments"),
-            user_defined=data.get("user_defined", {})
+            creator=creator,
+            created=created,
+            last_change=last_change,
+            comments=comments,
+            user_defined={}
         )
+
+    def update_xml_element(self, metadata_element: ET.Element, ns: str, new: bool = False):
+        """
+        Updates the XML element with the metadata values as child elements.
+        """
+        if new:
+            metadata_element.attrib.clear()
+            for child in list(metadata_element):
+                metadata_element.remove(child)
+
+        def _set_child_element(parent, tag, text):
+            element = parent.find(f"{{{ns}}}{tag}")
+            if element is None:
+                element = ET.SubElement(parent, ET.QName(ns, tag))
+            element.text = text
+
+        _set_child_element(metadata_element, "Creator", self.creator)
+        _set_child_element(metadata_element, "Created", self.created.strftime("%Y-%m-%d %H:%M:%S") if isinstance(self.created, datetime) else self.created)
+        _set_child_element(metadata_element, "LastChange", self.last_change.strftime("%Y-%m-%d %H:%M:%S") if isinstance(self.last_change, datetime) else self.last_change)
+        _set_child_element(metadata_element, "Comments", self.comments)

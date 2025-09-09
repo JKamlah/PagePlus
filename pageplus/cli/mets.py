@@ -4,6 +4,7 @@ import requests
 import urllib.parse
 
 import typer
+import pandas as pd
 from rich import print
 from rich.progress import track
 
@@ -44,27 +45,44 @@ def show_filegrps(
     """
     Inspect <fileGrp> entries in a METS XML file.
     """
+    data_rows = []
     for idx, doc in enumerate(
             parse_mets_xml_multiple_roots(
             mets, loose=not strict, verbose=verbose)):
-        print(f"{idx + 1}. Document")
         file_grps = doc.recursive_find(doc, "fileGrp")
 
         for file_grp in file_grps:
             attrs = file_grp.attributes.copy()
+            row = {
+                "Document": idx + 1,
+                "ID": attrs.get("ID", ""),
+                "USE": attrs.get("USE", ""),
+                "Type": "",
+                "MIMETYPE": ""
+            }
 
             if file_grp.children:
                 first_child = file_grp.children[0]
                 mime = first_child.attributes.get("MIMETYPE")
                 if mime:
-                    attrs["MIMETYPE"] = mime
+                    row["MIMETYPE"] = mime
 
                 if isinstance(first_child, FileGrp):
-                    print(f"\tGroup of Groups: {attrs}")
+                    row["Type"] = "Group of Groups"
                 else:
-                    print(f"\t\tGroup of Files: {attrs}")
+                    row["Type"] = "Group of Files"
             else:
-                print(f"\tEmpty Group: {attrs}")
+                row["Type"] = "Empty Group"
+            data_rows.append(row)
+
+    if not data_rows:
+        print("No file groups found.")
+        return pd.DataFrame()
+
+    df = pd.DataFrame(data_rows)
+    print("--- File Groups Summary ---")
+    print(df)
+    return df
 
 
 @app.command()
@@ -72,7 +90,7 @@ def download(
         mets: Annotated[str,
                         typer.Argument(
                             exists=True,
-                            help="Path to METS XML file.",
+                            help="Path to METS XML file or url.",
                             callback=validate_mets,),],
         strict: Annotated[bool, typer.Option(help="Do not allow parsing of unknown attributes and structures.")] = False,
         verbose: Annotated[bool, typer.Option(help="Print warnings to the terminal.")] = False,
@@ -83,11 +101,16 @@ def download(
     """
     Download files referenced in a METS XML document by <fileGrp>.
     """
-    mets_files = parse_mets_xml_multiple_roots(
-        mets, loose=not strict, verbose=verbose)
+    if mets.startswith("http"):
+        output_path = get_url(mets, Path(outputdir).joinpath('mets.xml'))
+        if output_path:
+            mets = output_path
+        else:
+            raise typer.Exit(1)
+    mets_files = parse_mets_xml_multiple_roots(mets, loose=not strict, verbose=verbose)
     base_output = Path(mets).parent if outputdir is None else Path(outputdir)
 
-    for idx, doc in enumerate(mets_files):
+    for idx, doc in track(enumerate(mets_files), description="Downloading files.."):
         # Determine output directory
         if selection and idx + 1 not in selection:
             continue
@@ -118,11 +141,9 @@ def download(
 
                     for file in child.children:
                         if isinstance(file, File):
-                            download_file_from_flocat(
-                                file, nested_folder, nametag, overwrite=True)
+                            download_file_from_flocat(file, nested_folder, nametag, overwrite=True)
                 elif isinstance(child, File):
-                    download_file_from_flocat(
-                        child, grp_folder, nametag, overwrite=True)
+                    download_file_from_flocat(child, grp_folder, nametag, overwrite=True)
 
 
 @app.command()
@@ -158,12 +179,9 @@ def get_oai(
 
 
 @app.command()
-def get_url(url: Annotated[str,
-                           typer.Argument(help="URL to the METS XML file.")],
-            output_dir: Annotated[Path,
-                                  typer.Option("--output-dir",
-                                               "-o",
-                                               help="Directory to save the METS XML file.")] = Path("."),
+def get_url(url: Annotated[str, typer.Argument(help="URL to the METS XML file.")],
+            output_path: Annotated[Path, typer.Option("--output-dir", "-o",
+                                    help="Directory to save the METS XML file.")] = Path("."),
             ):
     """
     Download a METS XML file directly from a URL and save to disk.
@@ -171,7 +189,10 @@ def get_url(url: Annotated[str,
     try:
         response = requests.get(url, timeout=10)
         response.raise_for_status()
-        output_dir.write_text(response.text, encoding="utf-8")
-        print(f"✅ Downloaded METS XML to: {output_dir}")
+        output_path = output_path / "mets.xml" if output_path.is_dir() else output_path
+        output_path.write_text(response.text, encoding="utf-8")
+        print(f"✅ Downloaded METS XML to: {output_path}")
+        return output_path
     except Exception as e:
         print(f"[red]❌ Failed to download METS XML: {e}[/red]")
+        return None

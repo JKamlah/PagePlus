@@ -1,5 +1,7 @@
 from importlib import util
 from typing import Any, Dict, List, Optional
+from pathlib import Path
+from datetime import datetime
 
 from pageplus.cli.modification import (delete_text, delete_textlines,
                                        extend_lines, fit_into_parent,
@@ -308,6 +310,19 @@ class ModificationBridge(CLIBridge):
         for file in files:
             # TODO: Implement metadata addition using CLI functions
             pass
+
+    def set_metadata(self, files: List[str], creator: Optional[str], created: Optional[str], last_change: Optional[str], comments: Optional[str],
+                     new: bool, default: bool, dry_run: bool):
+        """Sets the PAGE XML metadata of the input files."""
+        try:
+            from pageplus.cli.modification import set_metadata as set_metadata_cli
+            set_metadata_cli(inputs=files, creator=creator, created=created, last_change=last_change, comments=comments, new=new, default=default, dry_run=dry_run)
+            return {
+                "success": True,
+                "output": "Metadata set successfully"
+            }
+        except Exception as e:
+            return {"success": False, "output": str(e)}
 
     # Batch Operations
     def batch_rename(self, files: List[str], pattern: str) -> None:

@@ -1,4 +1,5 @@
 from importlib import util
+from datetime import datetime
 
 import streamlit as st
 
@@ -717,6 +718,64 @@ def show_modification(bridge: ModificationBridge) -> None:
                     st.success(result["output"])
                 else:
                     st.error(result["output"])
+
+        with st.expander("Set Metadata", expanded=False):
+            st.write("Update the metadata for the loaded PAGE XML files.")
+
+            metadata_options = ["Creator", "Comments", "Created", "Last Change"]
+            selected_options = st.multiselect(
+                "Fields to update",
+                options=metadata_options,
+                default=["Creator", "Last Change"],
+                key="metadata_fields_to_update"
+            )
+
+            creator = st.text_input("Creator", key="metadata_creator", value="PagePlus", disabled="Creator" not in selected_options)
+            comments = st.text_area("Comments", key="metadata_comments", disabled="Comments" not in selected_options)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                created_date = st.date_input("Created Date", value=datetime.now(), key="metadata_created_date", disabled="Created" not in selected_options)
+                created_time = st.time_input("Created Time", value=datetime.now().time(), key="metadata_created_time", disabled="Created" not in selected_options)
+            with col2:
+                last_change_date = st.date_input("Last Change Date", value=datetime.now(), key="metadata_last_change_date", disabled="Last Change" not in selected_options)
+                last_change_time = st.time_input("Last Change Time", value=datetime.now().time(), key="metadata_last_change_time", disabled="Last Change" not in selected_options)
+
+            created_datetime = datetime.combine(created_date, created_time).strftime("%Y-%m-%d %H:%M:%S")
+            last_change_datetime = datetime.combine(last_change_date, last_change_time).strftime("%Y-%m-%d %H:%M:%S")
+
+            col_opts1, col_opts2, col_opts3 = st.columns(3)
+            with col_opts1:
+                default_metadata = st.checkbox("Use Default Metadata", key="metadata_default")
+            with col_opts2:
+                new_metadata = st.checkbox("Overwrite Existing (new)", key="metadata_new")
+            with col_opts3:
+                dry_run_metadata = st.checkbox("Dry Run", key="metadata_dry_run")
+
+            if st.button("Set Metadata", key="set_metadata_button"):
+                if not st.session_state.loaded_files:
+                    st.warning("Please load files first.")
+                else:
+                    with st.spinner("Setting metadata..."):
+                        creator_arg = creator if "Creator" in selected_options else None
+                        comments_arg = comments if "Comments" in selected_options else None
+                        created_arg = created_datetime if "Created" in selected_options else None
+                        last_change_arg = last_change_datetime if "Last Change" in selected_options else None
+
+                        result = bridge.set_metadata(
+                            files=selected_files,
+                            creator=creator_arg,
+                            created=created_arg,
+                            last_change=last_change_arg,
+                            comments=comments_arg,
+                            new=new_metadata,
+                            default=default_metadata,
+                            dry_run=dry_run_metadata
+                        )
+                        if result["success"]:
+                            st.success(result["output"])
+                        else:
+                            st.error(result["output"])
 
     with tabs[4]:  # Batch Operations
         st.subheader("Batch Operations")

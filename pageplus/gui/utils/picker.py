@@ -53,12 +53,6 @@ def pick_files(initial_dir: str = None, filetypes: List[Tuple[str, str]] = None)
     return _run_picker_script(command)
 
 
-def pick_file(initial_dir: str = None, filetypes: List[Tuple[str, str]] = None) -> str:
-    """Use a subprocess to open a native file picker for a single file."""
-    files = pick_files(initial_dir, filetypes)
-    return files[0] if files else None
-
-
 def select_directory(initial_dir: str = None) -> List[str]:
     """Opens a directory selection dialog and returns the selected path."""
     app = QApplication.instance() or QApplication(sys.argv)
