@@ -194,7 +194,8 @@ class Workspace:
     def backup(
             self,
             backup_folder: Path = Path('Backup'),
-            workspace: str = None) -> None:
+            workspace: str = None,
+            as_zip: bool = False) -> None:
         """
         Create a backup of the xml files
         Returns:
@@ -212,18 +213,23 @@ class Workspace:
             return
         wsfolder = Path(get_key(find_dotenv(), self.prefix_ws + workspace))
         if wsfolder.exists():
+            if as_zip:
+                shutil.make_archive(backup_folder, 'zip', wsfolder)
+                print(f"Backup created: [bold green]{backup_folder}.zip[/bold green]")
+                return
             backup_path = wsfolder.joinpath(backup_folder)
             Path(backup_path).mkdir(parents=True, exist_ok=True)
             xml_files = collect_xml_files(map(Path, [workspace]))
             for file in xml_files:
                 shutil.copy(file, backup_path.joinpath(file.name))
             print(
-                f"Backup created: [bold green]{len(xml_files)} XML-files[bold green]")
+                f"Backup created: [bold green]{len(xml_files)} XML-files[/bold green]")
 
     def restore(
             self,
             backup_folder: Path = Path('Backup'),
-            workspace: str = None) -> None:
+            workspace: str = None,
+            from_zip: bool = False) -> None:
         """
         Restore a backup of the xml files
         Returns:
@@ -240,13 +246,17 @@ class Workspace:
             print("Please provide a valid workspace or load workspace.")
             return
         wsfolder = Path(get_key(find_dotenv(), self.prefix_ws + workspace))
+        if from_zip:
+            backup_path = wsfolder.joinpath(backup_folder).with_suffix('.zip')
+            shutil.unpack_archive(backup_path, wsfolder)
+            print("Restored: [bold green] XML-files from zip[/bold green]")
+            return
         backup_path = wsfolder.joinpath(backup_folder)
         if wsfolder.exists() and backup_path.exists():
             xml_files = collect_xml_files(map(Path, [backup_path]))
             for file in xml_files:
                 shutil.copy(file, wsfolder)
-            print(
-                f"Restored: [bold green]{len(xml_files)} XML-files[bold green]")
+            print(f"Restored: [bold green]{len(xml_files)} XML-files[/bold green]")
 
     def open(self,
              workspace: Annotated[str,

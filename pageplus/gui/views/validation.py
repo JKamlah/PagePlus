@@ -60,7 +60,7 @@ def show_validation(bridge: ValidationBridge) -> None:
         st.session_state.validation_results = None
 
     if st.button("Run Validation"):
-        with st.spinner("Running validation..."):
+        with st.spinner("Running validation...", show_time=True):
             st.session_state.validation_results = bridge.validate_files(
                 selected_files)
 

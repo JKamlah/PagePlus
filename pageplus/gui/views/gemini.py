@@ -273,7 +273,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                 type="password"
             )
             if st.button("Set API Key", key="set_api_key_button"):
-                with st.spinner("Setting API key..."):
+                with st.spinner("Setting API key...", show_time=True):
                     result = bridge.set_api_key(api_key)
                 if result["success"]:
                     st.success(result["output"])
@@ -281,7 +281,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                     st.error(result["output"])
 
             if st.button("Check API Key", key="check_api_key_button"):
-                with st.spinner("Checking API key..."):
+                with st.spinner("Checking API key...", show_time=True):
                     result = bridge.check_valid_key()
                 if result["success"]:
                     st.success(result["output"])
@@ -291,7 +291,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
         # Models
         with st.expander("Models", expanded=True):
             if st.button("Show Available Models", key="show_models_button"):
-                with st.spinner("Fetching available models..."):
+                with st.spinner("Fetching available models...", show_time=True):
                     result = bridge.show_models()
                 if result["success"]:
                     df = rich_table_to_dataframe(result["models"])
@@ -307,7 +307,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
             if st.button(
                 "Show Model Details",
                     key="show_model_details_button"):
-                with st.spinner(f"Fetching details for model {model}..."):
+                with st.spinner(f"Fetching details for model {model}...", show_time=True):
                     result = bridge.show_modeldetails(model)
                 if result["success"]:
                     st.success(result["output"])
@@ -315,7 +315,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                     st.error(result["output"])
 
             if st.button("Check Model", key="check_model_button"):
-                with st.spinner(f"Checking model {model}..."):
+                with st.spinner(f"Checking model {model}...", show_time=True):
                     result = bridge.check_model(model)
                 if result["success"]:
                     st.success(result["output"])
@@ -324,7 +324,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
 
             if st.button("Set Model", key="set_model_button"):
                 settings.set("GEMINI_MODEL", model)
-                with st.spinner(f"Setting model to {model}..."):
+                with st.spinner(f"Setting model to {model}...", show_time=True):
                     result = bridge.set_model(model)
                 if result["success"]:
                     st.success(result["output"])
@@ -942,7 +942,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                             disabled=True,
                             key="reocr_terminal_output_clear"
                         )
-                        with st.spinner("Running OCR...", show_time=True):
+                        with st.spinner("Running ReOCR...", show_time=True):
                             # Create a queue for output
                             output_queue = queue.Queue()
                             # Create a buffer to store all output

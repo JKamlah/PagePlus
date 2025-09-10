@@ -55,7 +55,7 @@ def show_mets(bridge: MetsBridge) -> None:
 
         if st.button("Download", key="download_url_button"):
             if url and output_dir_url:
-                with st.spinner("Downloading from URL..."):
+                with st.spinner("Downloading from URL...", show_time=True):
                     result = bridge.get_url(url, Path(output_dir_url))
                 if result["success"]:
                     st.session_state.mets_success_message = "METS XML downloaded successfully."
@@ -90,7 +90,7 @@ def show_mets(bridge: MetsBridge) -> None:
 
         if st.button("Download", key="download_oai_button"):
             if base_url and identifier and output_dir_oai:
-                with st.spinner("Downloading from OAI..."):
+                with st.spinner("Downloading from OAI...", show_time=True):
                     result = bridge.get_oai(base_url, identifier, Path(output_dir_oai), metadata_prefix)
                 if result["success"]:
                     st.session_state.mets_success_message = "METS XML downloaded successfully."
@@ -129,7 +129,7 @@ def show_mets(bridge: MetsBridge) -> None:
 
         if st.button("Inspect", key="inspect_button"):
             if mets_file_show and Path(mets_file_show).exists():
-                with st.spinner("Inspecting file groups..."):
+                with st.spinner("Inspecting file groups...", show_time=True):
                     result = bridge.show_filegrps(mets_file_show, strict_show, verbose_show)
                 if result["success"]:
                     st.success("Successfully inspected file groups.")
@@ -195,7 +195,7 @@ def show_mets(bridge: MetsBridge) -> None:
                     selection = [int(s.strip()) for s in selection_str.split(',')] if selection_str else None
                     tags = [t.strip() for t in tag.split(',')] if tag else [tag.strip()]
                     for idx, tag in enumerate(tags):
-                        with st.spinner(f"Downloading files for tag: {tag} ({idx + 1}/{len(tags)})..."):
+                        with st.spinner(f"Downloading files for tag: {tag} ({idx + 1}/{len(tags)})...", show_time=True):
                             result = bridge.download(
                                 mets=mets_file_download,
                                 strict=strict_download,
@@ -227,7 +227,7 @@ def show_mets(bridge: MetsBridge) -> None:
         st.warning("This will overwrite the file in place.")
         if st.button("Repair", key="repair_button"):
             if mets_file_repair and Path(mets_file_repair).exists():
-                with st.spinner("Repairing METS file..."):
+                with st.spinner("Repairing METS file...", show_time=True):
                     result = bridge.repair(mets_file_repair)
                 if result["success"]:
                     st.success("METS file repaired successfully.")

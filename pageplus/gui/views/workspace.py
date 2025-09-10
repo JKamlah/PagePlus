@@ -83,7 +83,7 @@ def show_workspace(cli_bridge):
         value="Backup",
         label_visibility="visible"
     )
-    col1, col2 = st.columns(2)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         if st.button("Backup XML Files"):
             try:
@@ -94,9 +94,25 @@ def show_workspace(cli_bridge):
                 st.error(f"Error backing up XML files: {str(e)}")
 
     with col2:
+        if st.button("Backup XML Files as Zip"):
+            try:
+                cli_bridge.backup_xmlfiles(backup_folder, as_zip=True)
+                st.success("XML files backed up successfully!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error backing up XML files: {str(e)}")
+    with col3:
         if st.button("Restore XML Files"):
             try:
                 cli_bridge.restore_xmlfiles(backup_folder)
+                st.success("XML files restored successfully!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error restoring XML files: {str(e)}")
+    with col4:
+        if st.button("Restore XML Files from Zip"):
+            try:
+                cli_bridge.restore_xmlfiles(backup_folder, from_zip=True)
                 st.success("XML files restored successfully!")
                 st.rerun()
             except Exception as e:

@@ -40,7 +40,7 @@ def show_transkribus(bridge: TranskribusBridge):
     if util.find_spec('transkribus_utils') is None:
         st.warning("Transkribus utils are not installed.")
         if st.button("Install Transkribus Utils"):
-            with st.spinner("Installing..."):
+            with st.spinner("Installing...", show_time=True):
                 result = bridge.install()
                 if result["success"]:
                     st.success("Installation successful! Please restart the application.")
@@ -63,7 +63,7 @@ def show_transkribus(bridge: TranskribusBridge):
         st.subheader("Set API URL")
         url = st.text_input("Transkribus URL", value=settings.get("TRANSKRIBUS_URL", "https://transkribus.eu/TrpServer/rest"), key="transkribus_url")
         if st.button("Set URL"):
-            with st.spinner("Setting URL..."):
+            with st.spinner("Setting URL...", show_time=True):
                 result = bridge.set_url(url)
                 if result["success"]:
                     st.success(result["output"])
@@ -75,7 +75,7 @@ def show_transkribus(bridge: TranskribusBridge):
         password = st.text_input("Password", type="password", value=settings.get("TRANSKRIBUS_PASSWORD", ""), key="transkribus_pass")
         if st.button("Set Credentials"):
             if username and password:
-                with st.spinner("Setting credentials..."):
+                with st.spinner("Setting credentials...", show_time=True):
                     result = bridge.set_credentials(username, password)
                     if result["success"]:
                         st.success(result["output"])
@@ -122,7 +122,7 @@ def show_transkribus(bridge: TranskribusBridge):
                     filter_by_list.append(DataFilter.COLLECTION)
                     search_term_list.append('.')
 
-                with st.spinner("Searching for documents..."):
+                with st.spinner("Searching for documents...", show_time=True):
                     result = bridge.find_documents(filter_by_list, search_term_list, case_sensitive)
                     if result["success"]:
                         st.session_state.transkribus_search_results_df = result["output"]
@@ -328,7 +328,7 @@ def show_transkribus(bridge: TranskribusBridge):
                 st.warning("Please provide a Collection ID and a Document ID.")
             else:
                 page_list = [p.strip() for p in pages.split(',')] if pages else []
-                with st.spinner("Loading document..."):
+                with st.spinner("Loading document...", show_time=True):
                     result = bridge.load_document(
                         collection_id=collection_id,
                         document_id=document_id,
@@ -410,7 +410,7 @@ def show_transkribus(bridge: TranskribusBridge):
                 st.warning("Please provide a Collection ID and a Document ID.")
             else:
                 page_list_up = [p.strip() for p in pages_up.split(',')] if pages_up else []
-                with st.spinner("Updating document..."):
+                with st.spinner("Updating document...", show_time=True):
                     result = bridge.update_document(
                         inputs=selected_files,
                         collection_id=collection_id_up,

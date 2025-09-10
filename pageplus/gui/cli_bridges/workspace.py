@@ -50,20 +50,22 @@ class WorkspaceBridge(CLIBridge):
     def backup_xmlfiles(
             self,
             backup_folder: str,
-            workspace: str = None) -> None:
+            workspace: str = None,
+            as_zip: bool = False) -> None:
         """Backup XML files from a workspace."""
         try:
-            backup_xmlfiles(backup_folder, workspace)
+            backup_xmlfiles(backup_folder, workspace, as_zip)
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to backup XML files: {e}")
 
     def restore_xmlfiles(
             self,
             backup_folder: str,
-            workspace: str = None) -> None:
+            workspace: str = None,
+            from_zip: bool = False) -> None:
         """Restore XML files to a workspace."""
         try:
-            restore_xmlfiles(backup_folder, workspace)
+            restore_xmlfiles(backup_folder, workspace, from_zip)
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to restore XML files: {e}")
 

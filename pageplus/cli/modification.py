@@ -22,6 +22,7 @@ from pageplus.utils.constants import TextLevel, PcGtsVersion
 
 app = typer.Typer()
 
+
 if (spec := util.find_spec('spellchecker')) is None:
     @app.command()
     def install_spellchecker() -> None:
@@ -1677,6 +1678,21 @@ def set_page_version(inputs: Annotated[List[str], typer.Argument(exists=True,
             logging.error(f"Error processing {xml_file.name}: {str(e)}")
 
 
+def _parse_user_defined(value: Optional[List[str]]) -> Optional[dict]:
+    """Callback to parse user-defined metadata from key=value strings."""
+    if value is None:
+        return None
+    user_defined_dict = {}
+    for item in value:
+        if "=" not in item:
+            raise typer.BadParameter(
+                f"Invalid format for user-defined metadata: '{item}'. "
+                "Expected 'key=value'."
+            )
+        key, val = item.split("=", 1)
+        user_defined_dict[key] = val
+    return user_defined_dict
+
 @app.command()
 def set_metadata(inputs: Annotated[List[str], typer.Argument(exists=True,
                                                                   help="Direct input of directories containing XML files.", callback=transform_inputs)] = None,
@@ -1687,7 +1703,10 @@ def set_metadata(inputs: Annotated[List[str], typer.Argument(exists=True,
                      created: Annotated[datetime, typer.Option(help="Created date of the metadata")] = None,
                      last_change: Annotated[datetime, typer.Option(help="Last change date of the metadata")] = None,
                      comments: Annotated[str, typer.Option(help="Comments of the metadata")] = None,
-                     user_defined: Annotated[dict, typer.Option(help="User defined metadata")] = None,
+                     user_defined: Annotated[Optional[List[str]], typer.Option(
+                         help="User defined metadata in 'key=value' format. Can be specified multiple times.",
+                         callback=_parse_user_defined
+                     )] = None,
                      new: Annotated[bool, typer.Option(help="If True, a new metadata is created (old metadata is overwritten).")] = False,
                      default: Annotated[bool, typer.Option(help="If True, a default metadata is created.")] = False,
                      dry_run: Annotated[bool, typer.Option(help="If True, no files will be modified.")] = False) -> None:

@@ -54,7 +54,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
     if util.find_spec('escriptorium_connector') is None:
         st.warning("eScriptorium connector is not installed.")
         if st.button("Install eScriptorium Connector"):
-            with st.spinner("Installing..."):
+            with st.spinner("Installing...", show_time=True):
                 result = bridge.install()
                 if result["success"]:
                     st.success("Installation successful! Please restart the application.")
@@ -79,7 +79,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
                 value=settings.get("ESCRIPTORIUM_BASE_URL", "https://escriptorium.fr"),
             )
             if st.button("Set Base URL", key="set_base_url_button"):
-                with st.spinner("Setting Base URL..."):
+                with st.spinner("Setting Base URL...", show_time=True):
                     result = bridge.set_base_url(base_url)
                 if result["success"]:
                     st.success(result["output"])
@@ -91,7 +91,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
                 value=settings.get("ESCRIPTORIUM_API_BASE", ""),
             )
             if st.button("Set API Base URL", key="set_api_base_url_button"):
-                with st.spinner("Setting API Base URL..."):
+                with st.spinner("Setting API Base URL...", show_time=True):
                     result = bridge.set_api_base_url(api_base_url)
                 if result["success"]:
                     st.success(result["output"])
@@ -103,7 +103,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
                 value=settings.get("ESCRIPTORIUM_INSTANCE_NAME", ""),
             )
             if st.button("Set Instance Name", key="set_instance_name_button"):
-                with st.spinner("Setting instance name..."):
+                with st.spinner("Setting instance name...", show_time=True):
                     result = bridge.set_instance_name(instance_name)
                 if result["success"]:
                     st.success(result["output"])
@@ -121,7 +121,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
                 type="password"
             )
             if st.button("Set Credentials", key="set_credentials_button"):
-                with st.spinner("Setting credentials..."):
+                with st.spinner("Setting credentials...", show_time=True):
                     result = bridge.set_credentials(username, password)
                 if result["success"]:
                     st.success(result["output"])
@@ -129,7 +129,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
                     st.error(result["output"])
 
         if st.button("Show Current Settings"):
-            with st.spinner("Fetching settings..."):
+            with st.spinner("Fetching settings...", show_time=True):
                 result = bridge.show_settings()
             if result["success"]:
                 st.text_area("Settings", result["output"], height=200)
@@ -141,6 +141,9 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
 
         if 'escriptorium_filters' not in st.session_state:
             st.session_state.escriptorium_filters = [{"filter_by": DataFilter.PROJECT.value, "search_term": "."}]
+
+        if 'selected_document_row_index' not in st.session_state:
+            st.session_state.selected_document_row_index = None
 
         for i, filter_item in enumerate(st.session_state.escriptorium_filters):
             cols = st.columns([3, 3, 1])
@@ -173,7 +176,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
             filter_by = [item['filter_by'] for item in filters]
             search_term = [item['search_term'] for item in filters]
 
-            with st.spinner("Finding documents..."):
+            with st.spinner("Finding documents...", show_time=True):
                 result = bridge.find_documents(filter_by, search_term, case_sensitive)
 
             if result["success"]:
@@ -192,19 +195,24 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
             st.dataframe(df, on_select="rerun", selection_mode="single-row", key="document_search_results")
 
             selection = st.session_state.get('document_search_results', {}).get('selection', {}).get('rows', [])
-            if selection:
-                selected_row = df.iloc[selection[0]]
-                doc_pk_str = selected_row['Document (PK)']
-                doc_pk_match = re.search(r'\((\d+)\)', doc_pk_str)
+            current_selection_index = selection[0] if selection else None
 
-                st.session_state.escript_doc_pk_input = int(doc_pk_match.group(1)) if doc_pk_match else None
-                st.session_state.escript_doc_name_input = doc_pk_str.split(' (')[0] if doc_pk_match else doc_pk_str
-                st.session_state.transcription_options = selected_row['Transcription (PK)']
+            if current_selection_index != st.session_state.get('selected_document_row_index'):
+                st.session_state.selected_document_row_index = current_selection_index
 
-                # Clear saved PK selection when a new row is selected from dataframe
-                st.session_state.saved_pk_selector = ""
-            else:
-                st.session_state.transcription_options = []
+                if current_selection_index is not None:
+                    selected_row = df.iloc[current_selection_index]
+                    doc_pk_str = selected_row['Document (PK)']
+                    doc_pk_match = re.search(r'\((\d+)\)', doc_pk_str)
+
+                    st.session_state.escript_doc_pk_input = int(doc_pk_match.group(1)) if doc_pk_match else None
+                    st.session_state.escript_doc_name_input = doc_pk_str.split(' (')[0] if doc_pk_match else doc_pk_str
+                    st.session_state.transcription_options = selected_row['Transcription (PK)']
+                    st.session_state.saved_pk_selector = ""  # Clear saved PK selection
+                else:
+                    st.session_state.transcription_options = []
+                    st.session_state.escript_doc_pk_input = None
+                    st.session_state.escript_doc_name_input = ""
 
         # --- SET PK UI ---
         with st.expander("Set Document/Transcription PK Manually", expanded=True):
@@ -390,7 +398,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
         if st.button("Download Document"):
             pages = [p.strip() for p in pages_str.split(',')] if pages_str else None
             
-            with st.spinner("Downloading document..."):
+            with st.spinner("Downloading document...", show_time=True):
                 result = bridge.load_document(
                     document_pk=doc_pk,
                     transcription_pk=trans_pk,
@@ -439,7 +447,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
         if st.button("Update Document"):
             pages = [p.strip() for p in pages_update_str.split(',')] if pages_update_str else None
 
-            with st.spinner("Updating document..."):
+            with st.spinner("Updating document...", show_time=True):
                 result = bridge.update_document(
                     inputs=[str(files.absolute()) for files in st.session_state.loaded_files],
                     document_pk=doc_pk_update,

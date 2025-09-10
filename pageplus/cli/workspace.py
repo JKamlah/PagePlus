@@ -71,13 +71,15 @@ def backup_xmlfiles(backup_folder: Annotated[Path,
                     workspace: Annotated[str,
                                          typer.Argument(help="Workspace name pointing to an existing path",
                                                         callback=validate_workspace)] = None,
+                    as_zip: Annotated[bool,
+                                      typer.Option(help="If True, the backup is created as a zip file.")] = False
                     ) -> None:
     """
     Create a backup of the xml files
     Returns:
     None
     """
-    pp_workspace().backup(backup_folder, workspace)
+    pp_workspace().backup(backup_folder, workspace, as_zip)
 
 
 @app.command(rich_help_panel="Workspace")
@@ -86,13 +88,15 @@ def restore_xmlfiles(backup_folder: Annotated[Path,
                      workspace: Annotated[str,
                                           typer.Argument(help="Workspace name pointing to an existing path",
                                                          callback=validate_workspace)] = None,
+                     from_zip: Annotated[bool,
+                                         typer.Option(help="If True, the backup is restored from a zip file.")] = False
                      ) -> None:
     """
     Create a backup of the xml files
     Returns:
     None
     """
-    pp_workspace().restore(backup_folder, workspace)
+    pp_workspace().restore(backup_folder, workspace, from_zip)
 
 
 @app.command(rich_help_panel="Workspace")

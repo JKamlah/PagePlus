@@ -102,7 +102,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                 dry_run = st.checkbox("Dry run", key="spellcheck_dry_run")
 
                 if st.button("Run Spellchecking"):
-                    with st.spinner("Running spellchecking..."):
+                    with st.spinner("Running spellchecking...", show_time=True):
                         result = bridge.spellchecking(
                             files=selected_files,
                             language=language,
@@ -128,7 +128,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                 key="remove_text"
             )
             if st.button("Delete Text (content)"):
-                with st.spinner("Deleting text content..."):
+                with st.spinner("Deleting text content...", show_time=True):
                     result = bridge.delete_text(
                         files=selected_files,
                         levels=[TextLevel(level) for level in levels],
@@ -182,7 +182,7 @@ def show_modification(bridge: ModificationBridge) -> None:
 
             if st.button("Replace Tags"):
                 old_tags = old_tags if old_tags else [None]
-                with st.spinner("Replacing tags..."):
+                with st.spinner("Replacing tags...", show_time=True):
                     for old_tag in old_tags:
                         result = bridge.replace_tag(
                             files=selected_files,
@@ -240,7 +240,7 @@ def show_modification(bridge: ModificationBridge) -> None:
 
             if st.button("Remove Tags"):
                 tags_to_remove = tags_to_remove if tags_to_remove else [None]
-                with st.spinner("Removing tags..."):
+                with st.spinner("Removing tags...", show_time=True):
                     for tag_to_remove in tags_to_remove:
                         result = bridge.remove_tag(
                             files=selected_files,
@@ -269,7 +269,7 @@ def show_modification(bridge: ModificationBridge) -> None:
             dry_run = st.checkbox("Dry run", key="remove_empty_dry_run")
             if st.button("Remove Empty"):
                 level = [TextLevel(level) for level in level]
-                with st.spinner("Removing empty elements..."):
+                with st.spinner("Removing empty elements...", show_time=True):
                     result = bridge.remove_empty(
                         files=selected_files,
                         level=level,
@@ -284,7 +284,7 @@ def show_modification(bridge: ModificationBridge) -> None:
         # Delete Textlines
         with st.expander("Delete Textlines (with content)"):
             if st.button("Delete Textlines"):
-                with st.spinner("Deleting textlines..."):
+                with st.spinner("Deleting textlines...", show_time=True):
                     result = bridge.delete_textlines(
                         files=selected_files,
                         outputdir=st.session_state.get('modification_dir')
@@ -308,7 +308,7 @@ def show_modification(bridge: ModificationBridge) -> None:
             )
             dry_run = st.checkbox("Dry run", key="translate_lines_dry_run")
             if st.button("Translate Lines"):
-                with st.spinner("Translating lines..."):
+                with st.spinner("Translating lines...", show_time=True):
                     result = bridge.translate_lines(
                         files=selected_files,
                         xoff=xoff,
@@ -342,7 +342,7 @@ def show_modification(bridge: ModificationBridge) -> None:
             )
             dry_run = st.checkbox("Dry run", key="extend_lines_dry_run")
             if st.button("Extend Lines"):
-                with st.spinner("Extending lines..."):
+                with st.spinner("Extending lines...", show_time=True):
                     result = bridge.extend_lines(
                         files=selected_files,
                         distance=distance,
@@ -371,7 +371,7 @@ def show_modification(bridge: ModificationBridge) -> None:
             dry_run = st.checkbox("Dry run", key="rectangularize_dry_run")
 
             if st.button("Rectangularize Coordinates"):
-                with st.spinner("Rectangularizing coordinates..."):
+                with st.spinner("Rectangularizing coordinates...", show_time=True):
                     result = bridge.rectangularize(
                         files=selected_files,
                         level=[TextLevel(level) for level in levels],
@@ -386,7 +386,7 @@ def show_modification(bridge: ModificationBridge) -> None:
         # Pseudoline Polygon
         with st.expander("Pseudoline Polygon"):
             if st.button("Pseudoline Polygon"):
-                with st.spinner("Generating pseudo-line polygons..."):
+                with st.spinner("Generating pseudo-line polygons...", show_time=True):
                     result = bridge.pseudolinepolygon(
                         files=selected_files,
                         outputdir=st.session_state.get('modification_dir')
@@ -399,7 +399,7 @@ def show_modification(bridge: ModificationBridge) -> None:
         # Sort
         with st.expander("Sort"):
             if st.button("Sort"):
-                with st.spinner("Sorting elements..."):
+                with st.spinner("Sorting elements...", show_time=True):
                     result = bridge.sort(
                         files=selected_files,
                         outputdir=st.session_state.get('modification_dir')
@@ -424,7 +424,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                 key="sort_and_merge_gap_y"
             )
             if st.button("Sort and Merge"):
-                with st.spinner("Sorting and merging elements..."):
+                with st.spinner("Sorting and merging elements...", show_time=True):
                     result = bridge.sort_and_merge(
                         files=selected_files,
                         merge_lines_gap_x=merge_lines_gap_x,
@@ -452,7 +452,7 @@ def show_modification(bridge: ModificationBridge) -> None:
             )
             dry_run = st.checkbox("Dry run", key="split_regions_dry_run")
             if st.button("Split Big Regions"):
-                with st.spinner("Splitting large regions..."):
+                with st.spinner("Splitting large regions...", show_time=True):
                     result = bridge.split_big_regions_vertical(
                         files=selected_files,
                         split_min_area=split_min_area,
@@ -481,7 +481,7 @@ def show_modification(bridge: ModificationBridge) -> None:
             dry_run = st.checkbox("Dry run", key="fit_into_parent_dry_run")
 
             if st.button("Fit into Parent"):
-                with st.spinner("Fitting elements into parent boundaries..."):
+                with st.spinner("Fitting elements into parent boundaries...", show_time=True):
                     result = bridge.fit_into_parent(
                         files=selected_files,
                         level=[TextLevel(level) for level in levels],
@@ -503,7 +503,7 @@ def show_modification(bridge: ModificationBridge) -> None:
             dry_run = st.checkbox("Dry run", key="top_tier_textregion_dry_run")
 
             if st.button("Create Top Tier TextRegion"):
-                with st.spinner("Creating top-tier text regions..."):
+                with st.spinner("Creating top-tier text regions...", show_time=True):
                     result = bridge.top_tier_textregion(
                         files=selected_files,
                         dry_run=dry_run,
@@ -567,7 +567,7 @@ def show_modification(bridge: ModificationBridge) -> None:
             dry_run = st.checkbox("Dry run", key="merge_columnaligned_dry_run")
 
             if st.button("Merge Column-Aligned Regions"):
-                with st.spinner("Merging column-aligned regions..."):
+                with st.spinner("Merging column-aligned regions...", show_time=True):
                     result = bridge.merge_columnaligned_regions(
                         files=selected_files,
                         tolerance=tolerance,
@@ -606,7 +606,7 @@ def show_modification(bridge: ModificationBridge) -> None:
             dry_run = st.checkbox("Dry run", key="sort_regions_dry_run")
 
             if st.button("Sort Regions"):
-                with st.spinner("Sorting regions..."):
+                with st.spinner("Sorting regions...", show_time=True):
                     result = bridge.sort_regions(
                         files=selected_files,
                         based_on_baselines=based_on_baselines,
@@ -631,7 +631,7 @@ def show_modification(bridge: ModificationBridge) -> None:
             )
             dry_run = st.checkbox("Dry run", key="reassign_ids_dry_run")
             if st.button("Reassign IDs"):
-                with st.spinner("Reassigning IDs..."):
+                with st.spinner("Reassigning IDs...", show_time=True):
                     result = bridge.reassign_ids(
                         files=selected_files,
                         reading_order_mode=mode,
@@ -647,7 +647,7 @@ def show_modification(bridge: ModificationBridge) -> None:
         with st.expander("Repair"):
             dry_run = st.checkbox("Dry run", key="repair_dry_run")
             if st.button("Repair"):
-                with st.spinner("Repairing files..."):
+                with st.spinner("Repairing files...", show_time=True):
                     result = bridge.repair(
                         files=selected_files,
                         dry_run=dry_run,
@@ -669,7 +669,7 @@ def show_modification(bridge: ModificationBridge) -> None:
             dry_run = st.checkbox("Dry run", key="repair_dummy_dry_run")
 
             if st.button("Repair Dummy Regions"):
-                with st.spinner("Repairing dummy regions..."):
+                with st.spinner("Repairing dummy regions...", show_time=True):
                     result = bridge.repair_dummy_region(
                         files=selected_files,
                         dry_run=dry_run,
@@ -706,7 +706,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                                      help="Check for compatibility issues before conversion")
             
             if st.button("Set PAGE Version"):
-                with st.spinner("Updating PAGE XML version..."):
+                with st.spinner("Updating PAGE XML version...", show_time=True):
                     result = bridge.set_page_version(
                         files=selected_files,
                         version=selected_version,
@@ -756,7 +756,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                 if not st.session_state.loaded_files:
                     st.warning("Please load files first.")
                 else:
-                    with st.spinner("Setting metadata..."):
+                    with st.spinner("Setting metadata...", show_time=True):
                         creator_arg = creator if "Creator" in selected_options else None
                         comments_arg = comments if "Comments" in selected_options else None
                         created_arg = created_datetime if "Created" in selected_options else None

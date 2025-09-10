@@ -270,7 +270,7 @@ def show_dsv_export(cli_bridge):
     dehyphenate = st.checkbox("Dehyphenate", value=False)
 
     if st.button("Export to DSV"):
-        with st.spinner("Exporting to DSV..."):
+        with st.spinner("Exporting to DSV...", show_time=True):
             try:
                 results = cli_bridge.export_files(
                     files=st.session_state.loaded_files,
@@ -290,7 +290,7 @@ def show_alto_export(cli_bridge):
     st.subheader("ALTO Export")
 
     if st.button("Export to ALTO"):
-        with st.spinner("Exporting to ALTO..."):
+        with st.spinner("Exporting to ALTO...", show_time=True):
             try:
                 results = cli_bridge.export_files(
                     files=st.session_state.loaded_files,
@@ -316,7 +316,7 @@ def show_fulltext_export(cli_bridge):
                             ReadingOrderMode.rog.name])
 
     if st.button("Export to Fulltext"):
-        with st.spinner("Exporting to Fulltext..."):
+        with st.spinner("Exporting to Fulltext...", show_time=True):
             try:
                 results = cli_bridge.export_files(
                     files=st.session_state.loaded_files,
@@ -344,7 +344,7 @@ def show_pdf_export(cli_bridge):
     dpi = st.number_input("DPI", value=400, min_value=72, max_value=1200)
 
     if st.button("Export to PDF"):
-        with st.spinner("Exporting to PDF..."):
+        with st.spinner("Exporting to PDF...", show_time=True):
             try:
                 results = cli_bridge.export_files(
                     files=st.session_state.loaded_files,

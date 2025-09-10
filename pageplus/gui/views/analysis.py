@@ -33,7 +33,7 @@ def show_text_statistics(cli_bridge):
     """Display text statistics analysis."""
     st.subheader("Text Statistics")
     if st.button("Run Text Analysis"):
-        with st.spinner("Analyzing text..."):
+        with st.spinner("Analyzing text...", show_time=True):
             try:
                 results = cli_bridge.analyse_statistics(
                     files=st.session_state.loaded_files)
@@ -47,7 +47,7 @@ def show_confidences(cli_bridge):
     """Display confidences."""
     st.subheader("Confidences")
     if st.button("Run Confidence Analysis"):
-        with st.spinner("Analyzing text..."):
+        with st.spinner("Analyzing text...", show_time=True):
             try:
                 results = cli_bridge.analyse_confidences(
                     files=st.session_state.loaded_files)
@@ -67,7 +67,7 @@ def show_tags(cli_bridge):
         st.session_state.tag_analysis_results = None
 
     if st.button("Run Tags Analysis"):
-        with st.spinner("Analyzing tags..."):
+        with st.spinner("Analyzing tags...", show_time=True):
             try:
                 results = cli_bridge.analyse_tags(
                     files=st.session_state.loaded_files)

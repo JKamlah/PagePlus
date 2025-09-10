@@ -154,7 +154,7 @@ class LoadFilesPage:
             return
 
         try:
-            with st.spinner("Loading files..."):
+            with st.spinner("Loading files...", show_time=True):
                 newly_added_files = []
 
                 if from_directory:
