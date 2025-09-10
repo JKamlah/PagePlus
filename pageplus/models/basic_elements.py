@@ -181,9 +181,9 @@ class CoordElement:
         """
         if inputtype == "polygon":
             removed_repeated_data = remove_repeated_points(data, tolerance=2)
-            if len(removed_repeated_data) < 3:
+            if len(removed_repeated_data.coords) < 3:
                 removed_repeated_data = remove_repeated_points(data, tolerance=0)
-            if len(removed_repeated_data) < 3:
+            if len(removed_repeated_data.coords) < 3:
                 removed_repeated_data = data
             coordstr = self.convert_coordinates_polygon_to_str(removed_repeated_data)
         elif inputtype == "tuple":

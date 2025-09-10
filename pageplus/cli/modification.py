@@ -1630,7 +1630,7 @@ def set_page_version(inputs: Annotated[List[str], typer.Argument(exists=True,
         return
 
     print(f"[bold green]Updating PAGE XML version to {version.value}[/bold green]")
-    print(f"Found {len(xml_files)} XML files to process.")
+    #print(f"Found {len(xml_files)} XML files to process.")
 
     for xml_file in track(xml_files, description="Processing files..."):
         try:
@@ -1703,9 +1703,8 @@ def set_metadata(inputs: Annotated[List[str], typer.Argument(exists=True,
                      created: Annotated[datetime, typer.Option(help="Created date of the metadata")] = None,
                      last_change: Annotated[datetime, typer.Option(help="Last change date of the metadata")] = None,
                      comments: Annotated[str, typer.Option(help="Comments of the metadata")] = None,
-                     user_defined: Annotated[Optional[List[str]], typer.Option(
-                         help="User defined metadata in 'key=value' format. Can be specified multiple times.",
-                         callback=_parse_user_defined
+                     user_defined_raw: Annotated[Optional[List[str]], typer.Option(
+                         help="User defined metadata in 'key=value' format. Can be specified multiple times."
                      )] = None,
                      new: Annotated[bool, typer.Option(help="If True, a new metadata is created (old metadata is overwritten).")] = False,
                      default: Annotated[bool, typer.Option(help="If True, a default metadata is created.")] = False,
@@ -1717,6 +1716,8 @@ def set_metadata(inputs: Annotated[List[str], typer.Argument(exists=True,
     if not xml_files:
         print("[red]No XML files found in input directories.[/red]")
         return
+
+    user_defined = _parse_user_defined(user_defined_raw)
 
     print(f"[bold green]Updating PAGE XML metadata[/bold green]")
     print(f"Found {len(xml_files)} XML files to process.")
