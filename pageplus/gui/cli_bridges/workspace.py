@@ -33,6 +33,14 @@ class WorkspaceBridge(CLIBridge):
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to get workspace path: {e}")
 
+    def set_workspace_path(self, workspace: str, path: str) -> None:
+        """Set path of a workspace."""
+        try:
+            ws = Workspace(Environments.PAGEPLUS)
+            ws.update_path(workspace, path)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Failed to set workspace path: {e}")
+
     def load_workspace(self, workspace: str) -> None:
         """Load a specific workspace."""
         try:

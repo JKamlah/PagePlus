@@ -102,12 +102,19 @@ class Workspace:
                 '') for val in filter_envs(
                 self.prefix_loaded_ws).values()][0]
 
-    def path(self, workspace: str) -> None:
+    def path(self, workspace: str) -> str:
         """
         Get path of a workspace
         Returns:
         """
         return get_key(find_dotenv(), self.prefix_ws + workspace)
+  
+    def update_path(self, workspace: str, path: str) -> None:
+        """
+        Set path of a workspace
+        Returns:
+        """
+        return set_key(find_dotenv(), self.prefix_ws + workspace, path) if Path(path).exists() else None
 
     def load(self, workspace: str) -> None:
         """
@@ -213,11 +220,11 @@ class Workspace:
             return
         wsfolder = Path(get_key(find_dotenv(), self.prefix_ws + workspace))
         if wsfolder.exists():
+            backup_path = wsfolder.joinpath(backup_folder)
             if as_zip:
-                shutil.make_archive(backup_folder, 'zip', wsfolder)
+                shutil.make_archive(backup_path, 'zip', wsfolder)
                 print(f"Backup created: [bold green]{backup_folder}.zip[/bold green]")
                 return
-            backup_path = wsfolder.joinpath(backup_folder)
             Path(backup_path).mkdir(parents=True, exist_ok=True)
             xml_files = collect_xml_files(map(Path, [workspace]))
             for file in xml_files:

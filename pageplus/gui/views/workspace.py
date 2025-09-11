@@ -40,6 +40,28 @@ def show_workspace(cli_bridge):
             index=None if not loaded_workspace else workspace_names.index(loaded_workspace)
         )
 
+        if selected_workspace:
+            # Remove green dot from selected workspace name for processing
+            clean_selected_workspace = selected_workspace.replace("🟢 ", "")
+
+            # Get and display workspace path
+            if clean_selected_workspace != "":
+                try:
+                    current_path = cli_bridge.workspace_path(clean_selected_workspace)
+                    if current_path:
+                        st.text_input("Workspace path", current_path, disabled=True)
+                        if st.button("Change directory", key=f"change_dir_{clean_selected_workspace}"):
+                            new_path = pick_directory(initial_dir=str(current_path))
+                            if new_path and new_path != str(current_path):
+                                try:
+                                    cli_bridge.set_workspace_path(clean_selected_workspace, new_path)
+                                    st.success(f"Path for '{clean_selected_workspace}' updated successfully!")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Error updating path: {str(e)}")
+                except Exception as e:
+                    st.error(f"Could not retrieve workspace path: {e}")
+
         col1, col2 = st.columns(2)
         with col1:
             if selected_workspace:
