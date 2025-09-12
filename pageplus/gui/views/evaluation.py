@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import json
 from pageplus.gui.cli_bridges.dinglehopper import DinglehopperBridge
 from pageplus.gui.components.help_button import help_button
 from pageplus.gui.utils.picker import pick_directory, pick_files
