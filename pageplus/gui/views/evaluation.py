@@ -246,16 +246,37 @@ def pageplus_tab():
         matched_files = _get_matched_files(gt_path, ocr_files)
 
         if matched_files:
+            results_data = []
             with st.spinner("Running PagePlus comparison on matched files..."):
                 for gt_file, ocr_file in matched_files:
-                    with st.expander(f"Comparison for {gt_file.name}", expanded=True):
-                        result = bridge.compare_metrics(
-                            gt=str(gt_file),
-                            ocr=str(ocr_file)
-                        )
+                    result = bridge.compare_metrics(
+                        gt=str(gt_file),
+                        ocr=str(ocr_file)
+                    )
+                    results_data.append({
+                        "gt_file": gt_file,
+                        "result": result
+                    })
 
-                        if not result["success"]:
-                            st.error(f"An error occurred during comparison for {gt_file.name}:")
-                            st.code(result["output"])
-                        else:
-                            _display_metrics(result["output"])
+            successful_results = [res for res in results_data if res["result"]["success"]]
+            if successful_results:
+                st.subheader("Error Rate Overview")
+                chart_data = {
+                    "File": [res["gt_file"].name for res in successful_results],
+                    "WER": [res["result"]["output"]["error_rate"]["global"]["word"] for res in successful_results],
+                    "CER": [res["result"]["output"]["error_rate"]["global"]["character"] for res in successful_results]
+                }
+                df = pd.DataFrame(chart_data).set_index("File")
+                st.bar_chart(df, stack=False, horizontal=True)
+
+            for item in results_data:
+                gt_file = item["gt_file"]
+                result = item["result"]
+                with st.expander(f"Comparison for {gt_file.name}", expanded=True):
+                    if not result["success"]:
+                        st.error(f"An error occurred during comparison for {gt_file.name}:")
+                        st.code(result["output"])
+                    else:
+                        _display_metrics(result["output"])
+
+            st.success("PagePlus comparison reports created for all matched files!")
