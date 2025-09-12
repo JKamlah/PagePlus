@@ -101,7 +101,7 @@ def _display_metrics(metrics: dict):
 
 
 def show_evaluation():
-    st.title("Evaluation")
+    st.title("📊 Evaluation")
 
     # Initialize session state variables
     if 'gt_path' not in st.session_state:
