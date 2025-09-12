@@ -10,6 +10,7 @@ from pageplus.cli.escriptorium import DataFilter
 from pageplus.gui.cli_bridges.escriptorium import EscriptoriumBridge
 from pageplus.gui.utils.picker import pick_directory, pick_files
 from pageplus.gui.utils.settings import Settings
+from pageplus.utils.escriptorium.scripts import MAIN_SCRIPTS
 
 
 def load_escriptorium_pks() -> dict:
@@ -494,6 +495,8 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
         with col2:
             document_name = st.text_input("Document name", help="Name of the document to create")
 
+        main_script = st.selectbox("Main Script", options=MAIN_SCRIPTS, index=MAIN_SCRIPTS.index("Latin"), help="Main script of the document")
+        
         col3, col4 = st.columns(2)
         with col3:
             st.subheader("Images")
@@ -539,6 +542,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
                     result = bridge.create_project_document(
                         project_name=project_name,
                         document_name=document_name,
+                        main_script=main_script,
                         images=image_paths if image_paths else None,
                         xml_files=xml_paths if xml_paths else None,
                         transcription_name=transcription_name if transcription_name else None,

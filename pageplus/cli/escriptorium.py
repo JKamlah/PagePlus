@@ -37,7 +37,13 @@ if (spec := util.find_spec('escriptorium_connector')) is None:
 
 else:
     from escriptorium_connector import EscriptoriumConnector
-    from escriptorium_connector.dtos.part_dtos import PostPart
+    from escriptorium_connector.dtos import (
+        PostPart,
+        PostProject,
+        PostDocument,
+        ReadDirection,
+        LineOffset
+    )
     from dotenv import load_dotenv, find_dotenv, set_key, dotenv_values
 
     from pageplus.utils.constants import Environments, Bool2OnOff
@@ -439,6 +445,8 @@ else:
     def create_project_document(
             project_name: Annotated[str, typer.Argument(help="Name of the project to create or existing procject pk")],
             document_name: Annotated[str, typer.Argument(help="Name of the document to create")],
+            main_script: Annotated[Optional[str], typer.Option("--main-script", "-s",
+                                                                  help="Main script of the document")] = "Latin",
             images: Annotated[List[Path], typer.Option("--images", "-i",
                                                        help="Paths to image files to upload")] = None,
             xml_files: Annotated[List[Path], typer.Option("--xml", "-x",
@@ -488,13 +496,21 @@ else:
             except ValueError:
                 # Not an integer, treat as project name and create new project
                 with Status(f"Creating project '{project_name}'"):
-                    project_data = escr.post_project(project_name)
-                    project_pk = project_data.pk
+                    project_post_data = PostProject(name=project_name)
+                    project_data = escr.create_project(project_post_data)
+                    project_pk = project_data.id
                     print(f"[green]✓[/green] Project created: {project_name} (PK: {project_pk})")
 
             # Step 2: Create document
             with Status(f"Creating document '{document_name}'"):
-                document_data = escr.post_document(document_name, project_pk)
+                doc_post_data = PostDocument(
+                    name=document_name,
+                    project=project_data.slug,
+                    main_script=main_script,
+                    read_direction=ReadDirection.LTR,
+                    line_offset=LineOffset.BASELINE
+                )
+                document_data = escr.create_document(doc_post_data)
                 document_pk = document_data.pk
                 print(f"[green]✓[/green] Document created: {document_name} (PK: {document_pk})")
 
@@ -680,7 +696,7 @@ else:
                         return
                     else:
                         raise e
-                
+
                 document_data = escr.get_document(document_pk)
                 print(f"[green]✓[/green] Document: {document_data.name} (PK: {document_pk})")
 

@@ -143,6 +143,7 @@ class EscriptoriumBridge(CLIBridge):
             return {"success": False, "output": str(e)}
 
     def create_project_document(self, project_name: str, document_name: str,
+                                main_script: str = "Latin",
                                 images: Optional[List[str]] = None,
                                 xml_files: Optional[List[str]] = None,
                                 transcription_name: Optional[str] = None,
@@ -159,6 +160,7 @@ class EscriptoriumBridge(CLIBridge):
             create_project_document(
                 project_name,
                 document_name,
+                main_script,
                 image_paths,
                 xml_paths,
                 transcription_name,
