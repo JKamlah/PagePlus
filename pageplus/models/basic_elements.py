@@ -180,10 +180,20 @@ class CoordElement:
         formatted according to the 'inputtype'.
         """
         if inputtype == "polygon":
-            removed_repeated_data = remove_repeated_points(data, tolerance=2)
-            if len(removed_repeated_data.coords) < 3:
-                removed_repeated_data = remove_repeated_points(data, tolerance=0)
-            if len(removed_repeated_data.coords) < 3:
+            try:
+                data = data.exterior if isinstance(data, Polygon) else data
+                removed_repeated_data = remove_repeated_points(data, tolerance=2)
+                # Use exterior.coords instead of coords to avoid the "Component rings" error
+                coords_len = len(removed_repeated_data.coords) if hasattr(removed_repeated_data, 'coords') else 0
+                print(f"Coords len: {coords_len}")
+                if coords_len < 3:
+                    removed_repeated_data = remove_repeated_points(data, tolerance=0)
+                    coords_len = len(removed_repeated_data.coords) if hasattr(removed_repeated_data, 'coords') else 0
+                if coords_len < 3:
+                    removed_repeated_data = data
+            except Exception:
+                # If remove_repeated_points fails, use the original data
+                print(f"Error updating coordinates: {e}")
                 removed_repeated_data = data
             coordstr = self.convert_coordinates_polygon_to_str(removed_repeated_data)
         elif inputtype == "tuple":

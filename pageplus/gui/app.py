@@ -15,11 +15,13 @@ from pageplus.gui.views.load_files import LoadFilesPage
 from pageplus.gui.views.escriptorium import show_escriptorium
 from pageplus.gui.views.transkribus import show_transkribus
 from pageplus.gui.views.mets import show_mets
+from pageplus.gui.views.evaluation import show_evaluation
 from pageplus.gui.utils.settings import Settings
 from pageplus.gui.cli_bridges.gemini import GeminiBridge
 from pageplus.gui.cli_bridges.escriptorium import EscriptoriumBridge
 from pageplus.gui.cli_bridges.transkribus import TranskribusBridge
 from pageplus.gui.cli_bridges.mets import MetsBridge
+from pageplus.gui.cli_bridges.dinglehopper import DinglehopperBridge
 from pageplus.gui.cli_bridges import (
     CLIBridge,
     AnalysisBridge,
@@ -125,6 +127,7 @@ def main():
             'escriptorium': EscriptoriumBridge(),
             'transkribus': TranskribusBridge(),
             'mets': MetsBridge(),
+            'dinglehopper': DinglehopperBridge(),
         }
 
     # Initialize pages
@@ -149,6 +152,7 @@ def main():
          "📚 METS",
          "🔍 Analytics",
          "✅ Validation",
+         "📊 Evaluation",
          "🛠️ Modification",
          "🌟 Gemini",
          "📤 Export",
@@ -179,6 +183,8 @@ def main():
             st.warning("Please load files first in the 'Input' page.")
         else:
             show_validation(st.session_state.bridges['validation'])
+    elif page == "📊 Evaluation":
+        show_evaluation()
     elif page == "🛠️ Modification":
         if not st.session_state.loaded_files:
             st.warning("Please load files first in the 'Input' page.")
@@ -222,6 +228,7 @@ def show_home():
     📚 METS Tools: Work with METS/MODS files  
     🔍 Analytics: Analyze the content of PAGE-XML files  
     ✅ Validation: Validate PAGE-XML files  
+    📊 Evaluation: Evaluate PAGE-XML files  
     🛠️ Modification: Modify processed documents  
     🖋️ OCR: Do OCR on PAGE-XML files with several OCR engines  
     🤖 LLM: Perform different tasks on PAGE-XML files with LLMs  

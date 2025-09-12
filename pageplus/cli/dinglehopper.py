@@ -557,8 +557,7 @@ else:
                             )
                 pass
         else:
-            reports_folder = reports_folder if reports_folder != '.' else str(
-                Path(ocr).parent.joinpath('Dinglehopper') .joinpath(reports_folder_prefix).absolute())
+            reports_folder = reports_folder if reports_folder != '.' else str(Path(ocr).parent.joinpath('Dinglehopper').joinpath(reports_folder_prefix).absolute())
             Path(reports_folder).mkdir(parents=True, exist_ok=True)
             process(gt,
                     ocr,
@@ -585,6 +584,38 @@ else:
                 subprocess.run(["xdg-open", reports_folder])
             print(
                 f"Opened workspace [bold green]Dinglehopper result folder[/bold green]: {reports_folder}")
+
+    @app.command()
+    def compare_metrics(
+            gt: Annotated[str, typer.Argument(help="Ground Truth file",
+                                              exists=True, callback=transform_input)] = ...,
+            ocr: Annotated[str, typer.Argument(help="OCR file",
+                                               exists=True, callback=transform_input)] = ...,):
+        """
+        Compare the metrics of the GT and OCR files.
+        """
+        print(f"Starting Dinglehopper comparison with gt={gt}, ocr={ocr}")
+        # Your existing logic here
+        from pageplus.models.page import Page
+        gt_page = Page(Path(gt))
+        ocr_page = Page(Path(ocr))
+        line_metrics = []
+        for gt_region in gt_page.regions.textregions:
+            ocr_region = ocr_page.get_region_by_id(gt_region.get_id()) 
+            if ocr_region is None:
+                continue
+            for gt_textline in gt_region.textlines:
+                for ocr_textline in ocr_region.textlines:
+                    if gt_textline.get_id() != ocr_textline.get_id():
+                        continue
+                    line_metrics.append(get_metrics(gt_textline.get_text(), ocr_textline.get_text()))
+                    print(f"GT Textline: {gt_textline.get_text()}")
+                    print(f"OCR Textline: {ocr_textline.get_text()}")
+                    print(f"Metrics: {line_metrics[-1]}")
+                    print("--------------------------------")       
+        metrics = summarize_metrics(line_metrics)
+        print(metrics)
+        return metrics
 
 
 if __name__ == "__main__":

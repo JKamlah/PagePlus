@@ -7,6 +7,8 @@ from pageplus.cli.escriptorium import (
     find_documents,
     load_document,
     update_document,
+    create_project_document,
+    add_parts,
     set_document_pk,
     set_transcription_pk,
     install
@@ -14,6 +16,7 @@ from pageplus.cli.escriptorium import (
 from typing import List, Optional
 from io import StringIO
 import sys
+from pathlib import Path
 from pageplus.gui.cli_bridges.base import CLIBridge, capture_output
 
 
@@ -132,6 +135,91 @@ class EscriptoriumBridge(CLIBridge):
             sys.stdout = captured_output = StringIO()
 
             update_document(inputs, document_pk, pages, transcription_name, overwrite)
+
+            sys.stdout = old_stdout
+            output = captured_output.getvalue()
+            return {"success": True, "output": output}
+        except Exception as e:
+            return {"success": False, "output": str(e)}
+
+    def create_project_document(self, project_name: str, document_name: str,
+                                images: Optional[List[str]] = None,
+                                xml_files: Optional[List[str]] = None,
+                                transcription_name: Optional[str] = None,
+                                workspace: Optional[str] = None) -> dict:
+        """Create a new project and document in eScriptorium with images and XML files."""
+        try:
+            old_stdout = sys.stdout
+            sys.stdout = captured_output = StringIO()
+
+            # Convert string paths to Path objects
+            image_paths = [Path(p) for p in images] if images else None
+            xml_paths = [Path(p) for p in xml_files] if xml_files else None
+
+            create_project_document(
+                project_name,
+                document_name,
+                image_paths,
+                xml_paths,
+                transcription_name,
+                workspace
+            )
+
+            sys.stdout = old_stdout
+            output = captured_output.getvalue()
+            return {"success": True, "output": output}
+        except Exception as e:
+            return {"success": False, "output": str(e)}
+
+    def add_parts(self, project_name: str, document_pk: int,
+                  images: Optional[List[str]] = None,
+                  xml_files: Optional[List[str]] = None,
+                  transcription_name: Optional[str] = None) -> dict:
+        """Add parts (images/transcriptions) to an existing eScriptorium document."""
+        try:
+            old_stdout = sys.stdout
+            sys.stdout = captured_output = StringIO()
+
+            # Convert string paths to Path objects
+            image_paths = [Path(p) for p in images] if images else None
+            xml_paths = [Path(p) for p in xml_files] if xml_files else None
+
+            add_parts(
+                project_name,
+                document_pk,
+                image_paths,
+                xml_paths,
+                transcription_name
+            )
+
+            sys.stdout = old_stdout
+            output = captured_output.getvalue()
+            return {"success": True, "output": output}
+        except Exception as e:
+            return {"success": False, "output": str(e)}
+
+    def add_parts_by_pk(self, project_pk: int, document_pk: int,
+                        images: Optional[List[str]] = None,
+                        xml_files: Optional[List[str]] = None,
+                        transcription_name: Optional[str] = None) -> dict:
+        """Add parts (images/transcriptions) to an existing eScriptorium document using project PK."""
+        try:
+            old_stdout = sys.stdout
+            sys.stdout = captured_output = StringIO()
+
+            # Convert string paths to Path objects
+            image_paths = [Path(p) for p in images] if images else None
+            xml_paths = [Path(p) for p in xml_files] if xml_files else None
+
+            # Call the CLI function with project PK instead of name
+            from pageplus.cli.escriptorium import add_parts_by_pk
+            add_parts_by_pk(
+                project_pk,
+                document_pk,
+                image_paths,
+                xml_paths,
+                transcription_name
+            )
 
             sys.stdout = old_stdout
             output = captured_output.getvalue()

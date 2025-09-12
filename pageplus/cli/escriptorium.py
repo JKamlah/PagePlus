@@ -8,6 +8,7 @@ import zipfile
 from datetime import datetime
 from enum import Enum
 from importlib import util
+import io
 from io import BytesIO
 from pathlib import Path
 from shutil import rmtree
@@ -36,6 +37,7 @@ if (spec := util.find_spec('escriptorium_connector')) is None:
 
 else:
     from escriptorium_connector import EscriptoriumConnector
+    from escriptorium_connector.dtos.part_dtos import PostPart
     from dotenv import load_dotenv, find_dotenv, set_key, dotenv_values
 
     from pageplus.utils.constants import Environments, Bool2OnOff
@@ -131,7 +133,7 @@ else:
         None
         """
         es_api.document_pk = document_pk
-    
+
     @app.command(rich_help_panel="Settings")
     def set_transcription_pk(transcription_pk: Annotated[int, typer.Argument(
             help="Transcription pk")]) -> None:
@@ -382,7 +384,6 @@ else:
         None
         """
         load_dotenv()
-        envs = dotenv_values()
 
         if not es_api.valid_login():
             return
@@ -401,7 +402,7 @@ else:
         # Raise error if no xml files are found
         if not xml_files:
             raise FileNotFoundError('No xml files found in input directory')
-        
+
         parts_to_update = parse_page_ranges(pages)
 
         all_parts = escr.get_document_parts(document_pk).results
@@ -433,6 +434,443 @@ else:
                 file_data,
                 override=overwrite)
         logging.info("Updating completed!")
+
+    @app.command(rich_help_panel="Document")
+    def create_project_document(
+            project_name: Annotated[str, typer.Argument(help="Name of the project to create or existing procject pk")],
+            document_name: Annotated[str, typer.Argument(help="Name of the document to create")],
+            images: Annotated[List[Path], typer.Option("--images", "-i",
+                                                       help="Paths to image files to upload")] = None,
+            xml_files: Annotated[List[Path], typer.Option("--xml", "-x",
+                                                          help="Paths to XML files to upload")] = None,
+            transcription_name: Annotated[Optional[str], typer.Option("--transcription-name", "-n",
+                                                                      help="Name for the transcription")] = None,
+            workspace: Annotated[Optional[str], typer.Option("--workspace", "-w",
+                                                             help="Workspace name to store the created project info")] = None) -> None:
+        """
+        Creates a new project and document in eScriptorium and uploads images and XML files.
+
+        This function will:
+        1. Create a new project with the given name (or use existing project PK)
+        2. Create a new document within that project
+        3. Upload image files to the document using create_document_part
+        4. Upload XML transcription files to the document
+
+        Args:
+            project_name: Name of the project to create OR existing project PK (integer)
+            document_name: Name of the document to create
+
+        Returns:
+        None
+        """
+        load_dotenv()
+        envs = dotenv_values()
+
+        if not es_api.valid_login():
+            return
+
+        escr = EscriptoriumConnector(
+            es_api.base_url,
+            *es_api.credentials,
+            es_api.api_key,
+            es_api.api_base_url,
+            instance_name=es_api.instance_name)
+
+        try:
+            # Step 1: Create project or use existing project PK
+            try:
+                # Try to parse as integer (existing project PK)
+                project_pk = int(project_name)
+                with Status(f"Using existing project PK: {project_pk}"):
+                    # Verify project exists by trying to get it
+                    project_data = escr.get_project(project_pk)
+                    print(f"[green]✓[/green] Using existing project: {project_data.name} (PK: {project_pk})")
+            except ValueError:
+                # Not an integer, treat as project name and create new project
+                with Status(f"Creating project '{project_name}'"):
+                    project_data = escr.post_project(project_name)
+                    project_pk = project_data.pk
+                    print(f"[green]✓[/green] Project created: {project_name} (PK: {project_pk})")
+
+            # Step 2: Create document
+            with Status(f"Creating document '{document_name}'"):
+                document_data = escr.post_document(document_name, project_pk)
+                document_pk = document_data.pk
+                print(f"[green]✓[/green] Document created: {document_name} (PK: {document_pk})")
+
+            # Step 3: Upload images if provided
+            if images:
+                with Status(f"Uploading {len(images)} image(s)"):
+                    for i, image_path in enumerate(images, 1):
+                        if not image_path.exists():
+                            print(f"[yellow]⚠[/yellow] Image file not found: {image_path}")
+                            continue
+
+                        try:
+                            # Read image data
+                            with open(image_path, 'rb') as f:
+                                image_data = f.read()
+
+                            # Create PostPart object
+                            part_info = PostPart(
+                                name=image_path.stem,
+                                typology=None,  # Can be set to specific typology if needed
+                                source="upload"
+                            )
+
+                            # Upload the image
+                            part_data = escr.create_document_part(
+                                document_pk,
+                                part_info,
+                                image_path.name,
+                                image_data
+                            )
+                            print(f"[green]✓[/green] Image {i}/{len(images)} uploaded: {image_path.name} (PK: {part_data.pk})")
+                        except Exception as e:
+                            print(f"[red]✗[/red] Failed to upload image {image_path.name}: {e}")
+
+            # Step 4: Upload XML files if provided
+            if xml_files:
+                with Status(f"Uploading {len(xml_files)} XML file(s)"):
+                    # Create a BytesIO object to hold the zip file in memory
+                    file_data = BytesIO()
+
+                    with zipfile.ZipFile(file_data, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                        for xml_file in xml_files:
+                            if xml_file.exists():
+                                zip_file.write(xml_file, xml_file.name)
+                            else:
+                                print(f"[yellow]⚠[/yellow] XML file not found: {xml_file}")
+
+                    # Check if we have data to upload
+                    file_data.seek(0, 2)
+                    if file_data.tell() > 0:
+                        file_data.seek(0, 0)
+
+                        # Use document name as transcription name if not provided
+                        trans_name = transcription_name if transcription_name else f"{document_name}_transcription"
+
+                        try:
+                            escr.upload_part_transcription(
+                                document_pk,
+                                trans_name,
+                                f"{trans_name}.zip",
+                                file_data,
+                                override=True
+                            )
+                            print(f"[green]✓[/green] XML files uploaded as transcription: {trans_name}")
+                        except Exception as e:
+                            print(f"[red]✗[/red] Failed to upload XML files: {e}")
+                    else:
+                        print("[yellow]⚠[/yellow] No valid XML files found to upload")
+
+            # Step 5: Save project info to workspace if requested
+            if workspace:
+                workspace = str_to_env(workspace)
+                ws_absolute = es_workspace.prefix_ws + workspace
+
+                # Create metadata
+                metadata = {
+                    es_workspace.env: {
+                        'project': {
+                            'name': project_name,
+                            'pk': project_pk,
+                            'document': {
+                                'name': document_name,
+                                'pk': document_pk,
+                                'transcription_name': transcription_name or f"{document_name}_transcription",
+                                'created_at': datetime.now().strftime('%H_%M_%d_%m_%Y'),
+                                'created_by': envs.get(es_workspace.prefix + 'USERNAME', ''),
+                                'images_uploaded': len(images) if images else 0,
+                                'xml_files_uploaded': len(xml_files) if xml_files else 0
+                            }
+                        }
+                    }
+                }
+
+                # Save metadata to a temporary file
+                temp_dir = Path(tempfile.mkdtemp(prefix=es_workspace.prefix_dir(), dir=es_workspace.dir()))
+                with open(temp_dir / 'metadata.pageplus.json', 'w') as meta:
+                    json.dump(metadata, meta, indent=4)
+
+                # Set workspace environment variable
+                set_key(find_dotenv(), ws_absolute, str(temp_dir.absolute()))
+                print(f"[green]✓[/green] Project info saved to workspace: {workspace}")
+
+            print("\n[bold green]Successfully created project and document![/bold green]")
+            print(f"Project: {project_name} (PK: {project_pk})")
+            print(f"Document: {document_name} (PK: {document_pk})")
+            if images:
+                print(f"Images uploaded: {len(images)}")
+            if xml_files:
+                print(f"XML files uploaded: {len(xml_files)}")
+
+        except Exception as e:
+            print(f"[red]Error creating project/document: {e}[/red]")
+            raise
+
+    @app.command(rich_help_panel="Document")
+    def add_parts(
+            project_name: Annotated[str, typer.Argument(help="Project primary name")],
+            document_pk: Annotated[int, typer.Argument(help="Document primary key (pk)")],
+            images: Annotated[List[Path], typer.Option("--images", "-i",
+                                                       help="Paths to image files to upload")] = None,
+            xml_files: Annotated[List[Path], typer.Option("--xml", "-x",
+                                                          help="Paths to XML files to upload")] = None,
+            transcription_name: Annotated[Optional[str], typer.Option("--transcription-name", "-n",
+                                                                      help="Name for the transcription")] = None) -> None:
+        """
+        Add parts (images/transcriptions) to an existing eScriptorium document.
+
+        This function will:
+        1. Upload image files to the document using create_document_part
+        2. Upload XML transcription files to the document
+
+        Args:
+            project_pk: Primary key of the existing project
+            document_pk: Primary key of the existing document
+            images: List of image file paths to upload
+            xml_files: List of XML file paths to upload
+            transcription_name: Name for the transcription (optional)
+
+        Returns:
+        None
+        """
+        load_dotenv()
+
+        if not es_api.valid_login():
+            return
+
+        escr = EscriptoriumConnector(
+            es_api.base_url,
+            *es_api.credentials,
+            es_api.api_key,
+            es_api.api_base_url,
+            instance_name=es_api.instance_name)
+
+        try:
+            # Verify project and document exist
+            with Status("Verifying project and document"):
+                try:
+                    print(f"[dim]Searching for project: '{project_name}'[/dim]")
+                    project_pk = escr.get_project_pk_by_name(project_name)
+                    if project_pk is None:
+                        print(f"[red]Error:[/red] Project '{project_name}' not found.")
+                        print("[yellow]Please check the project name or use the project PK directly.[/yellow]")
+                        # List available projects for debugging
+                        try:
+                            all_projects = escr.get_projects()
+                            print(f"[dim]Available projects (first 10): {[p.name for p in all_projects.results[:10]]}[/dim]")
+                            # Also check for case-insensitive matches
+                            case_insensitive_matches = [p.name for p in all_projects.results if p.name.lower() == project_name.lower()]
+                            if case_insensitive_matches:
+                                print(f"[dim]Case-insensitive matches found: {case_insensitive_matches}[/dim]")
+                        except Exception:
+                            pass
+                        return
+                    project_data = escr.get_project(project_pk)
+                    print(f"[green]✓[/green] Project: {project_data.name} (PK: {project_pk})")
+                except Exception as e:
+                    error_type = type(e).__name__
+                    if "EscriptoriumConnectorDtoValidationError" in error_type or "ValidationError" in str(e):
+                        print("[red]Error:[/red] eScriptorium connector library version incompatibility detected.")
+                        print("[yellow]Please try using the project PK directly instead of project name.[/yellow]")
+                        print("[yellow]You can find the project PK in the eScriptorium web interface.[/yellow]")
+                        print(f"[dim]Error details: {error_type}[/dim]")
+                        return
+                    else:
+                        raise e
+                
+                document_data = escr.get_document(document_pk)
+                print(f"[green]✓[/green] Document: {document_data.name} (PK: {document_pk})")
+
+            # Upload images if provided
+            if images:
+                with Status(f"Uploading {len(images)} image(s)"):
+                    for i, image_path in enumerate(images, 1):
+                        if not image_path.exists():
+                            print(f"[yellow]⚠[/yellow] Image file not found: {image_path}")
+                            continue
+
+                        try:
+                            # Read image data
+                            with open(image_path, 'rb') as f:
+                                image_data = f.read()
+
+                            # Create PostPart object
+                            part_info = PostPart(
+                                name=image_path.stem,
+                                typology=None,  # Can be set to specific typology if needed
+                                source="upload"
+                            )
+
+                            # Upload the image
+                            part_data = escr.create_document_part(
+                                document_pk,
+                                part_info,
+                                image_path.name,
+                                image_data
+                            )
+                            print(f"[green]✓[/green] Image {i}/{len(images)} uploaded: {image_path.name} (PK: {part_data.pk})")
+                        except Exception as e:
+                            print(f"[red]✗[/red] Failed to upload image {image_path.name}: {e}")
+
+            # Upload XML files if provided
+            if xml_files:
+                with Status(f"Uploading {len(xml_files)} XML file(s)"):
+                    # Create a BytesIO object to hold the zip file in memory
+                    file_data = BytesIO()
+
+                    with zipfile.ZipFile(file_data, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                        for xml_file in xml_files:
+                            if xml_file.exists():
+                                zip_file.write(xml_file, xml_file.name)
+                            else:
+                                print(f"[yellow]⚠[/yellow] XML file not found: {xml_file}")
+
+                    # Check if we have data to upload
+                    file_data.seek(0, 2)
+                    if file_data.tell() > 0:
+                        file_data.seek(0, 0)
+
+                        # Use document name as transcription name if not provided
+                        trans_name = transcription_name if transcription_name else f"{document_data.name}_transcription"
+
+                        try:
+                            escr.upload_part_transcription(
+                                document_pk,
+                                trans_name,
+                                f"{trans_name}.zip",
+                                file_data,
+                                override=True
+                            )
+                            print(f"[green]✓[/green] XML files uploaded as transcription: {trans_name}")
+                        except Exception as e:
+                            print(f"[red]✗[/red] Failed to upload XML files: {e}")
+                    else:
+                        print("[yellow]⚠[/yellow] No valid XML files found to upload")
+
+            print("\n[bold green]Successfully added parts to document![/bold green]")
+            print(f"Project: {project_data.name} (PK: {project_pk})")
+            print(f"Document: {document_data.name} (PK: {document_pk})")
+            if images:
+                print(f"Images uploaded: {len(images)}")
+            if xml_files:
+                print(f"XML files uploaded: {len(xml_files)}")
+
+        except Exception as e:
+            print(f"[red]Error adding parts to document: {e}[/red]")
+            raise
+
+
+@app.command(rich_help_panel="Document")
+def add_parts_by_pk(
+        project_pk: Annotated[int, typer.Argument(help="Project primary key (pk)")],
+        document_pk: Annotated[int, typer.Argument(help="Document primary key (pk)")],
+        images: Annotated[List[Path], typer.Option("--images", "-i",
+                                                   help="Paths to image files to upload")] = None,
+        xml_files: Annotated[List[Path], typer.Option("--xml", "-x",
+                                                      help="Paths to XML files to upload")] = None,
+        transcription_name: Annotated[Optional[str], typer.Option("--transcription-name", "-n",
+                                                                  help="Name for the transcription")] = None) -> None:
+    """
+    Add parts (images/transcriptions) to an existing eScriptorium document using project PK.
+
+    This function will:
+    1. Upload image files to the document using create_document_part
+    2. Upload XML transcription files to the document
+
+    Args:
+        project_pk: Primary key of the existing project
+        document_pk: Primary key of the existing document
+        images: List of image file paths to upload
+        xml_files: List of XML file paths to upload
+        transcription_name: Name for the transcription (optional)
+    """
+    es_api = EscriptoriumAPI()
+    if not es_api.valid_login():
+        return
+
+    escr = EscriptoriumConnector(
+        es_api.base_url,
+        *es_api.credentials,
+        es_api.api_key,
+        es_api.api_base_url,
+        instance_name=es_api.instance_name)
+
+    try:
+        # Verify project and document exist
+        with Status("Verifying project and document"):
+            project_data = escr.get_project(project_pk)
+            document_data = escr.get_document(document_pk)
+            print(f"[green]✓[/green] Project: {project_data.name} (PK: {project_pk})")
+            print(f"[green]✓[/green] Document: {document_data.name} (PK: {document_pk})")
+
+        # Upload images if provided
+        if images:
+            with Status(f"Uploading {len(images)} image(s)"):
+                for i, image_path in enumerate(images, 1):
+                    if not image_path.exists():
+                        print(f"[red]Warning:[/red] Image file not found: {image_path}")
+                        continue
+
+                    try:
+                        # Read image data
+                        with open(image_path, 'rb') as f:
+                            image_data = f.read()
+
+                        # Create PostPart object
+                        part_info = PostPart(
+                            name=image_path.stem,
+                            typology=None,  # Can be set to specific typology if needed
+                            source="upload"
+                        )
+
+                        # Upload the image
+                        escr.create_document_part(
+                            document_pk,
+                            part_info,
+                            image_path.name,
+                            image_data
+                        )
+
+                        print(f"[green]✓[/green] Uploaded image {i}/{len(images)}: {image_path.name}")
+
+                    except Exception as e:
+                        print(f"[red]Error uploading {image_path.name}:[/red] {e}")
+
+        # Upload XML files if provided
+        if xml_files:
+            with Status(f"Uploading {len(xml_files)} XML file(s)"):
+                # Create a ZIP file in memory
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                    for xml_path in xml_files:
+                        if not xml_path.exists():
+                            print(f"[red]Warning:[/red] XML file not found: {xml_path}")
+                            continue
+                        zip_file.write(xml_path, xml_path.name)
+
+                zip_buffer.seek(0)
+
+                # Upload the ZIP file as transcription
+                transcription_name_final = transcription_name or f"Transcription_{document_pk}"
+                try:
+                    escr.create_document_transcription(
+                        document_pk,
+                        transcription_name_final,
+                        zip_buffer.getvalue(),
+                        f"{transcription_name_final}.zip"
+                    )
+                    print(f"[green]✓[/green] Uploaded transcription: {transcription_name_final}")
+                except Exception as e:
+                    print(f"[red]Error uploading transcription:[/red] {e}")
+
+        print(f"[green]✓[/green] Parts added successfully to document {document_data.name}")
+
+    except Exception as e:
+        print(f"[red]Error:[/red] {e}")
+        return
 
 
 if __name__ == "__main__":

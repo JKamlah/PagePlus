@@ -1129,8 +1129,7 @@ def merge_columnaligned_regions(
                 coords_for_hull = []
                 if convex_hull_method == 'region':
                     for region in group_regions:
-                        region_coords = region.get_coordinates(
-                            returntype="tuple")
+                        region_coords = region.get_coordinates(returntype="tuple")
                         if region_coords:
                             coords_for_hull.extend(region_coords)
                 else:  # 'textlines'
@@ -1630,8 +1629,6 @@ def set_page_version(inputs: Annotated[List[str], typer.Argument(exists=True,
         return
 
     print(f"[bold green]Updating PAGE XML version to {version.value}[/bold green]")
-    #print(f"Found {len(xml_files)} XML files to process.")
-
     for xml_file in track(xml_files, description="Processing files..."):
         try:
             page = Page(xml_file)
@@ -1692,6 +1689,7 @@ def _parse_user_defined(value: Optional[List[str]]) -> Optional[dict]:
         key, val = item.split("=", 1)
         user_defined_dict[key] = val
     return user_defined_dict
+
 
 @app.command()
 def set_metadata(inputs: Annotated[List[str], typer.Argument(exists=True,
