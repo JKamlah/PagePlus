@@ -4,14 +4,6 @@
 
 PagePlus is a Python-based tool for processing and analyzing PAGE XML files, which are commonly used in document layout analysis. This tool provides a variety of functions to modify and extract data from these files, providing an efficient way to handle text and region-based information in document images. It offers both a command-line interface (CLI) for batch processing and a graphical user interface (GUI) for interactive use.
 
-## Funded By
-
-PagePlus is generously funded by the following organizations:
-
-- **[BERD@NFDI](https://www.berd-nfdi.de/)**
-  <img src="./assets/Logo_BERD-NFDI.png" alt="BERD@NFDI Logo" width="300"/>
-- **[HAdW (Heidelberger Akademie der Wissenschaften)](https://www.hadw-bw.de/)**
-  <img src="./assets/hadw_logo_blau.svg" alt="HAdW Logo" width="300"/>
 
 ## Features
 
@@ -138,3 +130,16 @@ Here is a list of available commands, grouped by module:
 ## Contributing
 
 Contributions to PagePlus are welcome! If you find a bug or have a feature request, please open an issue on the project's GitHub repository.
+
+## Funded By
+PagePlus was initially created during the 3rd funding phase of the [OCR-D project](https://ocr-d.de/en/).
+
+PagePlus was generously funded by the following organizations:  
+**[German Research Foundation (DFG)](https://www.dfg.de/foerderung/info_wissenschaft/2020/info_wissenschaft_20_15/index.html)**  
+  <img src="./assets/DFG-logo-blau.png" alt="DFG Logo" width="300"/>
+
+PagePlus is generously funded by the following organizations:  
+**[BERD@NFDI](https://www.berd-nfdi.de/)**  
+  <img src="./assets/Logo_BERD-NFDI.png" alt="BERD@NFDI Logo" width="300"/>  
+**[HAdW (Heidelberger Akademie der Wissenschaften)](https://www.hadw-bw.de/)**  
+  <img src="./assets/hadw_logo_blau.svg" alt="HAdW Logo" width="300"/>  
