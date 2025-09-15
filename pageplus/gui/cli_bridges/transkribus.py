@@ -43,7 +43,7 @@ class TranskribusBridge(CLIBridge):
 
     def find_documents(
         self,
-        filter_by: List[DataFilter],
+        filter_by: List[str],
         search_term: List[str],
         case_sensitive: bool = False
     ) -> Dict[str, Any]:
