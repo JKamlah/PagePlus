@@ -7,6 +7,7 @@ readme = "README.md"
 
 [tool.poetry.scripts]
 pageplus = "pageplus.main:app"
+install-extras = "tools.install_extras:app"
 
 [tool.poetry.dependencies]
 python = "^3.11"
