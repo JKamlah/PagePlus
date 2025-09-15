@@ -20,6 +20,9 @@ if util.find_spec('transkribus_utils'):
     TRANSKRIBUS_INSTALLED = True
 else:
     from pageplus.cli.transkribus import install
+    PageStatus = str
+    Role = str
+    DataFilter = str
     TRANSKRIBUS_INSTALLED = False
 
 from pageplus.gui.cli_bridges.base import CLIBridge, capture_output
