@@ -14,7 +14,6 @@ EXTRAS = ["dinglehopper", "transkribus", "escriptorium"]
 
 def install_package(package: str):
     """Installs a single extra package."""
-    console.print(f"Installing {package}...")
     try:
         command = ["poetry", "run", "pageplus", package, "install"]
         # Using sys.executable to ensure we use the python from the correct venv
@@ -56,10 +55,10 @@ def main(
                 )
                 sys.exit(1)
 
-    console.print(f"Packages to install: {packages_to_install}")
-
     for package in packages_to_install:
-        install_package(package)
+        with console.status(f"Installing {package}..."):
+            install_package(package)
+            console.print("\n[bold green]All selected extras installed successfully.[/bold green]")
 
     console.print("\n[bold green]All selected extras installed successfully.[/bold green]")
 
