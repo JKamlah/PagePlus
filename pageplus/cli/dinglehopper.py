@@ -57,7 +57,7 @@ def _install() -> None:
                             '            return old_word_break(c, index)',
                             '            return old_word_break(c)')
                         f.write(line)
-            if fname == ['extracted_text.py', 'ocr_files.py']:
+            if fname in ['extracted_text.py', 'ocr_files.py']:
                 shutil.copy(
                     output_filename,
                     output_filename.with_suffix('.old'))
