@@ -12,13 +12,15 @@ from pageplus.io.logger import logging
 from pageplus.utils.constants import Environments
 from pageplus.utils.fs import collect_xml_files
 from pageplus.utils.workspace import Workspace
+from pageplus.gui.cli_bridges.workspace import WorkspaceBridge
 
 
 class LoadFilesPage:
     """Page for loading PAGE XML files from a directory or file selection."""
 
-    def __init__(self):
+    def __init__(self, workspace_bridge: WorkspaceBridge):
         """Initialize the Load Files page."""
+        self.workspace_bridge = workspace_bridge
         if "loaded_files" not in st.session_state:
             st.session_state.loaded_files = []
         if "show_add_workspace" not in st.session_state:
@@ -69,6 +71,11 @@ class LoadFilesPage:
             workspaces,
             index=None,
         )
+
+        if selected_workspace:
+            current_path = self.workspace_bridge.workspace_path(selected_workspace)
+            if current_path:
+                st.text_input("Workspace path", current_path, disabled=True)
 
         col1, col2, col3 = st.columns(3)
 

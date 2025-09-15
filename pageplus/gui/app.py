@@ -131,7 +131,7 @@ def main():
         }
 
     # Initialize pages
-    load_page = LoadFilesPage()
+    load_page = LoadFilesPage(st.session_state.bridges['workspace'])
 
     # Sidebar navigation
     st.sidebar.markdown(
