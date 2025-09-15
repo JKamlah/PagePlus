@@ -11,7 +11,7 @@ from pageplus.gui.utils.picker import pick_directory, pick_files
 
 def show_mets(bridge: MetsBridge) -> None:
     """Show METS view."""
-    st.title("📚 METS Downloader & Inspector")
+    st.title("📚 METS")
 
     # --- SHOW PERSISTENT SUCCESS MESSAGE ---
     if 'mets_success_message' in st.session_state:
