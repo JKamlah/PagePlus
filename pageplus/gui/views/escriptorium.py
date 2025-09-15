@@ -2,15 +2,15 @@
 import json
 import re
 from pathlib import Path
-from importlib import util
 
 import streamlit as st
 
-from pageplus.cli.escriptorium import DataFilter
+
 from pageplus.gui.cli_bridges.escriptorium import EscriptoriumBridge
 from pageplus.gui.utils.picker import pick_directory, pick_files
 from pageplus.gui.utils.settings import Settings
 from pageplus.utils.escriptorium.scripts import MAIN_SCRIPTS
+
 
 
 def load_escriptorium_pks() -> dict:
@@ -63,7 +63,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
     st.title("📜 eScriptorium")
 
     # Check if escriptorium-connector is installed
-    if util.find_spec('escriptorium_connector') is None:
+    if not bridge.is_installed():
         st.warning("eScriptorium connector is not installed.")
         if st.button("Install eScriptorium Connector"):
             with st.spinner("Installing...", show_time=True):
@@ -75,6 +75,8 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
                     st.error("Installation failed:")
                     st.code(result["output"])
         return
+    else:
+        from pageplus.cli.escriptorium import DataFilter
 
     settings = Settings()
 

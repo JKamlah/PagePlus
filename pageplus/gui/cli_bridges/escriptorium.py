@@ -1,18 +1,26 @@
-from pageplus.cli.escriptorium import (
-    set_base_url,
-    set_api_base_url,
-    set_instance_name,
-    set_credentials,
-    show_settings,
-    find_documents,
-    load_document,
-    update_document,
-    create_project_document,
-    add_parts,
-    set_document_pk,
-    set_transcription_pk,
-    install
-)
+from importlib import util
+
+# Conditionally import escriptorium components
+if util.find_spec('escriptorium_connector'):
+    from pageplus.cli.escriptorium import (
+        set_base_url,
+        set_api_base_url,
+        set_instance_name,
+        set_credentials,
+        show_settings,
+        find_documents,
+        load_document,
+        update_document,
+        create_project_document,
+        add_parts,
+        set_document_pk,
+        set_transcription_pk,
+        install
+    )
+    ESCRIPTORIUM_INSTALLED = True
+else:
+    from pageplus.cli.escriptorium import install
+    ESCRIPTORIUM_INSTALLED = False
 from typing import List, Optional
 from io import StringIO
 import sys
@@ -22,6 +30,10 @@ from pageplus.gui.cli_bridges.base import CLIBridge, capture_output
 
 class EscriptoriumBridge(CLIBridge):
     """Bridge for eScriptorium CLI operations."""
+
+    def is_installed(self) -> bool:
+        """Check if escriptorium-connector is installed."""
+        return ESCRIPTORIUM_INSTALLED
 
     def install(self) -> dict:
         """Install the eScriptorium connector."""
