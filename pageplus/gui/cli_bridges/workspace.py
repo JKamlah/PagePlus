@@ -77,10 +77,10 @@ class WorkspaceBridge(CLIBridge):
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to restore XML files: {e}")
 
-    def delete_workspace(self, workspace: str) -> None:
+    def delete_workspace(self, workspace: str, all_files: bool = False) -> None:
         """Delete a workspace."""
         try:
-            delete_workspace(workspace)
+            delete_workspace(workspace, all_files)
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to delete workspace: {e}")
 

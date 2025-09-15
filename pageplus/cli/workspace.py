@@ -101,13 +101,16 @@ def restore_xmlfiles(backup_folder: Annotated[Path,
 
 @app.command(rich_help_panel="Workspace")
 def delete_workspace(workspace: Annotated[str, typer.Argument(
-        help="Set environmental name", callback=validate_workspace)]) -> None:
+        help="Set environmental name", callback=validate_workspace)],
+                     all_files: Annotated[bool,
+                                          typer.Option(help="If True, the workspace folder and all files will be deleted.")] = False
+                     ) -> None:
     """
     Deletes an existing workspace
     Returns:
     None
     """
-    pp_workspace().delete(workspace)
+    pp_workspace().delete(workspace, all_files)
 
 
 @app.command(rich_help_panel="Workspace")

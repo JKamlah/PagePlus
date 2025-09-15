@@ -152,7 +152,7 @@ class Workspace:
                     "Loaded workspace does not exist anymore and will set to empty!")
                 set_key(find_dotenv(), var, '')
 
-    def delete(self, workspace: str) -> None:
+    def delete(self, workspace: str, all_files: bool = False) -> None:
         """
         Deletes an existing workspace
         Returns:
@@ -161,13 +161,12 @@ class Workspace:
         dotenv_path = find_dotenv()
         workspace = self.prefix_ws + workspace
         wsfolder = Path(get_key(dotenv_path, workspace))
-        if wsfolder.exists():
+        if wsfolder.exists() and all_files:
             shutil.rmtree(str(wsfolder.absolute()))
         unset_key(dotenv_path, workspace)
         if get_key(dotenv_path, self.prefix_loaded_ws) == workspace:
             set_key(dotenv_path, self.prefix_loaded_ws, '')
-        print(
-            f"Workspace {workspace.replace(self.prefix_ws, '')} was deleted!")
+        print(f"Workspace {workspace.replace(self.prefix_ws, '')} was deleted!")
 
     def copy(
             self,

@@ -15,6 +15,10 @@ def show_workspace(cli_bridge):
     """Display workspace management page."""
     st.title("🗂️ Workspace Management")
 
+    # Initialize session state for delete confirmation
+    if 'confirming_delete' not in st.session_state:
+        st.session_state.confirming_delete = None
+
     # Get available workspaces and loaded workspace
     try:
         ws = Workspace(Environments.PAGEPLUS)
@@ -145,16 +149,38 @@ def show_workspace(cli_bridge):
     if workspace_names:
         if selected_workspace:
             # Remove green dot from workspace name for processing
-            selected_workspace = selected_workspace.replace("🟢 ", "")
-            if st.button("Delete Selected Workspace"):
-                try:
-                    cli_bridge.delete_workspace(selected_workspace)
-                    st.success(
-                        f"Workspace '{selected_workspace}' deleted successfully!")
-                    cli_bridge.update_workspaces()
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error deleting workspace: {str(e)}")
+            clean_selected_workspace = selected_workspace.replace("🟢 ", "")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Delete Selected Workspace (keep files)"):
+                    try:
+                        cli_bridge.delete_workspace(clean_selected_workspace, all_files=False)
+                        st.success(
+                            f"Workspace '{clean_selected_workspace}' deleted successfully!")
+                        cli_bridge.update_workspaces()
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error deleting workspace: {str(e)}")
+            with col2:
+                if st.button("Delete Workspace and all files"):
+                    st.session_state.confirming_delete = clean_selected_workspace
+
+                if st.session_state.confirming_delete == clean_selected_workspace:
+                    st.warning(f"**Are you sure you want to delete the workspace '{clean_selected_workspace}' and all its files?** This action cannot be undone.")
+                    if st.button("Yes, delete everything"):
+                        try:
+                            cli_bridge.delete_workspace(clean_selected_workspace, all_files=True)
+                            st.success(
+                                f"Workspace '{clean_selected_workspace}' and all its files deleted successfully!")
+                            st.session_state.confirming_delete = None  # Reset confirmation state
+                            cli_bridge.update_workspaces()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error deleting workspace: {str(e)}")
+                            st.session_state.confirming_delete = None # Reset on error
+                    if st.button("Cancel"):
+                        st.session_state.confirming_delete = None # Reset confirmation state
+                        st.rerun()
 
     # Copy workspace
     st.subheader("Copy Workspace")
