@@ -1,19 +1,27 @@
 from typing import Any, Dict, List, Optional
+from importlib import util
 
 import pandas as pd
 
-from pageplus.cli.transkribus import (
-    DataFilter,
-    PageStatus,
-    Role,
-    find_documents,
-    load_document,
-    set_credentials,
-    set_url,
-    show_settings,
-    update_document,
-    install
-)
+# Conditionally import transkribus components
+if util.find_spec('transkribus_utils'):
+    from pageplus.cli.transkribus import (
+        DataFilter,
+        PageStatus,
+        Role,
+        find_documents,
+        load_document,
+        set_credentials,
+        set_url,
+        show_settings,
+        update_document,
+        install
+    )
+    TRANSKRIBUS_INSTALLED = True
+else:
+    from pageplus.cli.transkribus import install
+    TRANSKRIBUS_INSTALLED = False
+
 from pageplus.gui.cli_bridges.base import CLIBridge, capture_output
 
 from io import StringIO
@@ -21,6 +29,10 @@ import sys
 
 
 class TranskribusBridge(CLIBridge):
+    def is_installed(self) -> bool:
+        """Check if transkribus_utils is installed."""
+        return TRANSKRIBUS_INSTALLED
+
     def install(self) -> dict:
         """Install the Transkribus connector."""
         try:
@@ -118,5 +130,18 @@ class TranskribusBridge(CLIBridge):
         try:
             set_credentials(name, password)
             return {"success": True, "output": "Credentials set successfully."}
+        except Exception as e:
+            return {"success": False, "output": str(e)}
+
+    def show_settings(self) -> dict:
+        """Show current Transkribus settings."""
+        try:
+            # This function prints to stdout, so we need to capture it.
+            old_stdout = sys.stdout
+            sys.stdout = captured_output = StringIO()
+            show_settings()
+            sys.stdout = old_stdout
+            output = captured_output.getvalue()
+            return {"success": True, "output": output}
         except Exception as e:
             return {"success": False, "output": str(e)}

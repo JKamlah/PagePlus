@@ -1,11 +1,10 @@
 import json
 import re
 from pathlib import Path
-from importlib import util
 
 import streamlit as st
 
-from pageplus.cli.transkribus import DataFilter, PageStatus, Role
+
 from pageplus.gui.cli_bridges.transkribus import TranskribusBridge
 from pageplus.gui.utils.picker import pick_directory, pick_files
 
@@ -37,7 +36,7 @@ def show_transkribus(bridge: TranskribusBridge):
     st.title("🐇 Transkribus")
 
     # Check if transkribus_utils is installed
-    if util.find_spec('transkribus_utils') is None:
+    if not bridge.is_installed():
         st.warning("Transkribus utils are not installed.")
         if st.button("Install Transkribus Utils"):
             with st.spinner("Installing...", show_time=True):
@@ -49,6 +48,8 @@ def show_transkribus(bridge: TranskribusBridge):
                     st.error("Installation failed:")
                     st.code(result["output"])
         return
+    else:
+        from pageplus.cli.transkribus import DataFilter, PageStatus, Role
 
     settings = Settings()
 
