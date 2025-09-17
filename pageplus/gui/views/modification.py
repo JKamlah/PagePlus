@@ -24,39 +24,26 @@ def show_modification(bridge: ModificationBridge) -> None:
     if 'modification_batch' not in st.session_state:
         st.session_state.modification_batch = []
 
-    def run_operation(bridge_method: Callable[..., dict[str, Any]], op_name: str, **kwargs: Any) -> None:
-        """Run a modification operation and display the result."""
-        with st.spinner(f"Running {op_name}..."):
-            result = bridge_method(**kwargs)
-            if result["success"]:
-                st.success(result["output"])
-            else:
-                st.error(result["output"])
-
-    def run_and_record(bridge_method: Callable[..., dict[str, Any]], **kwargs: Any) -> None:
-        """Record and run a modification operation."""
-        # Prepare arguments for recording, converting enums/objects to strings
+    def record_operation(op_name: str, **kwargs: Any) -> None:
+        """Record a modification operation."""
         record_kwargs = {}
         for key, value in kwargs.items():
-            if hasattr(value, 'name'):  # For enums
+            if hasattr(value, 'name'):
                 record_kwargs[key] = value.name
-            elif isinstance(value, list) and value and hasattr(value[0], 'name'):  # For lists of enums
+            elif isinstance(value, list) and value and hasattr(value[0], 'name'):
                 record_kwargs[key] = [item.name for item in value]
             elif isinstance(value, list) and value and isinstance(value[0], Path):
                 record_kwargs[key] = [str(item) for item in value]
             else:
                 record_kwargs[key] = value
 
-        # Exclude files from parameters as they are context-dependent
         if "files" in record_kwargs:
             del record_kwargs["files"]
 
         st.session_state.modification_batch.append({
-            "operation": bridge_method.__name__,
+            "operation": op_name,
             "parameters": record_kwargs
         })
-
-        run_operation(bridge_method, bridge_method.__name__, **kwargs)
 
     main_tabs = st.tabs(["Interactive", "Batch"])
 
@@ -116,14 +103,19 @@ def show_modification(bridge: ModificationBridge) -> None:
                                            help="Check for compatibility issues before conversion")
 
                 if st.button("Set PAGE Version"):
-                    run_and_record(
-                        bridge.set_page_version,
-                        files=selected_files,
-                        version=selected_version,
-                        dry_run=dry_run,
-                        validate=validate,
-                        outputdir=st.session_state.get('modification_dir')
-                    )
+                    params = {
+                        "version": selected_version,
+                        "dry_run": dry_run,
+                        "validate": validate,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("set_page_version", **params)
+                    with st.spinner("Updating PAGE XML version...", show_time=True):
+                        result = bridge.set_page_version(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
 
             with st.expander("Set Metadata", expanded=False):
                 st.write("Update the metadata for the loaded PAGE XML files.")
@@ -162,22 +154,22 @@ def show_modification(bridge: ModificationBridge) -> None:
                     if not st.session_state.loaded_files:
                         st.warning("Please load files first.")
                     else:
-                        creator_arg = creator if "Creator" in selected_options else None
-                        comments_arg = comments if "Comments" in selected_options else None
-                        created_arg = created_datetime if "Created" in selected_options else None
-                        last_change_arg = last_change_datetime if "Last Change" in selected_options else None
-
-                        run_and_record(
-                            bridge.set_metadata,
-                            files=selected_files,
-                            creator=creator_arg,
-                            created=created_arg,
-                            last_change=last_change_arg,
-                            comments=comments_arg,
-                            new=new_metadata,
-                            default=default_metadata,
-                            dry_run=dry_run_metadata
-                        )
+                        params = {
+                            "creator": creator if "Creator" in selected_options else None,
+                            "created": datetime.combine(created_date, created_time).strftime("%Y-%m-%d %H:%M:%S") if "Created" in selected_options else None,
+                            "last_change": datetime.combine(last_change_date, last_change_time).strftime("%Y-%m-%d %H:%M:%S") if "Last Change" in selected_options else None,
+                            "comments": comments if "Comments" in selected_options else None,
+                            "new": new_metadata,
+                            "default": default_metadata,
+                            "dry_run": dry_run_metadata
+                        }
+                        record_operation("set_metadata", **params)
+                        with st.spinner("Setting metadata...", show_time=True):
+                            result = bridge.set_metadata(files=selected_files, **params)
+                        if result["success"]:
+                            st.success(result["output"])
+                        else:
+                            st.error(result["output"])
 
         with tabs[1]:  # Text Operations
             st.subheader("Text-Layout Operations")
@@ -191,23 +183,30 @@ def show_modification(bridge: ModificationBridge) -> None:
                 )
                 dry_run = st.checkbox("Dry run", key="remove_empty_dry_run")
                 if st.button("Remove Empty"):
-                    level_enums = [TextLevel[name] for name in level]
-                    run_and_record(
-                        bridge.remove_empty,
-                        files=selected_files,
-                        level=level_enums,
-                        dry_run=dry_run,
-                        outputdir=st.session_state.get('modification_dir')
-                    )
+                    params = {
+                        "level": [TextLevel[name] for name in level],
+                        "dry_run": dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("remove_empty", **params)
+                    with st.spinner("Removing empty elements...", show_time=True):
+                        result = bridge.remove_empty(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
 
             # Delete Textlines
             with st.expander("Delete Textlines (with content)"):
                 if st.button("Delete Textlines"):
-                    run_and_record(
-                        bridge.delete_textlines,
-                        files=selected_files,
-                        outputdir=st.session_state.get('modification_dir')
-                    )
+                    params = {"outputdir": st.session_state.get('modification_dir')}
+                    record_operation("delete_textlines", **params)
+                    with st.spinner("Deleting textlines...", show_time=True):
+                        result = bridge.delete_textlines(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
 
             st.subheader("Modify Polygon Operations")
             # Translate Lines
@@ -224,14 +223,19 @@ def show_modification(bridge: ModificationBridge) -> None:
                 )
                 dry_run = st.checkbox("Dry run", key="translate_lines_dry_run")
                 if st.button("Translate Lines"):
-                    run_and_record(
-                        bridge.translate_lines,
-                        files=selected_files,
-                        xoff=xoff,
-                        yoff=yoff,
-                        dry_run=dry_run,
-                        outputdir=st.session_state.get('modification_dir')
-                    )
+                    params = {
+                        "xoff": xoff,
+                        "yoff": yoff,
+                        "dry_run": dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("translate_lines", **params)
+                    with st.spinner("Translating lines...", show_time=True):
+                        result = bridge.translate_lines(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
 
             # Extend Lines
             with st.expander("Extend Lines"):
@@ -254,16 +258,21 @@ def show_modification(bridge: ModificationBridge) -> None:
                 )
                 dry_run = st.checkbox("Dry run", key="extend_lines_dry_run")
                 if st.button("Extend Lines"):
-                    run_and_record(
-                        bridge.extend_lines,
-                        files=selected_files,
-                        distance=distance,
-                        dim=dim,
-                        rectangularize=rectangularize,
-                        cut_overlaps=cut_overlaps,
-                        dry_run=dry_run,
-                        outputdir=st.session_state.get('modification_dir')
-                    )
+                    params = {
+                        "distance": distance,
+                        "dim": dim,
+                        "rectangularize": rectangularize,
+                        "cut_overlaps": cut_overlaps,
+                        "dry_run": dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("extend_lines", **params)
+                    with st.spinner("Extending lines...", show_time=True):
+                        result = bridge.extend_lines(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
 
             # Rectangularize Coordinates
             with st.expander("Rectangularize"):
@@ -279,24 +288,31 @@ def show_modification(bridge: ModificationBridge) -> None:
                 dry_run = st.checkbox("Dry run", key="rectangularize_dry_run")
 
                 if st.button("Rectangularize Coordinates"):
-                    level_enums = [TextLevel[name] for name in levels]
-                    run_and_record(
-                        bridge.rectangularize,
-                        files=selected_files,
-                        level=level_enums,
-                        dry_run=dry_run,
-                        outputdir=st.session_state.get('modification_dir')
-                    )
+                    params = {
+                        "level": [TextLevel[name] for name in levels],
+                        "dry_run": dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("rectangularize", **params)
+                    with st.spinner("Rectangularizing coordinates...", show_time=True):
+                        result = bridge.rectangularize(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
 
             st.subheader("Recalculate Polygon Operations")
             # Pseudoline Polygon
             with st.expander("Pseudoline Polygon"):
                 if st.button("Pseudoline Polygon"):
-                    run_and_record(
-                        bridge.pseudolinepolygon,
-                        files=selected_files,
-                        outputdir=st.session_state.get('modification_dir')
-                    )
+                    params = {"outputdir": st.session_state.get('modification_dir')}
+                    record_operation("pseudolinepolygon", **params)
+                    with st.spinner("Generating pseudo-line polygons...", show_time=True):
+                        result = bridge.pseudolinepolygon(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
 
             # Fit into Parent
             with st.expander("Fit into Parent"):
@@ -314,14 +330,18 @@ def show_modification(bridge: ModificationBridge) -> None:
                 dry_run = st.checkbox("Dry run", key="fit_into_parent_dry_run")
 
                 if st.button("Fit into Parent"):
-                    level_enums = [TextLevel[name] for name in levels]
-                    run_and_record(
-                        bridge.fit_into_parent,
-                        files=selected_files,
-                        level=level_enums,
-                        dry_run=dry_run,
-                        outputdir=st.session_state.get('modification_dir')
-                    )
+                    params = {
+                        "level": [TextLevel[name] for name in levels],
+                        "dry_run": dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("fit_into_parent", **params)
+                    with st.spinner("Fitting elements into parent boundaries...", show_time=True):
+                        result = bridge.fit_into_parent(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
 
             st.subheader("Merging/Splitting Regions Operations")
 
@@ -335,12 +355,17 @@ def show_modification(bridge: ModificationBridge) -> None:
                 dry_run = st.checkbox("Dry run", key="top_tier_textregion_dry_run")
 
                 if st.button("Create Top Tier TextRegion"):
-                    run_and_record(
-                        bridge.top_tier_textregion,
-                        files=selected_files,
-                        dry_run=dry_run,
-                        outputdir=st.session_state.get('modification_dir')
-                    )
+                    params = {
+                        "dry_run": dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("top_tier_textregion", **params)
+                    with st.spinner("Creating top-tier text regions...", show_time=True):
+                        result = bridge.top_tier_textregion(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
 
             # Merge Column-Aligned Regions
             with st.expander("Merge Column-Aligned Regions"):
@@ -395,17 +420,22 @@ def show_modification(bridge: ModificationBridge) -> None:
                 dry_run = st.checkbox("Dry run", key="merge_columnaligned_dry_run")
 
                 if st.button("Merge Column-Aligned Regions"):
-                    run_and_record(
-                        bridge.merge_columnaligned_regions,
-                        files=selected_files,
-                        tolerance=tolerance,
-                        based_on_baselines=based_on_baselines,
-                        convex_hull_method=convex_hull_method,
-                        max_height_distance=max_height_distance,
-                        mid_tolerance=mid_tolerance,
-                        dry_run=dry_run,
-                        outputdir=st.session_state.get('modification_dir')
-                    )
+                    params = {
+                        "tolerance": tolerance,
+                        "based_on_baselines": based_on_baselines,
+                        "convex_hull_method": convex_hull_method,
+                        "max_height_distance": max_height_distance,
+                        "mid_tolerance": mid_tolerance,
+                        "dry_run": dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("merge_columnaligned_regions", **params)
+                    with st.spinner("Merging column-aligned regions...", show_time=True):
+                        result = bridge.merge_columnaligned_regions(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
 
             # Split Big Regions
             with st.expander("Split Big Regions"):
@@ -423,24 +453,32 @@ def show_modification(bridge: ModificationBridge) -> None:
                 )
                 dry_run = st.checkbox("Dry run", key="split_regions_dry_run")
                 if st.button("Split Big Regions"):
-                    run_and_record(
-                        bridge.split_big_regions_vertical,
-                        files=selected_files,
-                        split_min_area=split_min_area,
-                        scale_min_area_by_maxlines=scale_min_area,
-                        dry_run=dry_run,
-                        outputdir=st.session_state.get('modification_dir')
-                    )
+                    params = {
+                        "split_min_area": split_min_area,
+                        "scale_min_area_by_maxlines": scale_min_area,
+                        "dry_run": dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("split_big_regions_vertical", **params)
+                    with st.spinner("Splitting large regions...", show_time=True):
+                        result = bridge.split_big_regions_vertical(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
 
             st.subheader("Sorting Operations")
             # Sort
             with st.expander("Sort (textlines per region)"):
                 if st.button("Sort"):
-                    run_and_record(
-                        bridge.sort,
-                        files=selected_files,
-                        outputdir=st.session_state.get('modification_dir')
-                    )
+                    params = {"outputdir": st.session_state.get('modification_dir')}
+                    record_operation("sort", **params)
+                    with st.spinner("Sorting elements...", show_time=True):
+                        result = bridge.sort(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
 
             # Sort and Merge
             with st.expander("Sort (textlines per region) and merge (textlines with same height)"):
@@ -457,13 +495,18 @@ def show_modification(bridge: ModificationBridge) -> None:
                     key="sort_and_merge_gap_y"
                 )
                 if st.button("Sort and Merge"):
-                    run_and_record(
-                        bridge.sort_and_merge,
-                        files=selected_files,
-                        merge_lines_gap_x=merge_lines_gap_x,
-                        merge_lines_gap_y=merge_lines_gap_y,
-                        outputdir=st.session_state.get('modification_dir')
-                    )
+                    params = {
+                        "merge_lines_gap_x": merge_lines_gap_x,
+                        "merge_lines_gap_y": merge_lines_gap_y,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("sort_and_merge", **params)
+                    with st.spinner("Sorting and merging elements...", show_time=True):
+                        result = bridge.sort_and_merge(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
 
             # Sort Regions
             with st.expander("Sort regions and textlines"):
@@ -488,14 +531,19 @@ def show_modification(bridge: ModificationBridge) -> None:
                 dry_run = st.checkbox("Dry run", key="sort_regions_dry_run")
 
                 if st.button("Sort Regions"):
-                    run_and_record(
-                        bridge.sort_regions,
-                        files=selected_files,
-                        based_on_baselines=based_on_baselines,
-                        overlap_pct=overlap_pct,
-                        dry_run=dry_run,
-                        outputdir=st.session_state.get('modification_dir')
-                    )
+                    params = {
+                        "based_on_baselines": based_on_baselines,
+                        "overlap_pct": overlap_pct,
+                        "dry_run": dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("sort_regions", **params)
+                    with st.spinner("Sorting regions...", show_time=True):
+                        result = bridge.sort_regions(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
 
         with tabs[2]:  # Text-Attributes Operations
             st.subheader("Text-Attributes Operations")
@@ -509,13 +557,18 @@ def show_modification(bridge: ModificationBridge) -> None:
                 )
                 dry_run = st.checkbox("Dry run", key="reassign_ids_dry_run")
                 if st.button("Reassign IDs"):
-                    run_and_record(
-                        bridge.reassign_ids,
-                        files=selected_files,
-                        reading_order_mode=mode,
-                        dry_run=dry_run,
-                        outputdir=st.session_state.get('modification_dir')
-                    )
+                    params = {
+                        "reading_order_mode": mode,
+                        "dry_run": dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("reassign_ids", **params)
+                    with st.spinner("Reassigning IDs...", show_time=True):
+                        result = bridge.reassign_ids(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
 
             # Replace Tags
             with st.expander("Replace Tags"):
@@ -554,20 +607,26 @@ def show_modification(bridge: ModificationBridge) -> None:
                 dry_run = st.checkbox("Dry run", key="replace_tag_dry_run")
 
                 if st.button("Replace Tags"):
-                    old_tags = old_tags if old_tags else [None]
-                    with st.spinner("Replacing tags..."):
-                        for old_tag in old_tags:
-                            run_and_record(
-                                bridge.replace_tag,
-                                files=selected_files,
-                                old_tag=old_tag,
-                                new_tag=new_tag,
-                                level=[TextLevel[level] for level in levels],
-                                textfilter=textfilter if textfilter else None,
-                                skip_textfilter=skip_textfilter,
-                                dry_run=dry_run,
-                                outputdir=st.session_state.get('modification_dir')
-                            )
+                    old_tags_list = old_tags if old_tags else [None]
+                    for old_tag_item in old_tags_list:
+                        params = {
+                            "old_tag": old_tag_item,
+                            "new_tag": new_tag,
+                            "level": [TextLevel[level] for level in levels],
+                            "textfilter": textfilter if textfilter else None,
+                            "skip_textfilter": skip_textfilter,
+                            "dry_run": dry_run,
+                            "outputdir": st.session_state.get('modification_dir')
+                        }
+                        record_operation("replace_tag", **params)
+                        with st.spinner(f"Replacing tag '{old_tag_item}' with '{new_tag}'..."):
+                            result = bridge.replace_tag(files=selected_files, **params)
+                        if result["success"]:
+                            st.success(
+                                result["output"] +
+                                f': {old_tag_item} -> {new_tag}')
+                        else:
+                            st.error(result["output"])
 
             # Remove Tags
             with st.expander("Remove Tags"):
@@ -606,36 +665,32 @@ def show_modification(bridge: ModificationBridge) -> None:
                 dry_run = st.checkbox("Dry run", key="remove_tag_dry_run")
 
                 if st.button("Remove Tags"):
-                    tags_to_remove = tags_to_remove if tags_to_remove else [None]
-                    with st.spinner("Removing tags..."):
-                        for tag_to_remove in tags_to_remove:
-                            run_and_record(
-                                bridge.remove_tag,
-                                files=selected_files,
-                                tag_to_remove=tag_to_remove,
-                                level=[TextLevel[level] for level in levels],
-                                textfilter=textfilter if textfilter else None,
-                                skip_textfilter=skip_textfilter,
-                                dry_run=dry_run,
-                                outputdir=st.session_state.get('modification_dir')
-                            )
+                    tags_to_remove_list = tags_to_remove if tags_to_remove else [None]
+                    for tag_to_remove_item in tags_to_remove_list:
+                        params = {
+                            "tag_to_remove": tag_to_remove_item,
+                            "level": [TextLevel[level] for level in levels],
+                            "textfilter": textfilter if textfilter else None,
+                            "skip_textfilter": skip_textfilter,
+                            "dry_run": dry_run,
+                            "outputdir": st.session_state.get('modification_dir')
+                        }
+                        record_operation("remove_tag", **params)
+                        with st.spinner(f"Removing tag '{tag_to_remove_item}'..."):
+                            result = bridge.remove_tag(files=selected_files, **params)
+                        if result["success"]:
+                            st.success(
+                                result["output"] +
+                                f': Removed elements with tag "{tag_to_remove_item}"')
+                        else:
+                            st.error(result["output"])
 
         with tabs[3]:  # Text Operations
             st.subheader("Text-Content Operations")
 
             # Spellchecking
             with st.expander("Spellchecking"):
-                if util.find_spec('spellchecker') is None:
-                    st.error(
-                        "Spellchecker is not installed. Please install it with `pip install spellchecker`.")
-                    from pageplus.cli.modification import install_spellchecker
-                    if st.button("Install Spellchecking"):
-                        result = install_spellchecker()
-                        if result["success"]:
-                            st.success(result["output"])
-                        else:
-                            st.error(result["output"])
-                else:
+                if util.find_spec('spellchecker') is not None:
                     language = st.selectbox(
                         "Language",
                         ["en", "de", "fr"],
@@ -674,18 +729,24 @@ def show_modification(bridge: ModificationBridge) -> None:
                     dry_run = st.checkbox("Dry run", key="spellcheck_dry_run")
 
                     if st.button("Run Spellchecking"):
-                        run_and_record(
-                            bridge.spellchecking,
-                            files=selected_files,
-                            language=language,
-                            distance=distance,
-                            ignore_last_character=ignore_last,
-                            workspace_dictionary=workspace_dict,
-                            workspace_word_length=word_length if workspace_dict else 8,
-                            workspace_word_frequency=word_freq if workspace_dict else 50,
-                            report=report,
-                            dry_run=dry_run,
-                            outputdir=st.session_state.get('modification_dir'))
+                        params = {
+                            "language": language,
+                            "distance": distance,
+                            "ignore_last_character": ignore_last,
+                            "workspace_dictionary": workspace_dict,
+                            "workspace_word_length": word_length if workspace_dict else 8,
+                            "workspace_word_frequency": word_freq if workspace_dict else 50,
+                            "report": report,
+                            "dry_run": dry_run,
+                            "outputdir": st.session_state.get('modification_dir')
+                        }
+                        record_operation("spellchecking", **params)
+                        with st.spinner("Running spellchecking...", show_time=True):
+                            result = bridge.spellchecking(files=selected_files, **params)
+                        if result["success"]:
+                            st.success(result["output"])
+                        else:
+                            st.error(result["output"])
 
             # Delete Text
             with st.expander("Delete Text (content only)"):
@@ -696,12 +757,17 @@ def show_modification(bridge: ModificationBridge) -> None:
                     key="remove_text"
                 )
                 if st.button("Delete Text (content only)"):
-                    run_and_record(
-                        bridge.delete_text,
-                        files=selected_files,
-                        levels=[TextLevel[level] for level in levels],
-                        outputdir=st.session_state.get('modification_dir')
-                    )
+                    params = {
+                        "levels": [TextLevel[level] for level in levels],
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("delete_text", **params)
+                    with st.spinner("Deleting text content...", show_time=True):
+                        result = bridge.delete_text(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
 
         with tabs[4]:
             st.subheader("Repair Operations")
@@ -710,12 +776,17 @@ def show_modification(bridge: ModificationBridge) -> None:
             with st.expander("Repair"):
                 dry_run = st.checkbox("Dry run", key="repair_dry_run")
                 if st.button("Repair"):
-                    run_and_record(
-                        bridge.repair,
-                        files=selected_files,
-                        dry_run=dry_run,
-                        outputdir=st.session_state.get('modification_dir')
-                    )
+                    params = {
+                        "dry_run": dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("repair", **params)
+                    with st.spinner("Repairing files...", show_time=True):
+                        result = bridge.repair(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
 
             # Repair Dummy Regions
             with st.expander("Repair Dummy Regions"):
@@ -728,12 +799,17 @@ def show_modification(bridge: ModificationBridge) -> None:
                 dry_run = st.checkbox("Dry run", key="repair_dummy_dry_run")
 
                 if st.button("Repair Dummy Regions"):
-                    run_and_record(
-                        bridge.repair_dummy_region,
-                        files=selected_files,
-                        dry_run=dry_run,
-                        outputdir=st.session_state.get('modification_dir')
-                    )
+                    params = {
+                        "dry_run": dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("repair_dummy_region", **params)
+                    with st.spinner("Repairing dummy regions...", show_time=True):
+                        result = bridge.repair_dummy_region(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
 
     with main_tabs[1]:
         st.subheader("Batch Processing")
@@ -769,30 +845,27 @@ def show_modification(bridge: ModificationBridge) -> None:
                     st.warning("Please load files first.")
                 else:
                     selected_files = [str(f) for f in st.session_state.loaded_files]
-                    with st.spinner("Running batch..."):
-                        for op in st.session_state.modification_batch:
-                            op_name = op["operation"]
-                            op_params = op["parameters"].copy()
-
-                            bridge_method = getattr(bridge, op_name, None)
-                            if bridge_method and callable(bridge_method):
+                    progress_bar = st.progress(0)
+                    for i, op in enumerate(st.session_state.modification_batch):
+                        op_name = op["operation"]
+                        op_params = op["parameters"].copy()
+                        bridge_method = getattr(bridge, op_name, None)
+                        if bridge_method and callable(bridge_method):
+                            with st.spinner(f"Running batch operation {i+1}/{len(st.session_state.modification_batch)}: {op_name}"):
                                 sig = inspect.signature(bridge_method)
-
-                                # Add files and outputdir to params
                                 op_params["files"] = selected_files
-
-                                if "outputdir" in sig.parameters:
-                                    if "outputdir" not in op_params or op_params["outputdir"] is None:
-                                        op_params["outputdir"] = st.session_state.get('modification_dir')
-
-                                # Convert level strings back to enums if they exist
+                                if "outputdir" in sig.parameters and ("outputdir" not in op_params or op_params["outputdir"] is None):
+                                    op_params["outputdir"] = st.session_state.get('modification_dir')
                                 if 'level' in op_params and isinstance(op_params['level'], list):
                                     op_params['level'] = [TextLevel[name] for name in op_params['level']]
-
-                                run_operation(bridge_method, op_name, **op_params)
-                            else:
-                                st.error(f"Unknown operation in batch: {op_name}")
-                        st.success("Batch processing complete.")
+                                result = bridge_method(**op_params)
+                                if result["success"]:
+                                    st.info(f"Step {i+1}: {result['output']}")
+                                else:
+                                    st.error(f"Step {i+1} failed: {result['output']}")
+                                    break
+                        progress_bar.progress((i + 1) / len(st.session_state.modification_batch))
+                    st.success("Batch processing complete.")
 
         with col4:
             if st.button("Clear Batch"):
