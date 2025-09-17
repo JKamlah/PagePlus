@@ -14,7 +14,7 @@ import streamlit as st
 
 from pageplus.gui.cli_bridges.gemini import GeminiBridge
 from pageplus.gui.utils.output_transform import rich_table_to_dataframe
-from pageplus.gui.utils.picker import pick_files
+from pageplus.gui.utils.picker import pick_files, pick_directory
 from pageplus.gui.utils.settings import Settings
 from pageplus.utils.constants import Environments
 from pageplus.utils.workspace import Workspace
@@ -477,17 +477,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
             if st.button(
                 "Select Image Directory",
                     key="select_image_dir_button"):
-                picker_script_path = Path(__file__).parent.parent / "utils" / "picker.py"
-                command = [sys.executable, str(picker_script_path)]
-                initial_dir = get_loaded_workspace_dir()
-                if initial_dir:
-                    command.extend(["--initial-dir", str(initial_dir)])
-                
-                selected_paths = pick_files(
-                    initial_dir=initial_dir,
-                    filetypes=[("Image Files", " ".join(f"*{ext}" for ext in selected_extensions))]
-                )
-                selected_dir = selected_paths[0] if selected_paths else None
+                selected_dir = pick_directory()
                 
                 if selected_dir:
                     if selected_extensions:

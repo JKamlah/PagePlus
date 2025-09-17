@@ -181,6 +181,7 @@ class CoordElement:
         """
         if inputtype == "polygon":
             try:
+                data = data.convex_hull if isinstance(data, MultiPolygon) else data
                 data = data.exterior if isinstance(data, Polygon) else data
                 removed_repeated_data = remove_repeated_points(data, tolerance=2)
                 # Use exterior.coords instead of coords to avoid the "Component rings" error

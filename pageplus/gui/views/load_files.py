@@ -65,11 +65,22 @@ class LoadFilesPage:
         workspace = Workspace(Environments.PAGEPLUS)
         workspaces = workspace.names()
 
+        # Get available workspaces and loaded workspace
+        try:
+            workspace_names = workspace.names()
+            loaded_workspace = workspace.loaded()
+            if loaded_workspace and loaded_workspace in workspace_names:
+                default_index = workspace_names.index(loaded_workspace)
+            else:
+                default_index = None
+        except Exception:
+            default_index = None
+
         # Workspace dropdown
         selected_workspace = st.selectbox(
             "Select Workspace",
             workspaces,
-            index=None,
+            index=default_index,
         )
 
         if selected_workspace:

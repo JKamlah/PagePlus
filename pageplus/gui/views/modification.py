@@ -71,7 +71,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                 dry_run = st.checkbox("Dry run", key="set_page_version_dry_run")
             with col2:
                 validate = st.checkbox("Validate compatibility", value=True, key="set_page_version_validate",
-                                     help="Check for compatibility issues before conversion")
+                                       help="Check for compatibility issues before conversion")
             
             if st.button("Set PAGE Version"):
                 with st.spinner("Updating PAGE XML version...", show_time=True):
@@ -145,7 +145,6 @@ def show_modification(bridge: ModificationBridge) -> None:
                         else:
                             st.error(result["output"])
 
-
     with tabs[1]:  # Text Operations
         st.subheader("Text-Layout Operations")
         # Remove Empty
@@ -183,7 +182,6 @@ def show_modification(bridge: ModificationBridge) -> None:
                     st.success(result["output"])
                 else:
                     st.error(result["output"])
-
 
         st.subheader("Modify Polygon Operations")
         # Translate Lines
@@ -274,7 +272,6 @@ def show_modification(bridge: ModificationBridge) -> None:
                         st.success(result["output"])
                     else:
                         st.error(result["output"])
-
 
         st.subheader("Recalculate Polygon Operations")
         # Pseudoline Polygon
@@ -441,7 +438,7 @@ def show_modification(bridge: ModificationBridge) -> None:
 
         st.subheader("Sorting Operations")
         # Sort
-        with st.expander("Sort"):
+        with st.expander("Sort (textlines per region)"):
             if st.button("Sort"):
                 with st.spinner("Sorting elements...", show_time=True):
                     result = bridge.sort(
@@ -454,7 +451,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                     st.error(result["output"])
 
         # Sort and Merge
-        with st.expander("Sort and Merge"):
+        with st.expander("Sort (textlines per region) and merge (textlines with same height)"):
             merge_lines_gap_x = st.number_input(
                 "Merge lines gap X",
                 min_value=0,
@@ -481,7 +478,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                     st.error(result["output"])
 
         # Sort Regions
-        with st.expander("Sort Regions"):
+        with st.expander("Sort regions and textlines"):
             st.write(
                 "Sorts text regions based on a simple reading order using overlap analysis.")
 
@@ -519,7 +516,7 @@ def show_modification(bridge: ModificationBridge) -> None:
     with tabs[2]:  # Text-Attributes Operations
         st.subheader("Text-Attributes Operations")
 
-                # Reassign IDs
+        # Reassign IDs
         with st.expander("Reassign IDs"):
             mode = st.selectbox(
                 "Reading Order Mode",
@@ -540,7 +537,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                 else:
                     st.error(result["output"])
 
-         # Replace Tags
+        # Replace Tags
         with st.expander("Replace Tags"):
             # old_tag = st.text_input("Old Tag", key="replace_tag_old"
             # Initialize session state on first run

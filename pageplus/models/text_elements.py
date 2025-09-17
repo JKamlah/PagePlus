@@ -10,7 +10,7 @@ import shapely
 from shapely import affinity, concave_hull
 from shapely.errors import GEOSException, TopologicalError
 from shapely.geometry import (LinearRing, LineString, MultiLineString,
-                              MultiPoint, Point, Polygon)
+                              MultiPoint, Point, Polygon, MultiPolygon)
 from shapely.ops import nearest_points, unary_union
 
 from pageplus.io.logger import logging
@@ -194,6 +194,9 @@ class TextRegion(Region):
                 try:
                     new_polygon, new_baseline = self._merge_line_polygons_and_baselines(
                         i, previous_baseline, current_baseline)
+                    
+                    if isinstance(new_polygon, MultiPolygon):
+                        new_polygon = new_polygon.convex_hull
                     self.textlines[i].update_coordinates(
                         new_polygon.exterior, inputtype="polygon")
                     self.textlines[i].update_baseline_coordinates(new_baseline)
