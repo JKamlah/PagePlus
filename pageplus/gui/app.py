@@ -37,6 +37,7 @@ from typing import List
 import json
 import dotenv
 import base64
+from pageplus.gui.utils.undo import UndoManager
 
 # Initialize settings
 settings = Settings()
@@ -205,6 +206,37 @@ def main():
     elif page == "⚙️ Settings":
         show_settings(st.session_state.bridges['settings'])
 
+    # Undo History
+    undo_states = UndoManager.get_undo_states()
+    if undo_states:
+        st.sidebar.subheader("Undo History")
+
+        # Create a list of descriptions for the dropdown
+        undo_options = [f"Undo: {state.description}" for state in undo_states]
+
+        # Add a placeholder at the beginning of the list
+        undo_options.insert(0, "Select an action to undo...")
+
+        selected_action = st.sidebar.selectbox(
+            "Select an action to undo",
+            options=undo_options,
+            index=0,
+            key="undo_selectbox"
+        )
+
+        if selected_action != "Select an action to undo...":
+            # Find the index of the selected action
+            action_index = undo_options.index(selected_action) - 1  # Adjust for the placeholder
+
+            # A button to confirm the action
+            if st.sidebar.button("Confirm Undo", key=f"confirm_undo_{action_index}"):
+                restored_action = UndoManager.restore_state(action_index)
+                if restored_action:
+                    st.sidebar.success(f"Restored state before: '{restored_action}'")
+                    # Reset the selectbox after the action
+                    # st.session_state.undo_selectbox = "Select an action to undo..."
+                    st.rerun()
+
 
 def show_home():
     """Display the home page."""
@@ -218,14 +250,14 @@ def show_home():
     )
     st.header("✨ Welcome to PagePlus ✨")
     st.write("""
-    This is the GUI interface for PagePlus, a PAGE-XML file multi-tool.
+    This is the GUI interface for PagePlus, a PAGE-XML file multi-tool.  
     Disclaimer: A lot of the functionality is still under development and results should be checked carefully.
     
     Use the sidebar to navigate between different sections:  
-    📂 Input: Load PAGE-XML files to process
-    📜 eScriptorium: Work with eScriptorium
-    🐇 Transkribus: Work with Transkribus
-    📚 METS Tools: Work with METS/MODS files  
+    📂 Input: Load PAGE-XML files to process  
+    📜 eScriptorium: Work with eScriptorium  
+    🐇 Transkribus: Work with Transkribus  
+    📚 METS Tools: Work with METS/MODS files   
     🔍 Analytics: Analyze the content of PAGE-XML files  
     ✅ Validation: Validate PAGE-XML files  
     📊 Evaluation: Evaluate PAGE-XML files  

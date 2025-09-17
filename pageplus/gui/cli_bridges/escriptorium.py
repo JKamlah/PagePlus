@@ -26,6 +26,9 @@ from io import StringIO
 import sys
 from pathlib import Path
 from pageplus.gui.cli_bridges.base import CLIBridge, capture_output
+from pageplus.gui.utils.undo import UndoManager
+from pageplus.utils.workspace import Workspace
+from pageplus.utils.constants import Environments
 
 
 class EscriptoriumBridge(CLIBridge):
@@ -127,6 +130,17 @@ class EscriptoriumBridge(CLIBridge):
                       overwrite_ws: bool = False, loading: bool = True) -> dict:
         """Load a document from eScriptorium."""
         try:
+            if overwrite_ws and workspace:
+                try:
+                    ws = Workspace(workspace, Environments.PAGEPLUS)
+                    if ws.path.exists():
+                        files_to_backup = ws.collect_files()
+                        if files_to_backup:
+                            UndoManager.add_undo_state(f"Overwrite workspace '{workspace}'", files_to_backup)
+                except Exception as e:
+                    # Log or show a warning that backup failed, but proceed with loading.
+                    print(f"Warning: Could not back up workspace '{workspace}': {e}")
+
             old_stdout = sys.stdout
             sys.stdout = captured_output = StringIO()
 
@@ -143,6 +157,7 @@ class EscriptoriumBridge(CLIBridge):
                         transcription_name: Optional[str] = None, overwrite: bool = True) -> dict:
         """Update a document in eScriptorium."""
         try:
+            UndoManager.add_undo_state(f"Update document {document_pk}")
             old_stdout = sys.stdout
             sys.stdout = captured_output = StringIO()
 

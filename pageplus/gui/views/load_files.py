@@ -13,6 +13,17 @@ from pageplus.utils.constants import Environments
 from pageplus.utils.fs import collect_xml_files
 from pageplus.utils.workspace import Workspace
 from pageplus.gui.cli_bridges.workspace import WorkspaceBridge
+from pageplus.gui.utils.undo import UndoManager
+
+
+def get_loaded_files_from_session_state() -> List[Path]:
+    """Get the list of loaded XML files from session state."""
+    return st.session_state.get("loaded_files", [])
+
+
+def set_loaded_files_in_session_state(files: List[Path]):
+    """Sets the list of loaded XML files in session state."""
+    st.session_state.loaded_files = files
 
 
 class LoadFilesPage:
@@ -139,6 +150,7 @@ class LoadFilesPage:
         st.subheader("Loaded Files")
         if st.button("Clear Files", key="clear"):
             st.session_state.loaded_files = []
+            UndoManager.clear_stack()
             st.rerun()
 
         if st.session_state.loaded_files:
@@ -208,6 +220,7 @@ class LoadFilesPage:
                     logging.info(
                         f"Added {len(newly_added_files)} new files."
                     )
+                    UndoManager.clear_stack()
 
         except Exception as e:
             logging.error(
@@ -218,4 +231,4 @@ class LoadFilesPage:
 
     def get_loaded_files(self) -> List[Path]:
         """Get the list of loaded XML files."""
-        return st.session_state.get("loaded_files", [])
+        return get_loaded_files_from_session_state()

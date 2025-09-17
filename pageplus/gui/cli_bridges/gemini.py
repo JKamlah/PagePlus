@@ -1,9 +1,11 @@
 from typing import List
+from pathlib import Path
 
 from pageplus.cli.gemini import (check_model, check_valid_key, ocr,
                                  ocr_multithread, reocr_multithread,
                                  set_api_key, set_model, show_model,
                                  show_modeldetails, show_models, show_settings)
+from pageplus.gui.utils.undo import UndoManager
 
 
 class GeminiBridge:
@@ -91,6 +93,19 @@ class GeminiBridge:
             dry_run: bool = False) -> dict:
         """Run OCR on files using Gemini."""
         try:
+            if not dry_run:
+                # Assuming overwrite is implicit, backup potential XML files
+                xml_files_to_backup = []
+                for img_path_str in files:
+                    img_path = Path(img_path_str)
+                    # This logic assumes XMLs are generated next to images or in outputdir
+                    xml_name = img_path.with_suffix('.xml').name
+                    potential_xml_path = Path(outputdir) / xml_name if outputdir else img_path.with_suffix('.xml')
+                    if potential_xml_path.exists():
+                        xml_files_to_backup.append(potential_xml_path)
+                
+                if xml_files_to_backup:
+                    UndoManager.add_undo_state("OCR", file_paths=xml_files_to_backup)
             ocr(
                 inputs=files,
                 outputdir=outputdir,
@@ -116,6 +131,17 @@ class GeminiBridge:
             thinking_budget: int = 0) -> dict:
         """Run OCR on files using Gemini with different default settings."""
         try:
+            if not dry_run and overwrite:
+                xml_files_to_backup = []
+                for img_path_str in files:
+                    img_path = Path(img_path_str)
+                    xml_name = img_path.with_suffix('.xml').name
+                    potential_xml_path = Path(outputdir) / xml_name if outputdir else img_path.with_suffix('.xml')
+                    if potential_xml_path.exists():
+                        xml_files_to_backup.append(potential_xml_path)
+
+                if xml_files_to_backup:
+                    UndoManager.add_undo_state("Multithreaded OCR", file_paths=xml_files_to_backup)
             usage = ocr_multithread(
                 inputs=files,
                 outputdir=outputdir,
@@ -150,6 +176,9 @@ class GeminiBridge:
             overwrite: bool = True) -> dict:
         """Run ReOCR on XML files using Gemini with different default settings."""
         try:
+            if not dry_run:
+                paths_to_backup = [Path(p) for p in xml_files]
+                UndoManager.add_undo_state("ReOCR", file_paths=paths_to_backup)
             usage = reocr_multithread(
                 xml_files=xml_files,
                 image_files=image_files,

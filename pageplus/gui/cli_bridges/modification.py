@@ -14,6 +14,7 @@ from pageplus.cli.modification import (delete_text, delete_textlines,
                                        sort_regions, top_tier_textregion,
                                        translate_lines)
 from pageplus.gui.cli_bridges.base import CLIBridge
+from pageplus.gui.utils.undo import UndoManager
 
 
 class ModificationBridge(CLIBridge):
@@ -37,6 +38,8 @@ class ModificationBridge(CLIBridge):
         ) -> Dict[str, Any]:
             """Run spellchecking on files."""
             try:
+                if not dry_run:
+                    UndoManager.add_undo_state("Spellchecking")
                 spellchecking_cli(
                     inputs=files,
                     language=language,
@@ -63,6 +66,7 @@ class ModificationBridge(CLIBridge):
     ) -> Dict[str, Any]:
         """Delete text from files."""
         try:
+            UndoManager.add_undo_state("Delete Text")
             delete_text(
                 inputs=files,
                 levels=levels,
@@ -82,6 +86,7 @@ class ModificationBridge(CLIBridge):
     ) -> Dict[str, Any]:
         """Delete textlines from files."""
         try:
+            UndoManager.add_undo_state("Delete Textlines")
             delete_textlines(
                 inputs=files,
                 outputdir=outputdir
@@ -102,6 +107,8 @@ class ModificationBridge(CLIBridge):
     ) -> Dict[str, Any]:
         """Remove empty elements from files."""
         try:
+            if not dry_run:
+                UndoManager.add_undo_state("Remove Empty Elements")
             remove_empty(
                 inputs=files,
                 level=level,
@@ -124,6 +131,8 @@ class ModificationBridge(CLIBridge):
     ) -> Dict[str, Any]:
         """Reassign IDs in files."""
         try:
+            if not dry_run:
+                UndoManager.add_undo_state("Reassign IDs")
             reassign_ids(
                 inputs=files,
                 reading_order_mode=reading_order_mode,
@@ -145,6 +154,8 @@ class ModificationBridge(CLIBridge):
     ) -> Dict[str, Any]:
         """Repair files."""
         try:
+            if not dry_run:
+                UndoManager.add_undo_state("Repair")
             repair(
                 inputs=files,
                 outputdir=outputdir,
@@ -167,6 +178,8 @@ class ModificationBridge(CLIBridge):
     ) -> Dict[str, Any]:
         """Translate lines in files."""
         try:
+            if not dry_run:
+                UndoManager.add_undo_state("Translate Lines")
             translate_lines(
                 inputs=files,
                 xoff=xoff,
@@ -193,6 +206,8 @@ class ModificationBridge(CLIBridge):
     ) -> Dict[str, Any]:
         """Extend lines in files."""
         try:
+            if not dry_run:
+                UndoManager.add_undo_state("Extend Lines")
             extend_lines(
                 inputs=files,
                 distance=distance,
@@ -216,6 +231,7 @@ class ModificationBridge(CLIBridge):
     ) -> Dict[str, Any]:
         """Compute pseudo line polygons for files."""
         try:
+            UndoManager.add_undo_state("Compute Pseudo Line Polygons")
             pseudolinepolygon(
                 inputs=files,
                 outputdir=outputdir
@@ -234,6 +250,7 @@ class ModificationBridge(CLIBridge):
     ) -> Dict[str, Any]:
         """Sort elements in files."""
         try:
+            UndoManager.add_undo_state("Sort Elements")
             sort(
                 inputs=files,
                 outputdir=outputdir
@@ -254,6 +271,7 @@ class ModificationBridge(CLIBridge):
     ) -> Dict[str, Any]:
         """Sort and merge elements in files."""
         try:
+            UndoManager.add_undo_state("Sort and Merge Elements")
             sort_and_merge(
                 inputs=files,
                 merge_lines_gap_x=merge_lines_gap_x,
@@ -277,6 +295,8 @@ class ModificationBridge(CLIBridge):
     ) -> Dict[str, Any]:
         """Split big regions vertically in files."""
         try:
+            if not dry_run:
+                UndoManager.add_undo_state("Split Big Regions Vertically")
             from pageplus.cli.modification import split_big_regions_vertical
             split_big_regions_vertical(
                 inputs=files,
@@ -315,6 +335,8 @@ class ModificationBridge(CLIBridge):
                      new: bool, default: bool, dry_run: bool):
         """Sets the PAGE XML metadata of the input files."""
         try:
+            if not dry_run:
+                UndoManager.add_undo_state("Set Metadata")
             from pageplus.cli.modification import set_metadata as set_metadata_cli
             set_metadata_cli(inputs=files, creator=creator, created=created, last_change=last_change, comments=comments, new=new, default=default, dry_run=dry_run)
             return {
@@ -356,6 +378,8 @@ class ModificationBridge(CLIBridge):
     ) -> Dict[str, Any]:
         """Replace tags in files."""
         try:
+            if not dry_run:
+                UndoManager.add_undo_state("Replace Tags")
             replace_tag(
                 inputs=files,
                 old_tag=old_tag,
@@ -385,6 +409,8 @@ class ModificationBridge(CLIBridge):
     ) -> Dict[str, Any]:
         """Remove elements with specified tags from files."""
         try:
+            if not dry_run:
+                UndoManager.add_undo_state("Remove Elements by Tag")
             remove_tag(
                 inputs=files,
                 tag_to_remove=tag_to_remove,
@@ -410,6 +436,8 @@ class ModificationBridge(CLIBridge):
     ) -> Dict[str, Any]:
         """Rectangularize coordinates in files."""
         try:
+            if not dry_run:
+                UndoManager.add_undo_state("Rectangularize Coordinates")
             rectangularize(
                 inputs=files,
                 level=level,
@@ -430,6 +458,8 @@ class ModificationBridge(CLIBridge):
     ) -> Dict[str, Any]:
         """Repair TextRegions with invalid coordinates."""
         try:
+            if not dry_run:
+                UndoManager.add_undo_state("Repair Dummy Regions")
             repair_dummy_region(
                 inputs=files,
                 outputdir=outputdir,
@@ -451,6 +481,8 @@ class ModificationBridge(CLIBridge):
     ) -> Dict[str, Any]:
         """Fit elements into their parent boundaries."""
         try:
+            if not dry_run:
+                UndoManager.add_undo_state("Fit Elements into Parent")
             fit_into_parent(
                 inputs=files,
                 level=level,
@@ -472,6 +504,8 @@ class ModificationBridge(CLIBridge):
     ) -> Dict[str, Any]:
         """Create top tier text regions by merging multiple regions into one."""
         try:
+            if not dry_run:
+                UndoManager.add_undo_state("Create Top-Tier Text Regions")
             top_tier_textregion(
                 inputs=files,
                 outputdir=outputdir,
@@ -497,6 +531,8 @@ class ModificationBridge(CLIBridge):
     ) -> Dict[str, Any]:
         """Merge column-aligned text regions based on distance thresholds."""
         try:
+            if not dry_run:
+                UndoManager.add_undo_state("Merge Column-Aligned Regions")
             merge_columnaligned_regions(
                 inputs=files,
                 tolerance=tolerance,
@@ -524,6 +560,8 @@ class ModificationBridge(CLIBridge):
     ) -> Dict[str, Any]:
         """Sort text regions based on a simple reading order."""
         try:
+            if not dry_run:
+                UndoManager.add_undo_state("Sort Regions")
             sort_regions(
                 inputs=files,
                 based_on_baselines=based_on_baselines,
@@ -548,6 +586,8 @@ class ModificationBridge(CLIBridge):
     ) -> Dict[str, Any]:
         """Update PAGE XML version (xmlns and schemaLocation) of input files."""
         try:
+            if not dry_run:
+                UndoManager.add_undo_state("Set PAGE Version")
             from pageplus.utils.constants import PcGtsVersion
             
             # Convert string to enum
