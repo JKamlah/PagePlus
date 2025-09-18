@@ -29,14 +29,18 @@ def center_dialog():
     )
 
 
-@st.cache_resource
 def load_page_and_image(xml_path: Path, image_path: Path):
     """Loads and caches the Page and Image objects from file paths."""
     page = Page(xml_path)
-    image = Image.open(image_path)
-    image.load()  # Eagerly load image data
+    image = load_images(image_path)
     return page, image
 
+@st.cache_resource
+def load_images(image_path: Path):
+    """Loads and caches the Image object from file path."""
+    image = Image.open(image_path)
+    image.load()  # Eagerly load image data
+    return image
 
 @st.dialog("Line Details", width="large")
 def line_detail_dialog(all_lines: list, image: Image.Image, start_index: int, page: Page, xml_path: Path):
