@@ -95,7 +95,7 @@ class CoordElement:
     def get_coordinates(self, returntype: str = "string"):
         """
         Retrieves coordinates in various formats based on the 'returntype' parameter.
-        Supported return types are 'string', 'tuple', 'points', 'linearring', 'mrr', 'polygon'.
+        Supported return types are 'string', 'tuple', 'points', 'linearring', 'mrr', 'polygon', 'array'.
         """
         valid_types = [
             "string",
@@ -103,7 +103,9 @@ class CoordElement:
             "points",
             "linearring",
             "mrr",
-            "polygon"]
+            "polygon",
+            "array"
+        ]
         if returntype not in valid_types:
             return None
 
@@ -118,6 +120,8 @@ class CoordElement:
         coord_tuples = self.convert_coordinates_str_to_tuples(points)
         if returntype == "tuple":
             return coord_tuples
+        if returntype == "array":
+            return np.array(coord_tuples, dtype=np.int32)
         if returntype == "points":
             return MultiPoint(coord_tuples)
 
@@ -186,13 +190,12 @@ class CoordElement:
                 removed_repeated_data = remove_repeated_points(data, tolerance=2)
                 # Use exterior.coords instead of coords to avoid the "Component rings" error
                 coords_len = len(removed_repeated_data.coords) if hasattr(removed_repeated_data, 'coords') else 0
-                print(f"Coords len: {coords_len}")
                 if coords_len < 3:
                     removed_repeated_data = remove_repeated_points(data, tolerance=0)
                     coords_len = len(removed_repeated_data.coords) if hasattr(removed_repeated_data, 'coords') else 0
                 if coords_len < 3:
                     removed_repeated_data = data
-            except Exception:
+            except Exception as e:
                 # If remove_repeated_points fails, use the original data
                 print(f"Error updating coordinates: {e}")
                 removed_repeated_data = data

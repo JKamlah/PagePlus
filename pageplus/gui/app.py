@@ -16,6 +16,7 @@ from pageplus.gui.views.escriptorium import show_escriptorium
 from pageplus.gui.views.transkribus import show_transkribus
 from pageplus.gui.views.mets import show_mets
 from pageplus.gui.views.evaluation import show_evaluation
+from pageplus.gui.views.viewer import show_viewer
 from pageplus.gui.utils.settings import Settings
 from pageplus.gui.cli_bridges.gemini import GeminiBridge
 from pageplus.gui.cli_bridges.escriptorium import EscriptoriumBridge
@@ -151,6 +152,7 @@ def main():
          "📜 eScriptorium",
          "🐇 Transkribus",
          "📚 METS",
+         "🖼️ Viewer",
          "🔍 Analytics",
          "✅ Validation",
          "📊 Evaluation",
@@ -174,6 +176,11 @@ def main():
         show_transkribus(st.session_state.bridges['transkribus'])
     elif page == "📚 METS":
         show_mets(st.session_state.bridges['mets'])
+    elif page == "🖼️ Viewer":
+        if not st.session_state.loaded_files:
+            st.warning("Please load files first in the 'Input' page.")
+        else:
+            show_viewer()
     elif page == "🔍 Analytics":
         if not st.session_state.loaded_files:
             st.warning("Please load files first in the 'Input' page.")
@@ -258,6 +265,7 @@ def show_home():
     📜 eScriptorium: Work with eScriptorium  
     🐇 Transkribus: Work with Transkribus  
     📚 METS Tools: Work with METS/MODS files   
+    🖼️ Viewer: View PAGE-XML files with images  
     🔍 Analytics: Analyze the content of PAGE-XML files  
     ✅ Validation: Validate PAGE-XML files  
     📊 Evaluation: Evaluate PAGE-XML files  

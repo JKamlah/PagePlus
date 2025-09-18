@@ -399,7 +399,7 @@ class Textline(CoordElement):
         Retrieves the baseline coordinates in various formats based on the 'returntype' parameter.
         Supported return types are 'string', 'tuple', 'points', 'linestring'.
         """
-        valid_returntypes = ["string", "tuple", "points", "linestring"]
+        valid_returntypes = ["string", "tuple", "points", "linestring", "array"]
         if returntype not in valid_returntypes:
             return None
         baseline = self.xml_element.find(f'{{{self.ns}}}Baseline')
@@ -410,6 +410,8 @@ class Textline(CoordElement):
                 coord_tuples = self.convert_coordinates_str_to_tuples(baseline.attrib['points'])
                 if returntype == "tuple":
                     return coord_tuples
+                elif returntype == "array":
+                    return np.array(coord_tuples, dtype=np.int32)
                 elif returntype == "points":
                     return MultiPoint(coord_tuples)
                 else:
