@@ -276,19 +276,24 @@ def main():
 
     # Exit button
     st.sidebar.markdown("---")
-    if st.sidebar.button("Shutdown"):
+
+    def shutdown():
         # Target URL
+        dotenv.load_dotenv()
         target_url = os.environ.get("PAGEPLUS_REDIRECT_URL", "https://google.com")
+        print(f"Shutting down and redirecting to {target_url}")
 
         # HTML meta tag to redirect instantly
         redirect_html = f"""<meta http-equiv="refresh" content="0; url={target_url}">"""
         st.markdown(redirect_html, unsafe_allow_html=True)
         time.sleep(1)
-        
         # Stop the server
         os.kill(os.getpid(), signal.SIGTERM)
+    if st.sidebar.button("Shutdown"):
+        shutdown()
     if st.sidebar.button("Reboot"):
         import subprocess
+        shutdown()
         subprocess.run(["pageplus-gui"])
 
 
