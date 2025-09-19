@@ -1,3 +1,4 @@
+from ast import Pass
 import streamlit as st
 from pathlib import Path
 from PIL import Image, ImageFile
@@ -47,6 +48,9 @@ def line_detail_dialog(all_lines: list, image: Image.Image, start_index: int, pa
     """A dialog to show line details, allow editing and navigation."""
     center_dialog()
 
+    page = st.session_state.page if 'page' in st.session_state else page
+    all_lines = st.session_state.lines if 'lines' in st.session_state else all_lines
+
     if 'current_line_index' not in st.session_state or st.session_state.get('start_index') != start_index:
         st.session_state.current_line_index = start_index
         st.session_state.start_index = start_index
@@ -55,6 +59,25 @@ def line_detail_dialog(all_lines: list, image: Image.Image, start_index: int, pa
     line = all_lines[idx]
 
     st.header(f"Line: {line.get_id()}")
+
+    # Create a mapping from line ID to index for quick lookups
+    line_id_to_idx = {l.get_id(): i for i, l in enumerate(all_lines)}
+    line_ids = list(line_id_to_idx.keys())
+
+    # Dropdown to jump to a specific line
+    selected_line_id = st.selectbox(
+        "Jump to Line",
+        options=line_ids,
+        index=idx,
+        format_func=lambda line_id: f"({line_id_to_idx[line_id] + 1}/{len(all_lines)}) {line_id}",
+        key=f"line_jumper_{start_index}"
+    )
+
+    # If the selection changed, update the index in session state and rerun
+    selected_idx = line_id_to_idx[selected_line_id]
+    if selected_idx != st.session_state.current_line_index:
+        st.session_state.current_line_index = selected_idx
+        st.rerun()
 
     # Image cutout
     polygon = line.get_coordinates(returntype="array")
@@ -108,25 +131,30 @@ def line_detail_dialog(all_lines: list, image: Image.Image, start_index: int, pa
     new_tag = st.text_input("Tag", line.get_tag(), key=f"tag_{line.get_id()}_{idx}")
 
     # Buttons
-    b_col1, b_col2, b_col3, b_col4 = st.columns(4)
+    b_col1, b_col2, _, b_col4 = st.columns(4)
 
-    if b_col1.button("⬅️ Previous", disabled=idx <= 0):
-        st.session_state.current_line_index -= 1
-        st.rerun()
-
-    if b_col2.button("Next ➡️", disabled=idx >= len(all_lines) - 1):
-        st.session_state.current_line_index += 1
-        st.rerun()
-
-    if b_col3.button("Save"):
+    def auto_save():
         if line.get_text() != new_text:
             line.update_text(new_text)
         if line.get_tag() != new_tag:
             line.set_tag(new_tag)
-        page.save_xml(xml_path)
-        st.success("Saved!")
+        all_lines[idx] = line
+        st.session_state.lines = all_lines
+        st.session_state.page = page
 
-    if b_col4.button("Close"):
+    if b_col1.button("⬅️ Previous", disabled=idx <= 0):
+        auto_save()
+        st.session_state.current_line_index -= 1
+        st.rerun()
+
+    if b_col2.button("Next ➡️", disabled=idx >= len(all_lines) - 1):
+        auto_save()
+        st.session_state.current_line_index += 1
+        st.rerun()
+
+    if b_col4.button("Save & Close"):
+        page.save_xml(xml_path)
+        st.session_state.page = None
         st.session_state.line_editor['selection']['rows'] = []
         if 'current_line_index' in st.session_state:
             del st.session_state.current_line_index
@@ -285,7 +313,7 @@ def show_viewer():
 
     if image_source_option == "Select Directory":
         if st.button("Select Image Directory"):
-            selected_dir = pick_directory(initial_dir=str(get_loaded_workspace_dir()))
+            selected_dir = pick_directory(initial_dir=str(Path(xml_files[0]).parent) if xml_files else None)
             if selected_dir:
                 st.session_state.viewer_image_folder = selected_dir
                 if 'viewer_image_path' in st.session_state:
@@ -296,7 +324,7 @@ def show_viewer():
     elif image_source_option == "Select File":
         if st.button("Select Image File"):
             selected_files = pick_files(
-                initial_dir=str(get_loaded_workspace_dir()),
+                initial_dir=str(Path(xml_files[0]).parent) if xml_files else None,
                 filetypes=[("Image files", "*.jpg *.jpeg *.png *.tif *.tiff"), ("All files", "*.*")]
             )
             if selected_files:
