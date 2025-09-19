@@ -4,6 +4,36 @@ logger = setup_logger()
 # Configure external logging
 configure_external_logging()
 
+
+import streamlit as st
+from pathlib import Path
+
+# Constants
+STORAGE_DIR = Path(__file__).parent / "storage"
+STORAGE_FILE = STORAGE_DIR / "loaded_files.json"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+ENV_FILE = PROJECT_ROOT / ".env"
+LOGO_PATH = PROJECT_ROOT / 'assets/Tight_PagePlus_Logo.png'
+LOADING_PATH = PROJECT_ROOT / 'assets/loading_pageplus.gif'
+
+# Place a container at the top
+loading = st.empty()
+
+# Show the loading GIF
+with loading.container():
+    st.markdown(
+        """
+        <style>
+            .stApp {
+                background-color: black;
+            }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    _, col, _ = st.columns([1, 1, 1])
+    col.image(LOADING_PATH)
+
 from pageplus.gui.views.gemini import show_gemini
 from pageplus.gui.views.modification import show_modification
 from pageplus.gui.views.settings import show_settings
@@ -32,16 +62,15 @@ from pageplus.gui.cli_bridges import (
     WorkspaceBridge,
     ModificationBridge,
 )
-import streamlit as st
-from pathlib import Path
+
 from typing import List
 import json
 import dotenv
 import base64
 from pageplus.gui.utils.undo import UndoManager
 
-# Initialize settings
-settings = Settings()
+# Clear the placeholder and show main app
+loading.empty()
 
 # Set page config
 st.set_page_config(
@@ -50,12 +79,8 @@ st.set_page_config(
     layout="wide"
 )
 
-# Constants
-STORAGE_DIR = Path(__file__).parent / "storage"
-STORAGE_FILE = STORAGE_DIR / "loaded_files.json"
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-ENV_FILE = PROJECT_ROOT / ".env"
-LOGO_PATH = PROJECT_ROOT / 'assets/Tight_PagePlus_Logo.png'
+# Initialize settings
+settings = Settings()
 
 # Read and encode the image
 with open(LOGO_PATH, "rb") as img_file:
