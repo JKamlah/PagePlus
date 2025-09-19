@@ -5,6 +5,9 @@ logger = setup_logger()
 configure_external_logging()
 
 import os
+import signal
+import time
+import sys
 # Disable Streamlit browser usage stats
 os.environ["STREAMLIT_BROWSER_GATHERUSAGESTATS"] = "false"
 
@@ -270,6 +273,23 @@ def main():
                     # Reset the selectbox after the action
                     # st.session_state.undo_selectbox = "Select an action to undo..."
                     st.rerun()
+
+    # Exit button
+    st.sidebar.markdown("---")
+    if st.sidebar.button("Shutdown"):
+        # Target URL
+        target_url = os.environ.get("PAGEPLUS_REDIRECT_URL", "https://google.com")
+
+        # HTML meta tag to redirect instantly
+        redirect_html = f"""<meta http-equiv="refresh" content="0; url={target_url}">"""
+        st.markdown(redirect_html, unsafe_allow_html=True)
+        time.sleep(1)
+        
+        # Stop the server
+        os.kill(os.getpid(), signal.SIGTERM)
+    if st.sidebar.button("Reboot"):
+        import subprocess
+        subprocess.run(["pageplus-gui"])
 
 
 def show_home():

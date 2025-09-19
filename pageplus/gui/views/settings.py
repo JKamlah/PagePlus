@@ -41,6 +41,13 @@ def show_settings(cli_bridge):
         value=settings.get("OUTPUT_DIRECTORY", "")
     )
 
+    # GUI Settings
+    st.subheader("GUI Settings")
+    redirect_url = st.text_input(
+        "Redirect URL on Shutdown",
+        value=settings.get("PAGEPLUS_REDIRECT_URL", "https://google.com")
+    )
+
     # Save settings
     if st.button("Save Settings"):
         try:
@@ -50,9 +57,9 @@ def show_settings(cli_bridge):
                 "GEMINI_API_KEY": gemini_key,
                 "TESSERACT_MODEL_PATH": tesseract_path,
                 "KRAKEN_MODEL_PATH": kraken_path,
-                "OUTPUT_DIRECTORY": output_dir
+                "OUTPUT_DIRECTORY": output_dir,
+                "PAGEPLUS_REDIRECT_URL": redirect_url
             })
-
-            st.success("Settings saved successfully!")
+            st.rerun()
         except Exception as e:
             st.error(f"Error saving settings: {str(e)}")
