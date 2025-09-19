@@ -545,6 +545,22 @@ def show_modification(bridge: ModificationBridge) -> None:
                     else:
                         st.error(result["output"])
 
+            # Match Textlines to Region
+            with st.expander("Match Textlines to Region"):
+                st.write(
+                    "Matches textlines to the text region with the highest overlap (>50%) "
+                    "and then sorts the textlines in each region."
+                )
+                if st.button("Match Textlines to Region"):
+                    params = {"outputdir": st.session_state.get('modification_dir')}
+                    record_operation("match_textlines_to_region", **params)
+                    with st.spinner("Matching textlines to regions...", show_time=True):
+                        result = bridge.match_textlines_to_region(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
+
         with tabs[2]:  # Text-Attributes Operations
             st.subheader("Text-Attributes Operations")
 

@@ -5,6 +5,7 @@ from datetime import datetime
 
 from pageplus.cli.modification import (delete_text, delete_textlines,
                                        extend_lines, fit_into_parent,
+                                       match_textlines_to_region,
                                        merge_columnaligned_regions,
                                        pseudolinepolygon, reassign_ids,
                                        rectangularize, remove_empty,
@@ -613,6 +614,25 @@ class ModificationBridge(CLIBridge):
             return {
                 "success": True,
                 "output": f"PAGE XML version updated to {version} successfully"
+            }
+        except Exception as e:
+            return {"success": False, "output": str(e)}
+
+    def match_textlines_to_region(
+        self,
+        files: List[str],
+        outputdir: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Match textlines to regions in files."""
+        try:
+            UndoManager.add_undo_state("Match Textlines to Regions")
+            match_textlines_to_region(
+                inputs=files,
+                outputdir=outputdir
+            )
+            return {
+                "success": True,
+                "output": "Textlines matched to regions successfully"
             }
         except Exception as e:
             return {"success": False, "output": str(e)}

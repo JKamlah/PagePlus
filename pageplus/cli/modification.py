@@ -1741,5 +1741,100 @@ def set_metadata(inputs: Annotated[List[str], typer.Argument(exists=True,
             logging.error(f"Error processing {xml_file.name}: {str(e)}")
 
 
+@app.command()
+def match_textlines_to_region(
+    inputs: Annotated[List[str], typer.Argument(
+        exists=True,
+        help="Paths or workspace to the PAGE XML files to be processed.",
+        callback=transform_inputs
+    )] = None,
+    outputdir: Annotated[Optional[str], typer.Option(
+        help="Filename of the output directory. If not specified, input files will be overwritten.",
+        callback=transform_output
+    )] = None
+):
+    """
+    Matches textlines to the text region with the highest overlap (>50%).
+    After matching, it sorts the textlines in each region.
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError('No xml files found in input directory')
+
+    for xml_file in track(xml_files, description="Matching textlines to regions..."):
+        filename = xml_file.name
+        page = Page(xml_file)
+        logging.info('Processing file: ' + filename)
+
+        all_textlines = [line for region in page.regions.textregions for line in region.textlines]
+        
+        # A dictionary to hold the new assignments of textlines to regions
+        region_assignments = {region.get_id(): [] for region in page.regions.textregions}
+        original_parents = {line.get_id(): line.parent for line in all_textlines}
+
+        for line in all_textlines:
+            line_polygon = line.get_coordinates("polygon")
+            if not line_polygon or line_polygon.is_empty:
+                # Keep it in its original region if it has no geometry
+                region_assignments[line.parent.get_id()].append(line)
+                continue
+
+            best_region = None
+            max_overlap = 0
+
+            for region in page.regions.textregions:
+                region_polygon = region.get_coordinates("polygon")
+                if not region_polygon or region_polygon.is_empty:
+                    continue
+
+                try:
+                    intersection = line_polygon.intersection(region_polygon)
+                    overlap = intersection.area / line_polygon.area if line_polygon.area > 0 else 0
+                    if overlap > max_overlap:
+                        max_overlap = overlap
+                        best_region = region
+                except Exception as e:
+                    logging.warning(f"Could not calculate overlap for line {line.get_id()} and region {region.get_id()}: {e}")
+
+            if best_region and max_overlap > 0.5:
+                region_assignments[best_region.get_id()].append(line)
+            else:
+                # If no suitable region is found, keep it in its original region
+                region_assignments[line.parent.get_id()].append(line)
+
+        # Now, update the actual textlines in each region
+        for region in page.regions.textregions:
+            new_textlines = region_assignments[region.get_id()]
+            
+            # Remove all old textlines from XML
+            for line in region.textlines:
+                try:
+                    region.xml_element.remove(line.xml_element)
+                except ValueError:
+                    # Line might have already been moved from another region's list
+                    pass
+            
+            # Update the list of textlines in the object
+            region.textlines.clear()
+
+            # Add new textlines
+            for line in new_textlines:
+                original_parent_element = original_parents[line.get_id()].xml_element
+                if line.xml_element in original_parent_element:
+                    original_parent_element.remove(line.xml_element)
+                region.xml_element.append(line.xml_element)
+                line.parent = region
+                region.textlines.append(line)
+
+        # Sort the textlines in each region after re-assignment
+        for region in page.regions.textregions:
+            region.sort_baselines(mode='single_col')
+
+        # write modified xml file
+        fout = xml_file if outputdir is None else determine_output_path(xml_file, outputdir)
+        logging.info('Wrote modified xml file to output directory: ' + str(fout))
+        page.save_xml(fout)
+
+
 if __name__ == "__main__":
     app()
