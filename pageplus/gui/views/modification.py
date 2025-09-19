@@ -7,7 +7,7 @@ import inspect
 import streamlit as st
 
 from pageplus.gui.cli_bridges import ModificationBridge
-from pageplus.gui.utils.picker import select_directory
+from pageplus.gui.utils.picker import pick_directory
 from pageplus.models.page import Page
 from pageplus.utils.constants import TextLevel
 from pathlib import Path
@@ -54,7 +54,7 @@ def show_modification(bridge: ModificationBridge) -> None:
         # Select output directory
         st.write("Output directory: The default is to overwrite the input files (recommended with backup strategy).")
         if st.button("Select Output Directory"):
-            selected_paths = select_directory()
+            selected_paths = pick_directory()
             if selected_paths:
                 st.session_state.modification_dir = selected_paths
             elif selected_paths is not None:
