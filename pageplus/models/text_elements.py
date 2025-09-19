@@ -574,48 +574,42 @@ class Textline(CoordElement):
                 return False
 
             new_baseline_tuples, pts_outside, pts_replaced = [], [], []
-            for idx, point in enumerate(baseline_tuples):
+            for point in baseline_tuples:
                 pt = Point(point)
+                current_point = point
 
                 if not textline_polygon.covers(pt):
                     pt_distance_to_polygon = textline_polygon.distance(pt)
-                    if pt_distance_to_polygon > accepted_distance:
+                    is_outside_tolerance = pt_distance_to_polygon > accepted_distance
+
+                    if is_outside_tolerance:
                         pts_outside.append(point)
-                    if update:
-                        pt_distance = textline_polygon.distance(pt)
-                        pred_distance = Point(
-                            new_baseline_tuples[-1]).distance(pt) if new_baseline_tuples else float('inf')
-                        succ_distance = Point(baseline_tuples[idx + 1]).distance(
-                            pt) if idx != len(baseline_tuples) - 1 else float('inf')
 
-                        # Replace with nearest point if it's closer than
-                        # predecessor and successor
-                        if pt_distance < pred_distance and pt_distance < succ_distance:
-                            nearest_pt = nearest_points(
-                                pt, textline_polygon)[1]
-                            pts_replaced.append(
-                                [point, [int(nearest_pt.x), int(nearest_pt.y)]])
-                            point = (int(nearest_pt.x), int(nearest_pt.y))
-                        else:
-                            pts_replaced.append([point, None])
+                    if update and is_outside_tolerance:
+                        nearest_pt = nearest_points(pt, textline_polygon)[1]
+                        corrected_point = (int(nearest_pt.x), int(nearest_pt.y))
+                        if point != corrected_point:
+                            pts_replaced.append([point, corrected_point])
+                        current_point = corrected_point
 
-                new_baseline_tuples.append(point)
+                new_baseline_tuples.append(current_point)
 
             if pts_outside:
                 logging.warning(
                     f"{self.get_id()}: Some points of the baseline are outside of the textregion " f"{self.get_parent_element().attrib['id']}. Points outside {pts_outside}")
                 if not update:
                     return False
-                else:
+                elif pts_replaced:
                     logging.warning(
-                        f"{self.get_id()}: Some points got deleted or replaced" f"{self.get_parent_element().attrib['id']}. Points outside {pts_replaced}")
+                        f"{self.get_id()}: Some points got replaced: "
+                        f"{self.get_parent_element().attrib['id']}. Points replaced {pts_replaced}")
 
         except TopologicalError:
             logging.warning(
                 f"{self.get_id()}: Baseline or parentregion " f"{self.get_parent_element().attrib['id']} is invalid.")
             return False
         if update:
-            self.update_baseline_coordinates(baseline_tuples)
+            self.update_baseline_coordinates(new_baseline_tuples)
         return True
 
     def _compute_baseline(self, position: str = 'mid') -> list:

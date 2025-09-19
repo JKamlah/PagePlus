@@ -218,8 +218,7 @@ def repair(inputs: Annotated[List[str],
                             line.update_coordinates(new_coords, 'polygon')
 
                 if not line.validate_baseline(update=True):
-                    line.update_baseline_coordinates(
-                        line._compute_baseline(position='bottom'))
+                    line.update_baseline_coordinates(line._compute_baseline(position='bottom'))
 
             except Exception as e:
                 logging.error(f"{line.get_id()}: Error during repair - {e}")
