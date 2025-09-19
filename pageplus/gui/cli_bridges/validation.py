@@ -9,11 +9,11 @@ from pageplus.gui.cli_bridges.base import CLIBridge, capture_logging, logger
 class ValidationBridge(CLIBridge):
     """Bridge for validation functionality."""
 
-    def validate_files(self, files: List[Path]) -> pd.DataFrame:
+    def validate_files(self, files: List[Path], baseline_distance: int = 0) -> pd.DataFrame:
         """Validate processed files."""
         try:
             from pageplus.cli.validation import validate_all
-            result = capture_logging(validate_all, files)
+            result = capture_logging(validate_all, files, baseline_distance)
             return self._parse_validation_logs(result)
         except Exception as e:
             logger.error(f"Error validating files: {str(e)}")

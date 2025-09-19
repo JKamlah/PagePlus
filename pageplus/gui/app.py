@@ -246,7 +246,7 @@ def main():
     # Undo History
     undo_states = UndoManager.get_undo_states()
     if undo_states:
-        st.sidebar.subheader("Undo History")
+        st.sidebar.subheader("🔄 Undo History")
 
         # Create a list of descriptions for the dropdown
         undo_options = [f"Undo: {state.description}" for state in undo_states]
@@ -289,9 +289,9 @@ def main():
         time.sleep(1)
         # Stop the server
         os.kill(os.getpid(), signal.SIGTERM)
-    if st.sidebar.button("Shutdown"):
+    if st.sidebar.button("Shutdown", icon=":material/power_settings_new:"):
         shutdown()
-    if st.sidebar.button("Reboot"):
+    if st.sidebar.button("Reboot", icon=":material/refresh:"):
         import subprocess
         shutdown()
         subprocess.run(["pageplus-gui"])

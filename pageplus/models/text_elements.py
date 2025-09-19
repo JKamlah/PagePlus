@@ -547,7 +547,7 @@ class Textline(CoordElement):
         self._ensure_and_update_unicode(new_text_equiv, text)
 
     # Gemometry methods
-    def validate_baseline(self, update=False) -> bool:
+    def validate_baseline(self, update=False, accepted_distance: int = 0) -> bool:
         """
         Validates the baseline coordinates of the textline, updates them if necessary,
         and ensures they are within the textline polygon.
@@ -578,7 +578,9 @@ class Textline(CoordElement):
                 pt = Point(point)
 
                 if not textline_polygon.covers(pt):
-                    pts_outside.append(point)
+                    pt_distance_to_polygon = textline_polygon.distance(pt)
+                    if pt_distance_to_polygon > accepted_distance:
+                        pts_outside.append(point)
                     if update:
                         pt_distance = textline_polygon.distance(pt)
                         pred_distance = Point(

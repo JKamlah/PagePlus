@@ -59,10 +59,23 @@ def show_validation(bridge: ValidationBridge) -> None:
     if 'validation_results' not in st.session_state:
         st.session_state.validation_results = None
 
+    with st.expander("Accepted Baseline Distance"):
+        col1, _, _, _ = st.columns(4)
+        with col1:
+            baseline_distance = st.number_input(
+                "Accepted Baseline Distance to Textline Polygon (px)",
+                min_value=0,
+                value=0,
+                step=1,
+                help="Set the accepted distance for a baseline point to be outside the text region polygon. If the distance is within this value, it will not be flagged as an error."
+            )
+
     if st.button("Run Validation"):
         with st.spinner("Running validation...", show_time=True):
             st.session_state.validation_results = bridge.validate_files(
-                selected_files)
+                selected_files,
+                baseline_distance=baseline_distance
+            )
 
     # Show results and filters if validation has been run
     if st.session_state.validation_results is not None:

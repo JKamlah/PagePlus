@@ -17,7 +17,9 @@ app = typer.Typer()
 def validate_all(
         inputs: Annotated[List[str], typer.Argument(exists=True,
                                                     help="Paths or workspace to the files to be validated.",
-                                                    callback=transform_inputs)] = None):
+                                                    callback=transform_inputs)] = None,
+        baseline_distance: Annotated[int, typer.Option(
+            help="Accepted distance for baseline to textline polygon validation.")] = 0):
     """
     Validates PAGE XML files.
 
@@ -50,7 +52,7 @@ def validate_all(
             try:
                 line.validate_text()
                 line.validate_region()
-                line.validate_baseline()
+                line.validate_baseline(accepted_distance=baseline_distance)
             except Exception as e:
                 logging.error(
                     f"{line.get_id()}: Error during validation - {e}")
