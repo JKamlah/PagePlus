@@ -112,7 +112,7 @@ else:
 
     # PACKAGE #
     @app.command(rich_help_panel="Package")
-    def update_package() -> None:
+    def install() -> None:
         """ Updates dinglehopper by Mike Gerber and the qurator team! """
         _install()
 

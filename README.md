@@ -38,6 +38,12 @@ To install PagePlus, you will need Python 3.11+ and [Poetry](https://python-poet
     poetry shell
     ```
 
+4.  WSL-User
+    ```sh
+    sudo add-apt-repository ppa:wslutilities/wslu
+    sudo apt update
+    sudo apt install wslu
+    ```
 ## GUI Usage
 
 PagePlus comes with a user-friendly graphical interface built with Streamlit.

@@ -43,6 +43,8 @@ def main(
     """
     Installs optional extras for pageplus.
     """
+    console.print(f"[green]Uninstalling litellm...[/green]")
+    subprocess.check_call([sys.executable, "-m", "pip", "uninstall", "litellm", "-y"])
     if "all" in packages:
         packages_to_install = EXTRAS
     else:

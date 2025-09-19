@@ -4,10 +4,12 @@ logger = setup_logger()
 # Configure external logging
 configure_external_logging()
 
+import os
+# Disable Streamlit browser usage stats
+os.environ["STREAMLIT_BROWSER_GATHERUSAGESTATS"] = "false"
 
 import streamlit as st
 from pathlib import Path
-
 # Constants
 STORAGE_DIR = Path(__file__).parent / "storage"
 STORAGE_FILE = STORAGE_DIR / "loaded_files.json"
