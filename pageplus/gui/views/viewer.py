@@ -155,6 +155,7 @@ def line_detail_dialog(all_lines: list, image: Image.Image, start_index: int, pa
     if b_col4.button("Save & Close"):
         page.save_xml(xml_path)
         st.session_state.page = None
+        st.session_state.lines = None
         st.session_state.line_editor['selection']['rows'] = []
         if 'current_line_index' in st.session_state:
             del st.session_state.current_line_index
