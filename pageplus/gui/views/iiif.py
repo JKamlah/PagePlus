@@ -47,7 +47,7 @@ def show_iiif_downloader(cli_bridge):
         with col1:
             filename_strategy = st.selectbox(
                 "Filename Strategy",
-                options=["label", "id", "index"],
+                options=["id", "label", "index"],
                 index=0,
                 key="filename_strategy_iiif",
                 help="Determines how downloaded files are named. 'label' uses the manifest label, 'id' uses the last part of the image URL, and 'index' uses a sequential number."

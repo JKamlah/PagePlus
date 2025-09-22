@@ -86,6 +86,21 @@ def set_open_folder_default(default_true: Annotated[bool, typer.Argument(
         str(default_true))
 
 
+@app.command()
+def set_user_agent(
+    user_agent: Annotated[str, typer.Argument(help="User agent string to use for HTTP requests.")]
+):
+    """
+    Set the user agent for PagePlus.
+    """
+    try:
+        dotfile = find_dotenv()
+        set_key(dotfile, PagePlus.SYSTEM.as_prefix() + 'USER_AGENT', user_agent)
+        print(f"User agent set to: {user_agent}")
+    except Exception as e:
+        print(f"[red]Error setting user agent: {e}[/red]")
+
+
 @app.command(rich_help_panel="Workspace")
 def set_workspace_dir(wsdir: Annotated[Path, typer.Argument(
         help="Path to the directory where all workspaces get stored. Default: Tempfolder")],) -> None:

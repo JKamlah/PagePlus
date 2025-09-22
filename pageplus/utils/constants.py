@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
+from pathlib import Path
 
 
 class WorkState(str, Enum):
@@ -173,4 +174,13 @@ class PcGtsVersion(Enum):
         return cls.V2019_07_15
 
 
+# For more details, see: https://ocr-d.de/en/spec/ocrd_page#textline
+VALID_TEXTLINE_ORDER = {"top-to-bottom", "bottom-to-top",
+                        "left-to-right", "right-to-left"}
+
+# User Agent for HTTP requests
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+# Environment variables
+ENV_FILE = ".env"
+STORAGE_DIR = Path.home() / ".pageplus"

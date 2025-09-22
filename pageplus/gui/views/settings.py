@@ -51,6 +51,10 @@ def show_settings(cli_bridge):
             "Redirect URL on Shutdown",
             value=settings.get("PAGEPLUS_REDIRECT_URL", "https://google.com")
         )
+        user_agent = st.text_input(
+            "User Agent",
+            value=settings.get("PAGEPLUS_USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        )
         # Save settings
         if st.button("Save Settings"):
             try:
@@ -61,7 +65,8 @@ def show_settings(cli_bridge):
                     "TESSERACT_MODEL_PATH": tesseract_path,
                     "KRAKEN_MODEL_PATH": kraken_path,
                     "OUTPUT_DIRECTORY": output_dir,
-                    "PAGEPLUS_REDIRECT_URL": redirect_url
+                    "PAGEPLUS_REDIRECT_URL": redirect_url,
+                    "PAGEPLUS_USER_AGENT": user_agent,
                 })
                 st.rerun()
             except Exception as e:

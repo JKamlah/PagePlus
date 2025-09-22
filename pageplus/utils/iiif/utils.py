@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from contextlib import asynccontextmanager
 from html import unescape
@@ -9,7 +10,6 @@ from typing import Any, Dict, List, Optional, Union
 import aiofiles
 from aiohttp import ClientResponse, ClientSession, ClientSSLError, ClientTimeout, ContentTypeError
 
-from pageplus.utils.constants import USER_AGENT
 
 
 def check_dir(path):
@@ -96,7 +96,8 @@ async def async_request(
         None
     )
 
-    request_headers = {"User-Agent": USER_AGENT}
+    user_agent = os.getenv("PAGEPLUS_USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    request_headers = {"User-Agent": user_agent}
     if headers:
         request_headers.update(headers)
 

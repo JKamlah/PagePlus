@@ -27,6 +27,14 @@ class SettingsBridge(CLIBridge):
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to clean logs: {e}")
 
+    def set_user_agent(self, user_agent: str) -> None:
+        """Set the user agent."""
+        try:
+            cmd = ["pageplus", "system", "set-user-agent", user_agent]
+            subprocess.run(cmd, check=True)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Failed to set user agent: {e}")
+
     def set_workspace_dir(self, wsdir: str) -> None:
         """Set the workspace directory."""
         try:

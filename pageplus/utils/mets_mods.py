@@ -2,6 +2,7 @@ import re
 from io import BytesIO
 from pathlib import Path
 from typing import List, Optional
+import os
 
 import requests
 import typer
@@ -1325,12 +1326,14 @@ def download_file_from_flocat(
                 print(
                     "Already exists and skipped! Use 'overwrite=True' to force download.")
                 continue
+            user_agent = os.getenv("PAGEPLUS_USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            headers = {"User-Agent": user_agent}
 
             response = requests.get(
                 href,
                 timeout=20,
                 verify=False,
-                headers={"User-Agent": "Mozilla/5.0"}
+                headers=headers
             )
             response.raise_for_status()
 
