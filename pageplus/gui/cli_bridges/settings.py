@@ -13,6 +13,20 @@ class SettingsBridge(CLIBridge):
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to update pip: {e}")
 
+    def update_ssl(self) -> None:
+        """Update SSL certificates."""
+        try:
+            subprocess.run(["pageplus", "system", "update-ssl"], check=True)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Failed to update SSL certificates: {e}")
+
+    def clean_logs(self) -> None:
+        """Clean all log files."""
+        try:
+            subprocess.run(["pageplus", "system", "clean-logs"], check=True)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"Failed to clean logs: {e}")
+
     def set_workspace_dir(self, wsdir: str) -> None:
         """Set the workspace directory."""
         try:
