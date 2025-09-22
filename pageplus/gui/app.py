@@ -52,12 +52,14 @@ from pageplus.gui.views.transkribus import show_transkribus
 from pageplus.gui.views.mets import show_mets
 from pageplus.gui.views.evaluation import show_evaluation
 from pageplus.gui.views.viewer import show_viewer
+from pageplus.gui.views.iiif import show_iiif_downloader
 from pageplus.gui.utils.settings import Settings
 from pageplus.gui.cli_bridges.gemini import GeminiBridge
 from pageplus.gui.cli_bridges.escriptorium import EscriptoriumBridge
 from pageplus.gui.cli_bridges.transkribus import TranskribusBridge
 from pageplus.gui.cli_bridges.mets import MetsBridge
 from pageplus.gui.cli_bridges.dinglehopper import DinglehopperBridge
+from pageplus.gui.cli_bridges.iiif import IIIFBridge
 from pageplus.gui.cli_bridges import (
     CLIBridge,
     AnalysisBridge,
@@ -160,6 +162,7 @@ def main():
             'transkribus': TranskribusBridge(),
             'mets': MetsBridge(),
             'dinglehopper': DinglehopperBridge(),
+            'iiif': IIIFBridge(),
         }
 
     # Initialize pages
@@ -182,6 +185,7 @@ def main():
          "📜 eScriptorium",
          "🐇 Transkribus",
          "📚 METS",
+         "📑 IIIF",
          "🖼️ Viewer",
          "🔍 Analytics",
          "✅ Validation",
@@ -206,6 +210,8 @@ def main():
         show_transkribus(st.session_state.bridges['transkribus'])
     elif page == "📚 METS":
         show_mets(st.session_state.bridges['mets'])
+    elif page == "📑 IIIF":
+        show_iiif_downloader(st.session_state.bridges['iiif'])
     elif page == "🖼️ Viewer":
         if not st.session_state.loaded_files:
             st.warning("Please load files first in the 'Input' page.")
@@ -317,6 +323,7 @@ def show_home():
     📜 eScriptorium: Work with eScriptorium  
     🐇 Transkribus: Work with Transkribus  
     📚 METS Tools: Work with METS/MODS files   
+    📑 IIIF: Download images from IIIF manifests
     🖼️ Viewer: View PAGE-XML files with images  
     🔍 Analytics: Analyze the content of PAGE-XML files  
     ✅ Validation: Validate PAGE-XML files  

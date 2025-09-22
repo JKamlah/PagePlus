@@ -14,7 +14,9 @@ from pageplus.cli import (
     ocr_kraken,
     ocr_tesseract,
     escriptorium,
-    transkribus)
+    transkribus,
+    iiif
+)
 import typer
 from pageplus.utils.logger import configure_external_logging
 
@@ -37,6 +39,7 @@ app.add_typer(validation.app, name="validation", rich_help_panel="PagePlus")
 # app.add_typer(visualize.app, name="visualize", rich_help_panel="PagePlus")
 app.add_typer(modification.app, name="modification", rich_help_panel="PagePlus")
 app.add_typer(mets.app, name="mets", rich_help_panel="PagePlus")
+app.add_typer(iiif.app, name="iiif", rich_help_panel="PagePlus")
 app.add_typer(workspace.app, name="workspace", rich_help_panel="PagePlus")
 app.add_typer(ingest.app, name="ingest", rich_help_panel="PagePlus")
 app.add_typer(export.app, name="export", rich_help_panel="PagePlus")
