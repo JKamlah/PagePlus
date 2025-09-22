@@ -178,24 +178,39 @@ def main():
         unsafe_allow_html=True
     )
     st.sidebar.title("Navigation")
-    page = st.sidebar.radio(
+    
+    # Initialize session state for navigation
+    if 'main_page_selection' not in st.session_state:
+        st.session_state.main_page_selection = "✨ Home"
+    if 'external_page_selection' not in st.session_state:
+        st.session_state.external_page_selection = None
+    
+    def clear_other_nav(nav_type):
+        if nav_type == 'main' and st.session_state.external_page_selection is not None:
+            st.session_state.external_page_selection = None
+        elif nav_type == 'external' and st.session_state.main_page_selection is not None:
+            st.session_state.main_page_selection = None
+
+    main_pages = ["✨ Home", "📂 Input", "🖼️ Viewer", "🔍 Analytics", "✅ Validation", 
+                  "📊 Evaluation", "🛠️ Modification", "🌟 Gemini", "📤 Export", 
+                  "🗂️ Workspace", "⚙️ Settings"]
+    
+    st.sidebar.radio(
         "Select Page",
-        ["✨ Home",
-         "📂 Input",
-         "📜 eScriptorium",
-         "🐇 Transkribus",
-         "📚 METS",
-         "📑 IIIF",
-         "🖼️ Viewer",
-         "🔍 Analytics",
-         "✅ Validation",
-         "📊 Evaluation",
-         "🛠️ Modification",
-         "🌟 Gemini",
-         "📤 Export",
-         "🗂️ Workspace",
-         "⚙️ Settings"]
+        main_pages,
+        key='main_page_selection',
+        on_change=lambda: clear_other_nav('main')
     )
+    
+    with st.sidebar.expander("External Resources"):
+        external_pages = ["📜 eScriptorium", "🐇 Transkribus", "📚 METS", "📑 IIIF"]
+        st.radio(
+            "Select External Ressource Page",
+            external_pages,
+            key='external_page_selection',
+            on_change=lambda: clear_other_nav('external')
+        )
+    page = st.session_state.main_page_selection or st.session_state.external_page_selection
 
     # Display selected page
     if page == "✨ Home":
