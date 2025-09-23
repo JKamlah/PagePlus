@@ -9,6 +9,7 @@ from typing import List, Annotated
 
 import typer
 from rich import print
+from dotenv import load_dotenv, dotenv_values, find_dotenv, set_key
 
 from pageplus.io.logger import logging
 from pageplus.models.page import Page
@@ -19,6 +20,9 @@ from pageplus.utils.image import get_image, crop_image_by_polygon
 from pageplus.utils.profile import profile, ProfileFnRet
 
 app = typer.Typer()
+
+load_dotenv()
+envs = dotenv_values()
 
 
 def _install(env_path: Path = None) -> None:
@@ -66,6 +70,17 @@ if spec := util.find_spec('kraken') is None:
         else:
             print(f"Error: {env_path} is not a valid directory!")
 
+
+elif envs.get('PAGEPLUS_OCR_KRAKEN', 'False') == 'False':
+
+    @app.command()
+    def activate() -> None:
+        """
+        Activate before Kraken can be used!
+        """
+        set_key(find_dotenv(), 'PAGEPLUS_OCR_KRAKEN', 'True')
+        print("[green]Kraken OCR is now activated![/green]")
+
 else:
 
     try:
@@ -80,7 +95,7 @@ else:
         import_done = True
     except BaseException:
         print("Warning: Kraken disabled. Please re-install Kraken-OCR!")
-
+        
         @app.command()
         def install() -> None:
             """
@@ -104,6 +119,15 @@ else:
         import_done = False
 
     if import_done:
+
+        @app.command()
+        @profile('kraken-ocr')
+        def deactivate() -> None:
+            """
+            Do not load Kraken OCR for performance!
+            """
+            set_key(find_dotenv(), 'PAGEPLUS_OCR_KRAKEN', 'False')
+            print("[red]Kraken OCR is now deactivated![/red]")
 
         @app.command()
         @profile('kraken-ocr')

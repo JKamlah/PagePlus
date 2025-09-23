@@ -8,6 +8,7 @@ from typing import List, Annotated
 
 import typer
 from rich import print
+from dotenv import load_dotenv, dotenv_values, find_dotenv, set_key
 
 from pageplus.io.logger import logging
 from pageplus.models.page import Page
@@ -18,6 +19,9 @@ from pageplus.utils.image import get_image, crop_image_by_polygon
 from pageplus.utils.profile import profile, ProfileFnRet
 
 app = typer.Typer()
+
+load_dotenv()
+envs = dotenv_values()
 
 
 def _install(env_path: Path = None) -> None:
@@ -34,14 +38,32 @@ if spec := util.find_spec('pytesseract') is None:
     @app.command()
     def install() -> None:
         """
-        Before tesseract can be used, please use this install command
+        Before Tesseract can be used, please use this install command
         to install pytesseract by Samuel Hoffstaetter!
         """
         _install()
 
+elif envs.get('PAGEPLUS_OCR_TESSERACT', 'False') == 'False':
+
+    @app.command()
+    def activate() -> None:
+        """
+        Activate before Tesseract can be used!
+        """
+        set_key(find_dotenv(), 'PAGEPLUS_OCR_TESSERACT', 'True')
+        print("[green]Tesseract OCR is now activated![/green]")
 
 else:
     import pytesseract
+
+    @app.command()
+    @profile('tesseract-ocr')
+    def deacticvate() -> None:
+        """
+        Do not load Tesseract OCR for performance!
+        """
+        set_key(find_dotenv(), 'PAGEPLUS_OCR_TESSERACT', 'False')
+        print("[red]Tesseract OCR is now deactivated![/red]")
 
     @app.command()
     @profile('tesseract-ocr')
