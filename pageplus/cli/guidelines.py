@@ -302,6 +302,11 @@ def mapping_text(
             typer.secho("    New:      ", fg=typer.colors.GREEN, nl=False)
             typer.echo(log_entry['new'])
 
+    return {
+        "replacement_counts": handler.replacement_counts,
+        "change_log": change_log
+    }
+
 
 if __name__ == '__main__':
     app()

@@ -5,6 +5,8 @@ from pageplus.gui.views.guideline_views.profile_editor import profile_editor_vie
 from pageplus.gui.views.guideline_views.unicode_finder import unicode_finder_view
 from pathlib import Path
 from pageplus.utils.guidelines.lib.unicodecache import get_name
+from collections import Counter
+from collections import defaultdict
 
 
 def get_glyph_name(glyph):
@@ -174,6 +176,53 @@ def render_evaluation_results(results):
         st.write("No per-file results available.")
 
 
+def render_mapping_results(mapping_data):
+    """Renders the mapping results in an interactive way."""
+    replacement_counts = mapping_data.get("replacement_counts", {})
+    change_log = mapping_data.get("change_log", {})
+
+    if not replacement_counts:
+        st.info("No replacements were made.")
+        return
+
+    st.header("Mapping Results")
+
+    # Overall Summary
+    st.subheader("Summary of Replacements")
+    total_rule_counts = Counter()
+    for filename, rules in replacement_counts.items():
+        for rule, line_counts in rules.items():
+            total_rule_counts[rule] += sum(line_counts.values())
+
+    for rule, count in total_rule_counts.items():
+        st.metric(label=rule, value=f"{count} replacements")
+
+    # Detailed view per file
+    st.subheader("Detailed Changes")
+    for filename, rules in replacement_counts.items():
+        with st.expander(f"File: {filename}"):
+            # Collect all changed lines in the file to group rules by line
+            lines_in_file = defaultdict(list)
+            for rule, line_counts in rules.items():
+                for line_id, count in line_counts.items():
+                    lines_in_file[line_id].append({"rule": rule, "count": count})
+
+            for line_id, applied_rules in sorted(lines_in_file.items()):
+                st.markdown(f"**Line: `{line_id}`**")
+
+                st.markdown("Applied Rules:")
+                for rule_info in applied_rules:
+                    st.text(f"  - {rule_info['rule']} ({rule_info['count']} replacements)")
+
+                # Find the corresponding change_log entry
+                log_entry_key = next((key for key in change_log if key[0] == filename and key[1] == line_id), None)
+                if log_entry_key and log_entry_key in change_log:
+                    log_entry = change_log[log_entry_key]
+                    st.markdown(f"Original: `{log_entry['original']}`")
+                    st.markdown(f"New: `{log_entry['new']}`")
+                st.markdown("---")
+
+
 def show_guidelines():
     st.title("📄 Guidelines Tools")
 
@@ -263,11 +312,11 @@ def show_guidelines():
                     if not result.get("success", False):
                         st.error(result.get("output", ""))
                         return
-                    st.text_area("Output", result.get("output", ""), height=300)
+
                     st.success("Mapping finished successfully!")
+                    render_mapping_results(result.get("output", {}))
 
     with tab3:
         profile_editor_view()
-
     with tab4:
         unicode_finder_view()
