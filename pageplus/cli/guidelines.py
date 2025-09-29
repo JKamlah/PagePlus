@@ -14,7 +14,7 @@ from pageplus.models.page import Page
 from pageplus.utils.guidelines.lib.evaluation import validate_with_guidelines, categorize, missing_unicode
 from pageplus.utils.guidelines.lib.functools import get_defaultdict
 from pageplus.utils.guidelines.lib.io import create_json, set_output
-from pageplus.utils.guidelines.lib.processhandler import Normalizationhandler, Evaluatehandler
+from pageplus.utils.guidelines.lib.processhandler import Mappinghandler, Evaluatehandler
 from pageplus.utils.guidelines.lib.profile_export import export_profile_to_csv
 from pageplus.utils.guidelines.lib.report import summarize, create_report, ReportCollector, write_structured_report
 from pageplus.utils.guidelines.lib.text_analyzer import FileAnalysis
@@ -206,7 +206,7 @@ def mapping_text(
     Mapping the glyphs of PAGE XML files based on a guideline profile.
     """
     xml_files = collect_xml_files(map(Path, inputs))
-    handler = Normalizationhandler(xml_files, guideline, textnormalization)
+    handler = Mappinghandler(xml_files, guideline, textnormalization)
     change_log = {}
 
     with Progress(
@@ -232,8 +232,8 @@ def mapping_text(
                         unicode_normalized_text = unicodedata.normalize(textnormalization, original_text)
 
                         # Apply guideline normalization
-                        guideline_normalized_text = handler.normalize_by_guideline(
-                            unicode_normalized_text, line.get_id(), xml_path.name, mode='normalize'
+                        guideline_normalized_text = handler.mapping_by_guideline(
+                            unicode_normalized_text, line.get_id(), xml_path.name, mode='deterministic'
                         )
 
                         if original_text != guideline_normalized_text:

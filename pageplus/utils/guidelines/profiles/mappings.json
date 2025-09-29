@@ -12,30 +12,36 @@
         ]
       },
       "LineSeparator": {
+        "mode": "regex",
         "mappings": [
           {
             "to": "¬",
-            "from": "="
+            "from": "=$"
           },
           {
             "to": "¬",
-            "from": "¬"
+            "from": "₌$"
           },
           {
             "to": "¬",
-            "from": "₌"
+            "from": "—$"
           },
           {
             "to": "¬",
-            "from": "—"
+            "from": "-$"
           },
           {
             "to": "¬",
-            "from": "-"
-          },
+            "from": "⸗$"
+          }
+        ]
+      },
+      "DoubleObliqueHyphen": {
+        "mode": "regex",
+        "mappings": [
           {
-            "to": "¬",
-            "from": "⸗"
+            "to": "-",
+            "from": "⸗(?=.)"
           }
         ]
       },
@@ -104,8 +110,8 @@
       "description": "Historic GT normalization rules",
       "rules": {
         "deterministic": [
-          "SharpS",
           "LineSeparator",
+          "DoubleObliqueHyphen",
           "LongS"
         ]
       }

@@ -77,3 +77,9 @@ class GuidelinesBridge(CLIBridge):
         """Reads and returns the category keys from categories.json."""
         manager = GuidelineManager(profile_type="rules", filename="categories.json")
         return list(manager.data.get("categories", {}).keys())
+
+    @staticmethod
+    def get_mapping_profiles() -> List[str]:
+        """Returns a list of available mapping profiles."""
+        manager = GuidelineManager(profile_type="mappings", filename="mappings.json")
+        return manager.get_profile_names()

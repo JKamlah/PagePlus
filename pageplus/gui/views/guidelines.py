@@ -227,43 +227,44 @@ def show_guidelines():
                     render_evaluation_results(result)
 
     with tab2:
-        st.header("Normalize Text")
-        with st.form("normalize_form"):
+        st.header("Text Mapping")
+        with st.form("mapping_form"):
             files_to_normalize = st.multiselect(
-                "Select files to normalize",
+                "Select files to map",
                 options=[f.name for f in loaded_files],
                 default=[f.name for f in loaded_files]
             )
-            # TODO: Add a way to dynamically get normalization profiles
-            normalization_profiles = ["GT4Hist"]
+            # TODO: Add a way to dynamically get mapping profiles
+            normalization_profiles = bridge.get_mapping_profiles()
             selected_normalization_guideline = st.selectbox(
-                "Select normalization guideline",
+                "Select mapping profile",
                 options=normalization_profiles
             )
             dry_run = st.checkbox("Dry Run", value=True)
 
-            text_normalization_normalize = st.selectbox(
-                "Text Normalization",
+            text_mapping = st.selectbox(
+                "Text Mapping",
                 options=["NFC", "NFKC", "NFD", "NFKD"],
                 index=0,
-                key="normalize_text_norm"
+                key="mapping_text_mapping"
             )
 
-            normalize_submitted = st.form_submit_button("Run Normalization")
+            mapping_submitted = st.form_submit_button("Run Mapping")
 
-            if normalize_submitted and files_to_normalize:
-                selected_files_normalize = [f for f in loaded_files if f.name in files_to_normalize]
-                with st.spinner("Running normalization..."):
-                    result = bridge.run_normalize_text(
-                        inputs=selected_files_normalize,
+            if mapping_submitted and files_to_normalize:
+                selected_files_mapping = [f for f in loaded_files if f.name in files_to_normalize]
+                with st.spinner("Running mapping..."):
+                    result = bridge.run_mapping_text(
+                        inputs=selected_files_mapping,
                         guideline=selected_normalization_guideline,
                         dry_run=dry_run,
-                        textnormalization=text_normalization_normalize,
+                        textnormalization=text_mapping,
                     )
-                    st.text_area("Output", result.stdout, height=300)
-                    if result.stderr:
-                        st.error(result.stderr)
-                    st.success("Normalization finished successfully!")
+                    if not result.get("success", False):
+                        st.error(result.get("output", ""))
+                        return
+                    st.text_area("Output", result.get("output", ""), height=300)
+                    st.success("Mapping finished successfully!")
 
     with tab3:
         profile_editor_view()
