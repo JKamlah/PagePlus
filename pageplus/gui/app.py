@@ -13,13 +13,50 @@ os.environ["STREAMLIT_BROWSER_GATHERUSAGESTATS"] = "false"
 
 import streamlit as st
 from pathlib import Path
+import threading
+from pageplus.utils.constants import GUI_STORAGE_DIR, ENV_FILE, LOGO_PATH, LOADING_PATH
+
 # Constants
-STORAGE_DIR = Path(__file__).parent / "storage"
-STORAGE_FILE = STORAGE_DIR / "loaded_files.json"
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-ENV_FILE = PROJECT_ROOT / ".env"
-LOGO_PATH = PROJECT_ROOT / 'assets/Tight_PagePlus_Logo.png'
-LOADING_PATH = PROJECT_ROOT / 'assets/loading_pageplus.gif'
+STORAGE_FILE = GUI_STORAGE_DIR / "loaded_files.json"
+
+def monitor_sessions():
+    """
+    Monitors active Streamlit sessions and shuts down the server if no sessions
+    are active for a specified duration.
+
+    NOTE: This uses an undocumented, internal Streamlit API, which may break
+    in future versions. This is not a recommended production practice.
+    """
+    # Grace period to allow for initial connections
+    time.sleep(10)
+    
+    inactivity_period = 30  # seconds
+    check_interval = 5      # seconds
+    max_inactive_checks = inactivity_period // check_interval
+    inactive_checks = 0
+    pid = os.getpid()
+    while True:
+        try:
+            # THIS IS AN UNDOCUMENTED, INTERNAL STREAMLIT API.
+            active_sessions = st.runtime.get_instance()._session_mgr.list_active_sessions()
+            
+            if not active_sessions:
+                inactive_checks += 1
+            else:
+                inactive_checks = 0  # Reset on activity
+
+            if inactive_checks >= max_inactive_checks:
+                if pid == os.getpid():
+                    logger.info(f"No active sessions for {inactivity_period} seconds. Shutting down server.")
+                    os.kill(os.getpid(), signal.SIGTERM)
+                break
+
+        except Exception as e:
+            logger.error(f"Failed to check for active Streamlit sessions: {e}. Stopping monitor.")
+            break
+
+        time.sleep(check_interval)
+
 
 # Place a container at the top
 loading = st.empty()
@@ -53,6 +90,7 @@ from pageplus.gui.views.mets import show_mets
 from pageplus.gui.views.evaluation import show_evaluation
 from pageplus.gui.views.viewer import show_viewer
 from pageplus.gui.views.iiif import show_iiif_downloader
+from pageplus.gui.views.guidelines import show_guidelines
 from pageplus.gui.utils.settings import Settings
 from pageplus.gui.cli_bridges.gemini import GeminiBridge
 from pageplus.gui.cli_bridges.escriptorium import EscriptoriumBridge
@@ -96,7 +134,7 @@ with open(LOGO_PATH, "rb") as img_file:
 
 def ensure_storage_dir():
     """Ensure the storage directory exists."""
-    STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+    GUI_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def save_loaded_files(files: List[Path]):
@@ -143,6 +181,22 @@ def save_env_settings(settings: dict):
 
 def main():
     """Run the PagePlus application."""
+    # Start the session monitor thread only once per server instance
+    lock_file = GUI_STORAGE_DIR / "session_monitor.lock"
+    if not lock_file.exists():
+        try:
+            # Create the lock file to prevent other processes from starting the monitor
+            lock_file.touch(exist_ok=False)
+            monitor_thread = threading.Thread(target=monitor_sessions, daemon=True)
+            monitor_thread.start()
+
+            # Cleanup the lock file on exit
+            import atexit
+            atexit.register(lambda: lock_file.unlink(missing_ok=True))
+        except FileExistsError:
+            # Another process created the lock file just now
+            pass
+
     # Initialize session state
     if 'loaded_files' not in st.session_state:
         st.session_state.loaded_files = load_previous_files()
@@ -178,30 +232,30 @@ def main():
         unsafe_allow_html=True
     )
     st.sidebar.title("Navigation")
-    
+
     # Initialize session state for navigation
     if 'main_page_selection' not in st.session_state:
         st.session_state.main_page_selection = "✨ Home"
     if 'external_page_selection' not in st.session_state:
         st.session_state.external_page_selection = None
-    
+
     def clear_other_nav(nav_type):
         if nav_type == 'main' and st.session_state.external_page_selection is not None:
             st.session_state.external_page_selection = None
         elif nav_type == 'external' and st.session_state.main_page_selection is not None:
             st.session_state.main_page_selection = None
 
-    main_pages = ["✨ Home", "📂 Input", "🖼️ Viewer", "🔍 Analytics", "✅ Validation", 
-                  "📊 Evaluation", "🛠️ Modification", "🌟 Gemini", "📤 Export", 
+    main_pages = ["✨ Home", "📂 Input", "🖼️ Viewer", "🔍 Analytics", "📝 Guidelines", "✅ Validation",
+                  "📊 Evaluation", "🛠️ Modification", "🌟 Gemini", "📤 Export",
                   "🗂️ Workspace", "⚙️ Settings"]
-    
+
     st.sidebar.radio(
         "Select Page",
         main_pages,
         key='main_page_selection',
         on_change=lambda: clear_other_nav('main')
     )
-    
+
     with st.sidebar.expander("External Resources"):
         external_pages = ["📜 eScriptorium", "🐇 Transkribus", "📚 METS", "📑 IIIF"]
         st.radio(
@@ -237,6 +291,11 @@ def main():
             st.warning("Please load files first in the 'Input' page.")
         else:
             show_analysis(st.session_state.bridges['analysis'])
+    elif page == "📝 Guidelines":
+        if not st.session_state.loaded_files:
+            st.warning("Please load files first in the 'Input' page.")
+        else:
+            show_guidelines()
     elif page == "✅ Validation":
         if not st.session_state.loaded_files:
             st.warning("Please load files first in the 'Input' page.")
@@ -332,15 +391,12 @@ def show_home():
     st.write("""
     This is the GUI interface for PagePlus, a PAGE-XML file multi-tool.  
     Disclaimer: A lot of the functionality is still under development and results should be checked carefully.
-    
+
     Use the sidebar to navigate between different sections:  
     📂 Input: Load PAGE-XML files to process  
-    📜 eScriptorium: Work with eScriptorium  
-    🐇 Transkribus: Work with Transkribus  
-    📚 METS Tools: Work with METS/MODS files   
-    📑 IIIF: Download images from IIIF manifests
     🖼️ Viewer: View PAGE-XML files with images  
     🔍 Analytics: Analyze the content of PAGE-XML files  
+    📜 Guidelines: Evaluate and normalize text based on guideline profiles  
     ✅ Validation: Validate PAGE-XML files  
     📊 Evaluation: Evaluate PAGE-XML files  
     🛠️ Modification: Modify processed documents  
@@ -349,7 +405,13 @@ def show_home():
     🌟 Gemini: Use Gemini to process images and validate PAGE-XML output  
     📤 Export: Export PAGE-XML files to different formats (ALTO, PDF, Text)  
     🗂️ Workspace: Manage workspaces  
-    ⚙️ Settings: Configure application settings  
+    ⚙️ Settings: Configure application settings
+
+    External Resources:  
+    📜 eScriptorium: Work with eScriptorium  
+    🐇 Transkribus: Work with Transkribus  
+    📚 METS Tools: Work with METS/MODS files   
+    📑 IIIF: Download images from IIIF manifests  
     """)
 
 

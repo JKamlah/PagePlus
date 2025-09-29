@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Annotated, List, Optional
+from typing import Annotated, Optional
 import typer
 import asyncio
 import json
@@ -37,6 +37,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
+
 @app.command()
 def download(
     manifest_url: Annotated[str, typer.Argument(help="IIIF manifest URL to download")],
@@ -64,6 +65,7 @@ def download(
         min_dim=min_dim,
     )
     manifest.download()
+
 
 @app.command(name="get-resources")
 def get_resources(

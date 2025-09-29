@@ -3,6 +3,10 @@ from __future__ import annotations
 from enum import Enum
 from pathlib import Path
 
+# --- App Information ---
+APP_NAME = "PagePlus"
+APP_AUTHOR = "PagePlus"
+
 
 class WorkState(str, Enum):
     """
@@ -181,6 +185,26 @@ VALID_TEXTLINE_ORDER = {"top-to-bottom", "bottom-to-top",
 # User Agent for HTTP requests
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
-# Environment variables
-ENV_FILE = ".env"
-STORAGE_DIR = Path.home() / ".pageplus"
+
+# --- Base Directories ---
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+
+# --- User-Specific Directories (in user's home folder) ---
+USER_DATA_DIR = Path.home() / ".pageplus"
+USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+GUI_STORAGE_DIR = USER_DATA_DIR / "storage"
+GUI_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+
+LOG_DIR = USER_DATA_DIR / "logs"
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+# --- Static Asset and Resource Directories (part of the package) ---
+ASSETS_DIR = PROJECT_ROOT / "assets"
+GUIDELINES_DIR = PACKAGE_ROOT / "utils" / "guidelines"
+
+# --- File Paths ---
+ENV_FILE = USER_DATA_DIR / ".env"
+LOGO_PATH = ASSETS_DIR / 'Tight_PagePlus_Logo.png'
+LOADING_PATH = ASSETS_DIR / 'loading_pageplus.gif'

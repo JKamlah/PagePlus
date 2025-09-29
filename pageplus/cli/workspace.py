@@ -1,17 +1,21 @@
 from pageplus.utils.workspace import Workspace
 from pageplus.utils.constants import Environments
-from dotenv import load_dotenv, find_dotenv, get_key, set_key
+from dotenv import load_dotenv, get_key, set_key
 from pathlib import Path
 
 import typer
 from rich import print
 from typing_extensions import Annotated
 
-app = typer.Typer()
+from pageplus.utils.envs import get_env_path
+
+app = typer.Typer(
+    no_args_is_help=True,
+)
 
 
 def current_workspace() -> Workspace:
-    env = get_key(find_dotenv(), Environments.PAGEPLUS.as_prefix_environment())
+    env = get_key(get_env_path(), Environments.PAGEPLUS.as_prefix_environment())
     return Workspace(
         Environments[env]) if env else Workspace(
         Environments.PAGEPLUS)
@@ -52,7 +56,9 @@ def load_workspace(workspace: Annotated[str, typer.Argument(
     Returns:
     None
     """
+    load_dotenv(dotenv_path=get_env_path())
     pp_workspace().load(workspace)
+    print(f"Workspace {workspace} loaded.")
 
 
 @app.command(rich_help_panel="Workspace")
@@ -166,7 +172,7 @@ def load_local_document(inputdir: Annotated[Path,
               " Please set [green]overwrite-workspace[/green] "
               "to True, if you want to overwrite the workspace.")
     if inputdir.is_dir():
-        set_key(find_dotenv(), pp_workspace().prefix_ws +
+        set_key(get_env_path(), pp_workspace().prefix_ws +
                 workspace, str(inputdir.absolute()))
         if loading:
             load_workspace(workspace)

@@ -15,10 +15,14 @@ import typer
 from rich import print
 from rich.status import Status
 from rich.table import Table
-from typing_extensions import Annotated, Optional
+from typing_extensions import Annotated
 
 from pageplus.utils.converter import parse_page_ranges
 from pageplus.utils.fs import transform_inputs, collect_xml_files
+from pageplus.utils.envs import get_env_path
+from pageplus.utils.api import TranskribusAPI
+from pageplus.utils.constants import Environments
+from pageplus.utils.workspace import Workspace
 
 app = typer.Typer()
 
@@ -39,7 +43,7 @@ else:
 
     import pandas as pd
     from transkribus_utils.transkribus_utils import PagePlusTranskribusUtils
-    from dotenv import load_dotenv, find_dotenv, get_key, set_key, dotenv_values
+    from dotenv import load_dotenv, set_key, dotenv_values
 
     from pageplus.utils.constants import Environments, WorkState
     from pageplus.utils.envs import str_to_env
@@ -188,7 +192,7 @@ else:
         Returns:
         None
         """
-        load_dotenv()
+        load_dotenv(get_env_path())
         # envs = dotenv_values()
         if not ts_api.valid_login():
             return
@@ -321,8 +325,8 @@ else:
         None
         """
         # Create a Path object for the directory
-        load_dotenv()
-        envs = dotenv_values()
+        load_dotenv(get_env_path())
+        envs = dotenv_values(get_env_path())
         workspace = str_to_env(workspace)
         if not ts_api.valid_login():
             return
@@ -346,7 +350,7 @@ else:
                 dir=ts_workspace.dir())) if folderpath is None else Path(folderpath)
         wsfolder.mkdir(parents=True, exist_ok=True)
 
-        dotfile = find_dotenv()
+        dotfile = get_env_path()
         metadata = {ts_workspace.env: {'collection': {}}}
 
         for idx, (md, transcript) in enumerate(pagedata):
@@ -450,8 +454,7 @@ else:
         None
         """
         # Create a Path object for the directory
-        load_dotenv()
-        envs = dotenv_values()
+        load_dotenv(get_env_path())
         if not ts_api.valid_login():
             return
         # TODO:
@@ -459,7 +462,7 @@ else:
 
         tsclient = PagePlusTranskribusUtils(*ts_api.credentials)
 
-        page_names = []
+        page_names = {}
         # Create a BytesIO object to hold the zip file in memory
         xml_files = collect_xml_files(map(Path, inputs))
         # Raise error if no xml files are found
@@ -546,8 +549,7 @@ else:
         from pageplus.io.parser import parse_xml
         from pageplus.io.writer import write_xml
 
-        load_dotenv()
-        envs = dotenv_values()
+        load_dotenv(get_env_path())
         xml_files = collect_xml_files(map(Path, inputs))
         outputdir = Path(outputdir) if outputdir is not None else Path(outputdir)
         outputdir.mkdir(parents=True, exist_ok=True)

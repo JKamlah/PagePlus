@@ -18,6 +18,7 @@ from pageplus.gui.utils.picker import pick_files, pick_directory
 from pageplus.gui.utils.settings import Settings
 from pageplus.utils.constants import Environments
 from pageplus.utils.workspace import Workspace
+from pageplus.utils.constants import GUI_STORAGE_DIR
 
 
 def strip_ansi_codes(text_to_clean):
@@ -213,7 +214,7 @@ def process_result(
 
 def load_prompt_templates() -> dict:
     """Load prompt templates from storage."""
-    storage_file = Path(__file__).parent.parent / "storage" / "gemini.json"
+    storage_file = GUI_STORAGE_DIR / "gemini.json"
     if storage_file.exists():
         with open(storage_file, 'r') as f:
             user_templates = json.load(f)
@@ -228,7 +229,7 @@ def load_prompt_templates() -> dict:
 
 def save_prompt_templates(templates: dict) -> None:
     """Save prompt templates to storage."""
-    storage_file = Path(__file__).parent.parent / "storage" / "gemini.json"
+    storage_file = GUI_STORAGE_DIR / "gemini.json"
     storage_file.parent.mkdir(parents=True, exist_ok=True)
     with open(storage_file, 'w') as f:
         json.dump(templates, f, indent=4)

@@ -15,14 +15,15 @@ from pageplus.cli import (
     ocr_tesseract,
     escriptorium,
     transkribus,
-    iiif
+    iiif,
+    guidelines
 )
 import typer
+
 from pageplus.utils.logger import configure_external_logging
 
 # Configure external logging
 configure_external_logging()
-
 
 # Create Typer app
 app = typer.Typer()
@@ -32,6 +33,7 @@ app.add_typer(transkribus.app, name="transkribus", rich_help_panel="Transcriptio
 app.add_typer(dinglehopper.app, name="dinglehopper", rich_help_panel="PagePlus - external tools")
 app.add_typer(litellm.app, name="litellm", rich_help_panel="PagePlus - external tools")
 app.add_typer(gemini.app, name="gemini", rich_help_panel="PagePlus - external tools")
+app.add_typer(guidelines.app, name="guidelines", rich_help_panel="PagePlus - external tools")
 app.add_typer(ocr_kraken.app, name="kraken", rich_help_panel="Kraken - external tools")
 app.add_typer(ocr_tesseract.app, name="tesseract", rich_help_panel="Tesseract - external tools")
 app.add_typer(analytics.app, name="analytics", rich_help_panel="PagePlus")

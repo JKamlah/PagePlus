@@ -2,20 +2,19 @@ from pathlib import Path
 from typing import Any, Dict
 
 from dotenv import dotenv_values, set_key
+from pageplus.utils.constants import ENV_FILE, GUI_STORAGE_DIR
 
 
 class Settings:
     """Handle application settings persistence using .env file."""
 
     def __init__(self):
-        self.config_dir = Path(__file__).parent.parent.parent.parent
-        self.env_file = self.config_dir / ".env"
+        self.env_file = ENV_FILE
         self._ensure_env_file()
         self.settings = self._load_settings()
 
     def _ensure_env_file(self) -> None:
         """Ensure .env file exists with default values."""
-        self.config_dir.mkdir(parents=True, exist_ok=True)
         if not self.env_file.exists():
             default_settings = {
                 "OUTPUT_DIRECTORY": str(Path.home() / "pageplus_output"),

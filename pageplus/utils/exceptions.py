@@ -1,3 +1,8 @@
+class PagePlusException(Exception):
+    """Base exception for all PagePlus errors."""
+    pass
+
+
 class PageXMLError(Exception):
     pass
 

@@ -8,16 +8,21 @@ from typing import Any, Iterator, List, Tuple
 
 import lxml.etree as ET
 import typer
-from dotenv import dotenv_values, find_dotenv, get_key, load_dotenv
+from dotenv import dotenv_values, get_key, load_dotenv
 
 from pageplus.utils.constants import Environments, PagePlus
-from pageplus.utils.envs import str_to_env
+from pageplus.utils.envs import str_to_env, get_env_path
 from pageplus.utils.exceptions import InputsDoNotExistException
+from pageplus.utils.workspace import Workspace
+from rich.progress import track
+from lxml import etree
+
+ws = Workspace()
 
 
 def open_folder_default() -> bool:
     """Set the directory where all workspaces by all environments get stored"""
-    dotfile = find_dotenv()
+    dotfile = get_env_path()
     return get_key(
         dotfile,
         PagePlus.SYSTEM.as_prefix() +
@@ -66,7 +71,7 @@ def join_modified_path(path: Path, count: int) -> Path:
         Path: The updated path with the modified segment appended 'count' times.
     """
     mod_path = get_key(
-        find_dotenv(),
+        get_env_path(),
         Environments.PAGEPLUS.as_prefix() +
         'MODIFIED')
     for _ in range(0, count):
@@ -379,6 +384,81 @@ def determine_output_path(xml_file, outputdir, filename):
     load_dotenv()
     if outputdir is None:
         return xml_file.parent / \
-            get_key(find_dotenv(), Environments.PAGEPLUS.as_prefix() + 'MODIFIED') / filename
+            get_key(get_env_path(), Environments.PAGEPLUS.as_prefix() + 'MODIFIED') / filename
     else:
         return Path(outputdir) / filename
+
+
+def get_prefixed_files_from_ws(prefix: str) -> List[Path]:
+    files = []
+    ws_path = ws.get_ws_path(
+        ws.get_loaded_ws().replace(
+            ws.prefix_ws, ''))
+    if ws_path:
+        for file in Path(ws_path).iterdir():
+            if file.name.startswith(prefix):
+                files.append(file)
+    return files
+
+
+def save_result_to_ws(result: str, filename: str, from_file: Path) -> Path:
+    load_dotenv(dotenv_path=get_env_path())
+    envs = dotenv_values(dotenv_path=get_env_path())
+
+    current_ws = envs.get("PAGEPLUS_LOADED_WS", None)
+    if not current_ws:
+        raise ValueError("PAGEPLUS_LOADED_WS not set in environment.")
+
+    output_dir = Path(get_key(get_env_path(), Environments.PAGEPLUS.as_prefix() + 'MODIFIED'))
+    if not output_dir.exists():
+        output_dir.mkdir(parents=True)
+
+    output_path = output_dir / filename
+    with open(output_path, 'w') as f:
+        f.write(result)
+    return output_path
+
+
+def get_img_path_from_pagexml(page_path: Path) -> Path | None:
+    """
+    Returns the path to the image file referenced in a PAGE XML file.
+    """
+    load_dotenv(dotenv_path=get_env_path())
+    envs = dotenv_values(dotenv_path=get_env_path())
+
+    # Try to find the image in the current workspace first
+    current_ws = envs.get("PAGEPLUS_LOADED_WS", None)
+    if current_ws:
+        ws_path = ws.get_ws_path(current_ws)
+        if ws_path:
+            for img_file in Path(ws_path).iterdir():
+                if img_file.name == page_path.name:
+                    return img_file
+    return None
+
+
+def get_project_from_pagexml(page_path: Path) -> str | None:
+    load_dotenv(dotenv_path=get_env_path())
+
+    tree = etree.parse(page_path)
+    # Define the namespace map
+    ns = {
+        'page': "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15",
+        'xlink': "http://www.w3.org/1999/xlink"
+    }
+
+    # Find the project element
+    project_elem = tree.find(".//page:project", ns)
+    if project_elem is not None:
+        return project_elem.text
+    return None
+
+
+def get_modified_pagexml_path(page_path: Path) -> Path | None:
+    load_dotenv(dotenv_path=get_env_path())
+    filename = Path(page_path).name
+
+    try:
+        return Path(get_key(get_env_path(), Environments.PAGEPLUS.as_prefix() + 'MODIFIED') / filename)
+    except TypeError:
+        return None

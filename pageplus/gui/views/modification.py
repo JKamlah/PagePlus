@@ -1,7 +1,7 @@
 from importlib import util
 from datetime import datetime
 import json
-from typing import Callable, Any
+from typing import Any
 import inspect
 
 import streamlit as st

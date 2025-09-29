@@ -2,21 +2,30 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import List
+from typing import List, Dict
 
 from dotenv import dotenv_values, load_dotenv
+from pageplus.utils.constants import ENV_FILE
 
 
-def filter_envs(pattern: str) -> dict:
-    """
-    Filters dotenv values for a specific pattern (e.g. services, prefixes, ..)
+def get_env_path() -> Path:
+    """Returns the path to the application's .env file."""
+    return ENV_FILE
+
+
+def filter_dotenv(pattern: str) -> Dict[str, str]:
+    """Filters dotenv values for a specific pattern (e.g. services, prefixes, ..)
     Returns:
-        dict
+        Dict[str, str]: Filtered dictionary
     """
-    load_dotenv()
-    envs = dotenv_values()
-    return dict(sorted([(var, key) for (var, key) in envs.items()
-                if var.startswith(pattern)], key=lambda x: x[0]))
+    load_dotenv(dotenv_path=get_env_path())
+    envs = dotenv_values(dotenv_path=get_env_path())
+
+    filtered_envs: Dict[str, str] = {}
+    for key, value in envs.items():
+        if key.startswith(pattern):
+            filtered_envs[key] = value
+    return filtered_envs
 
 
 def str_to_env(string: str, substring=True) -> str:

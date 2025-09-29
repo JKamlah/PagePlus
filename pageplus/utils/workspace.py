@@ -9,15 +9,18 @@ from pathlib import Path
 from typing import Type
 
 import typer
-from dotenv import (dotenv_values, find_dotenv, get_key, load_dotenv, set_key,
+from dotenv import (dotenv_values, get_key, load_dotenv, set_key,
                     unset_key)
 from rich import print
 from rich.table import Table
 from typing_extensions import Annotated
 
 from pageplus.utils.constants import Environments, PagePlus
-from pageplus.utils.envs import filter_envs, str_to_env
+from pageplus.utils.envs import filter_dotenv, str_to_env, get_env_path
 from pageplus.utils.fs import collect_xml_files
+from pageplus.io.logger import logging
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -40,7 +43,7 @@ class Workspace:
         ensuring case-insensitive comparison.
         """
         value = get_key(
-            find_dotenv(),
+            get_env_path(),
             self.prefix_loaded_ws).replace(
             self.prefix_ws,
             '') if value is None else value
@@ -57,7 +60,7 @@ class Workspace:
         Get current workspace directory (Default: Tempfolder)
         Returns:
         """
-        dotfile = find_dotenv()
+        dotfile = get_env_path()
         ws_dir = get_key(dotfile, ws_dir)
         return Path(ws_dir) if (
             ws_dir and ws_dir != 'tmp') else Path(
@@ -78,9 +81,9 @@ class Workspace:
         table.add_column("Workspace folder")
         [table.add_row('[green bold]Loaded workspace[/green bold]',
                        f"[cyan]{key.replace(self.prefix_ws, '')}[/cyan]")
-         for (val, key) in filter_envs(self.prefix_loaded_ws).items()]
+         for (val, key) in filter_dotenv(self.prefix_loaded_ws).items()]
         [table.add_row(val.replace(self.prefix_ws, ''), key) for (val, key)
-         in filter_envs(self.prefix_ws).items()]
+         in filter_dotenv(self.prefix_ws).items()]
         print(table)
 
     def names(self):
@@ -89,7 +92,7 @@ class Workspace:
         Conversion to lowercase for case-insensitive handling is done in the callback
         """
         return [key.replace(self.prefix_ws, '')
-                for key in filter_envs(self.prefix_ws).keys()]
+                for key in filter_dotenv(self.prefix_ws).keys()]
 
     def loaded(self):
         """
@@ -99,7 +102,7 @@ class Workspace:
         return [
             val.replace(
                 self.prefix_ws,
-                '') for val in filter_envs(
+                '') for val in filter_dotenv(
                 self.prefix_loaded_ws).values()][0]
 
     def path(self, workspace: str) -> str:
@@ -107,14 +110,14 @@ class Workspace:
         Get path of a workspace
         Returns:
         """
-        return get_key(find_dotenv(), self.prefix_ws + workspace)
+        return get_key(get_env_path(), self.prefix_ws + workspace)
   
     def update_path(self, workspace: str, path: str) -> None:
         """
         Set path of a workspace
         Returns:
         """
-        return set_key(find_dotenv(), self.prefix_ws + workspace, path) if Path(path).exists() else None
+        return set_key(get_env_path(), self.prefix_ws + workspace, path) if Path(path).exists() else None
 
     def load(self, workspace: str) -> None:
         """
@@ -122,7 +125,7 @@ class Workspace:
         Returns:
         None
         """
-        dotfile = find_dotenv()
+        dotfile = get_env_path()
         if workspace == '':
             set_key(dotfile, self.prefix_loaded_ws, workspace)
         else:
@@ -138,19 +141,19 @@ class Workspace:
         Returns:
         None
         """
-        dotenv_path = find_dotenv()
-        for (var, key) in filter_envs(self.prefix_ws).items():
+        dotenv_path = get_env_path()
+        for (var, key) in filter_dotenv(self.prefix_ws).items():
             if not Path(key).exists():
                 print(
                     f"Workspace {var.replace(self.prefix_ws, '')} does not exist anymore and will be deleted!")
                 unset_key(dotenv_path, var)
-        for (var, key) in filter_envs(self.prefix_loaded_ws).items():
+        for (var, key) in filter_dotenv(self.prefix_loaded_ws).items():
             workspace = self.prefix_ws + \
                 get_key(dotenv_path, self.prefix_loaded_ws)
             if not get_key(dotenv_path, workspace):
                 print(
                     "Loaded workspace does not exist anymore and will set to empty!")
-                set_key(find_dotenv(), var, '')
+                set_key(get_env_path(), var, '')
 
     def delete(self, workspace: str, all_files: bool = False) -> None:
         """
@@ -158,7 +161,7 @@ class Workspace:
         Returns:
         None
         """
-        dotenv_path = find_dotenv()
+        dotenv_path = get_env_path()
         workspace = self.prefix_ws + workspace
         wsfolder = Path(get_key(dotenv_path, workspace))
         if wsfolder.exists() and all_files:
@@ -188,13 +191,13 @@ class Workspace:
         if workspace == '':
             print("Please provide a valid workspace or load workspace.")
             return
-        wsfolder = Path(get_key(find_dotenv(), self.prefix_ws + workspace))
+        wsfolder = Path(get_key(get_env_path(), self.prefix_ws + workspace))
         if wsfolder.exists():
             Path(destination_path).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(wsfolder, destination_path)
             if new_workspace != "":
                 new_workspace = str_to_env(new_workspace)
-                set_key(find_dotenv(), self.prefix_ws +
+                set_key(get_env_path(), self.prefix_ws +
                         new_workspace, str(Path(destination_path).absolute()))
 
     def backup(
@@ -207,6 +210,7 @@ class Workspace:
         Returns:
         None
         """
+        from pageplus.utils.fs import collect_xml_files
         load_dotenv()
         envs = dotenv_values()
         workspace = envs.get(
@@ -217,7 +221,7 @@ class Workspace:
         if workspace == '':
             print("Please provide a valid workspace or load workspace.")
             return
-        wsfolder = Path(get_key(find_dotenv(), self.prefix_ws + workspace))
+        wsfolder = Path(get_key(get_env_path(), self.prefix_ws + workspace))
         if wsfolder.exists():
             backup_path = wsfolder.joinpath(backup_folder)
             if as_zip:
@@ -251,7 +255,7 @@ class Workspace:
         if workspace == '':
             print("Please provide a valid workspace or load workspace.")
             return
-        wsfolder = Path(get_key(find_dotenv(), self.prefix_ws + workspace))
+        wsfolder = Path(get_key(get_env_path(), self.prefix_ws + workspace))
         if from_zip:
             backup_path = wsfolder.joinpath(backup_folder).with_suffix('.zip')
             shutil.unpack_archive(backup_path, wsfolder)

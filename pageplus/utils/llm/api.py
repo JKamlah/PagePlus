@@ -3,13 +3,14 @@ from importlib import util
 
 import requests
 import typer
-from dotenv import find_dotenv, get_key, set_key
+from dotenv import get_key, set_key
 from rich import print
 from rich.table import Table
 from typing_extensions import Annotated
 
 from pageplus.utils.api import API
 from pageplus.utils.constants import Environments, LLMProvider
+from pageplus.utils.envs import get_env_path
 
 if (spec := util.find_spec('litellm')) is not None:
     import litellm
@@ -43,7 +44,7 @@ if (spec := util.find_spec('litellm')) is not None:
             None
             """
             modelname = get_key(
-                find_dotenv(),
+                get_env_path(),
                 self.environment.as_prefix() +
                 self.prefix_provider() +
                 'MODEL')
@@ -64,7 +65,7 @@ if (spec := util.find_spec('litellm')) is not None:
             try:
                 assert self.check_model(modelname)
                 set_key(
-                    find_dotenv(),
+                    get_env_path(),
                     self.environment.as_prefix() +
                     self.prefix_provider() +
                     'MODEL',
@@ -192,7 +193,7 @@ if (spec := util.find_spec('google')) is not None and (
             None
             """
             modelname = get_key(
-                find_dotenv(),
+                get_env_path(),
                 self.environment.as_prefix() +
                 self.prefix_provider() +
                 'MODEL')
@@ -213,7 +214,7 @@ if (spec := util.find_spec('google')) is not None and (
             try:
                 assert self.check_model(modelname)
                 set_key(
-                    find_dotenv(),
+                    get_env_path(),
                     self.environment.as_prefix() +
                     self.prefix_provider() +
                     'MODEL',

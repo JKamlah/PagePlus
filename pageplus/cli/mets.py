@@ -181,7 +181,7 @@ def get_oai(
 @app.command()
 def get_url(url: Annotated[str, typer.Argument(help="URL to the METS XML file.")],
             output_path: Annotated[Path, typer.Option("--output-dir", "-o",
-                                    help="Directory to save the METS XML file.")] = Path("."),
+                                                      help="Directory to save the METS XML file.")] = Path("."),
             ):
     """
     Download a METS XML file directly from a URL and save to disk.

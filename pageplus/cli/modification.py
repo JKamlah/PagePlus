@@ -1612,7 +1612,7 @@ def fit_into_parent(
 
 @app.command()
 def set_page_version(inputs: Annotated[List[str], typer.Argument(exists=True,
-                                                                  help="Direct input of directories containing XML files.", callback=transform_inputs)] = None,
+                                                                 help="Direct input of directories containing XML files.", callback=transform_inputs)] = None,
                      outputdir: Annotated[Optional[str], typer.Option(
                          help="Filename of the output directory. If not specified, input files will be overwritten.",
                          callback=transform_output)] = None,
@@ -1631,22 +1631,22 @@ def set_page_version(inputs: Annotated[List[str], typer.Argument(exists=True,
     for xml_file in track(xml_files, description="Processing files..."):
         try:
             page = Page(xml_file)
-            
+
             # Validate compatibility if requested
             if validate:
                 validation_result = page.validate_version_compatibility(version)
-                
+
                 if validation_result["errors"]:
                     print(f"[red]ERROR: Cannot convert {xml_file.name} to {version.value}[/red]")
                     for error in validation_result["errors"]:
                         print(f"  [red]• {error}[/red]")
                     continue
-                
+
                 if validation_result["warnings"]:
                     print(f"[yellow]WARNING: {xml_file.name} has compatibility issues with {version.value}[/yellow]")
                     for warning in validation_result["warnings"]:
                         print(f"  [yellow]• {warning}[/yellow]")
-                
+
                 compatibility_score = validation_result["compatibility_score"]
                 if compatibility_score < 50:
                     print(f"[red]Compatibility score: {compatibility_score}% - conversion may result in data loss[/red]")
@@ -1654,21 +1654,20 @@ def set_page_version(inputs: Annotated[List[str], typer.Argument(exists=True,
                     print(f"[yellow]Compatibility score: {compatibility_score}% - some features may be affected[/yellow]")
                 else:
                     print(f"[green]Compatibility score: {compatibility_score}% - conversion should be safe[/green]")
-            
+
             if dry_run:
                 print(f"[yellow]DRY RUN: Would update {xml_file.name} to version {version.value}[/yellow]")
                 continue
-                
+
             # Update the PAGE version
             page.update_pcgts_version(version)
-            
             # Determine output path
             fout = xml_file if outputdir is None else determine_output_path(xml_file, outputdir)
-            
+
             # Save the updated file
             page.save_xml(fout)
             print(f"[green]Updated {xml_file.name} to version {version.value}[/green]")
-            
+
         except Exception as e:
             print(f"[red]Error processing {xml_file.name}: {str(e)}[/red]")
             logging.error(f"Error processing {xml_file.name}: {str(e)}")
@@ -1692,20 +1691,16 @@ def _parse_user_defined(value: Optional[List[str]]) -> Optional[dict]:
 
 @app.command()
 def set_metadata(inputs: Annotated[List[str], typer.Argument(exists=True,
-                                                                  help="Direct input of directories containing XML files.", callback=transform_inputs)] = None,
-                     outputdir: Annotated[Optional[str], typer.Option(
-                         help="Filename of the output directory. If not specified, input files will be overwritten.",
-                         callback=transform_output)] = None,
-                     creator: Annotated[str, typer.Option(help="Creator of the metadata")] = None,
-                     created: Annotated[datetime, typer.Option(help="Created date of the metadata")] = None,
-                     last_change: Annotated[datetime, typer.Option(help="Last change date of the metadata")] = None,
-                     comments: Annotated[str, typer.Option(help="Comments of the metadata")] = None,
-                     user_defined_raw: Annotated[Optional[List[str]], typer.Option(
-                         help="User defined metadata in 'key=value' format. Can be specified multiple times."
-                     )] = None,
-                     new: Annotated[bool, typer.Option(help="If True, a new metadata is created (old metadata is overwritten).")] = False,
-                     default: Annotated[bool, typer.Option(help="If True, a default metadata is created.")] = False,
-                     dry_run: Annotated[bool, typer.Option(help="If True, no files will be modified.")] = False) -> None:
+                                                             help="Direct input of directories containing XML files.", callback=transform_inputs)] = None,
+                 outputdir: Annotated[Optional[str], typer.Option(help="Filename of the output directory. If not specified, input files will be overwritten.", callback=transform_output)] = None,
+                 creator: Annotated[str, typer.Option(help="Creator of the metadata")] = None,
+                 created: Annotated[datetime, typer.Option(help="Created date of the metadata")] = None,
+                 last_change: Annotated[datetime, typer.Option(help="Last change date of the metadata")] = None,
+                 comments: Annotated[str, typer.Option(help="Comments of the metadata")] = None,
+                 user_defined_raw: Annotated[Optional[List[str]], typer.Option(help="User defined metadata in 'key=value' format. Can be specified multiple times.")] = None,
+                 new: Annotated[bool, typer.Option(help="If True, a new metadata is created (old metadata is overwritten).")] = False,
+                 default: Annotated[bool, typer.Option(help="If True, a default metadata is created.")] = False,
+                 dry_run: Annotated[bool, typer.Option(help="If True, no files will be modified.")] = False) -> None:
     """
     Updates the PAGE XML metadata of the input files.
     """
@@ -1716,7 +1711,7 @@ def set_metadata(inputs: Annotated[List[str], typer.Argument(exists=True,
 
     user_defined = _parse_user_defined(user_defined_raw)
 
-    print(f"[bold green]Updating PAGE XML metadata[/bold green]")
+    print("[bold green]Updating PAGE XML metadata[/bold green]")
     print(f"Found {len(xml_files)} XML files to process.")
     print(f" New: {new}")
     for xml_file in track(xml_files, description="Processing files..."):
@@ -1767,7 +1762,7 @@ def match_textlines_to_region(
         logging.info('Processing file: ' + filename)
 
         all_textlines = [line for region in page.regions.textregions for line in region.textlines]
-        
+
         # A dictionary to hold the new assignments of textlines to regions
         region_assignments = {region.get_id(): [] for region in page.regions.textregions}
         original_parents = {line.get_id(): line.parent for line in all_textlines}
@@ -1805,7 +1800,7 @@ def match_textlines_to_region(
         # Now, update the actual textlines in each region
         for region in page.regions.textregions:
             new_textlines = region_assignments[region.get_id()]
-            
+
             # Remove all old textlines from XML
             for line in region.textlines:
                 try:
@@ -1813,7 +1808,7 @@ def match_textlines_to_region(
                 except ValueError:
                     # Line might have already been moved from another region's list
                     pass
-            
+
             # Update the list of textlines in the object
             region.textlines.clear()
 

@@ -12,14 +12,14 @@ import io
 from io import BytesIO
 from pathlib import Path
 from shutil import rmtree
-from typing import List
+from typing import List, Optional
 
 import pandas as pd
 import typer
 from rich import print
 from rich.status import Status
 from rich.table import Table
-from typing_extensions import Annotated, Optional
+from typing_extensions import Annotated
 
 app = typer.Typer()
 
@@ -44,10 +44,10 @@ else:
         ReadDirection,
         LineOffset
     )
-    from dotenv import load_dotenv, find_dotenv, set_key, dotenv_values
+    from dotenv import load_dotenv, set_key, dotenv_values
 
     from pageplus.utils.constants import Environments, Bool2OnOff
-    from pageplus.utils.envs import str_to_env
+    from pageplus.utils.envs import str_to_env, get_env_path
     from pageplus.utils.workspace import Workspace
     from pageplus.utils.api import EscriptoriumAPI
     from pageplus.utils.fs import transform_inputs, collect_xml_files
@@ -176,7 +176,7 @@ else:
         Returns:
         None
         """
-        load_dotenv()
+        load_dotenv(get_env_path())
         if not es_api.valid_login():
             return
         escr = EscriptoriumConnector(
@@ -283,8 +283,8 @@ else:
         None
         """
         # Create a Path object for the directory
-        load_dotenv()
-        envs = dotenv_values()
+        load_dotenv(get_env_path())
+        envs = dotenv_values(get_env_path())
         workspace = workspace if workspace is not None else ""
         if workspace != "":
             workspace = str_to_env(workspace)
@@ -364,7 +364,7 @@ else:
                 print(f"The data in folder {Path(current_folder).absolute()} is now unset. "
                       f"You can load it with the load local documents function.")
         if workspace != "":
-            set_key(find_dotenv(), ws_absolute, str(wsfolder.absolute()))
+            set_key(get_env_path(), ws_absolute, str(wsfolder.absolute()))
             if loading:
                 es_workspace.load(workspace)
         print(f"The data was successfully stored in: [bold purple]{str(wsfolder.absolute())}[/bold purple]")
@@ -389,7 +389,7 @@ else:
         Returns:
         None
         """
-        load_dotenv()
+        load_dotenv(get_env_path())
 
         if not es_api.valid_login():
             return
@@ -446,7 +446,7 @@ else:
             project_name: Annotated[str, typer.Argument(help="Name of the project to create or existing procject pk")],
             document_name: Annotated[str, typer.Argument(help="Name of the document to create")],
             main_script: Annotated[Optional[str], typer.Option("--main-script", "-s",
-                                                                  help="Main script of the document")] = "Latin",
+                                                               help="Main script of the document")] = "Latin",
             images: Annotated[List[Path], typer.Option("--images", "-i",
                                                        help="Paths to image files to upload")] = None,
             xml_files: Annotated[List[Path], typer.Option("--xml", "-x",
@@ -471,8 +471,8 @@ else:
         Returns:
         None
         """
-        load_dotenv()
-        envs = dotenv_values()
+        load_dotenv(get_env_path())
+        envs = dotenv_values(get_env_path())
 
         if not es_api.valid_login():
             return
@@ -610,7 +610,7 @@ else:
                     json.dump(metadata, meta, indent=4)
 
                 # Set workspace environment variable
-                set_key(find_dotenv(), ws_absolute, str(temp_dir.absolute()))
+                set_key(get_env_path(), ws_absolute, str(temp_dir.absolute()))
                 print(f"[green]✓[/green] Project info saved to workspace: {workspace}")
 
             print("\n[bold green]Successfully created project and document![/bold green]")
@@ -652,7 +652,7 @@ else:
         Returns:
         None
         """
-        load_dotenv()
+        load_dotenv(get_env_path())
 
         if not es_api.valid_login():
             return

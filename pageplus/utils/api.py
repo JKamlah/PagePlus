@@ -1,13 +1,13 @@
 from dataclasses import dataclass, field
 
 import typer
-from dotenv import dotenv_values, find_dotenv, get_key, set_key
+from dotenv import dotenv_values, get_key, set_key
 from rich import print
 from rich.table import Table
 from typing_extensions import Annotated
 
 from pageplus.utils.constants import Environments, Provider
-from pageplus.utils.envs import filter_envs
+from pageplus.utils.envs import filter_dotenv, get_env_path
 
 
 @dataclass
@@ -40,7 +40,7 @@ class API:
         None
         """
         providername = get_key(
-            find_dotenv(),
+            get_env_path(),
             self.environment.name.upper() +
             "_PROVIDER")
         return providername if providername else ''
@@ -59,7 +59,7 @@ class API:
         try:
             provider = providername.name.upper() + '__' + service.upper()
             set_key(
-                find_dotenv(),
+                get_env_path(),
                 self.environment.name.upper() +
                 "_PROVIDER",
                 provider)
@@ -75,7 +75,7 @@ class API:
         None
         """
         return get_key(
-            find_dotenv(),
+            get_env_path(),
             self.prefix +
             self.prefix_provider() +
             "BASE_URL")
@@ -89,9 +89,8 @@ class API:
         None
         """
         try:
-            dotfile = find_dotenv()
             set_key(
-                dotfile,
+                get_env_path(),
                 self.prefix +
                 self.prefix_provider() +
                 "BASE_URL",
@@ -107,7 +106,7 @@ class API:
         Returns:
         None
         """
-        dotfile = find_dotenv()
+        dotfile = get_env_path()
         name = get_key(
             dotfile, f"{self.prefix + self.prefix_provider()}USERNAME")
         password = get_key(
@@ -122,7 +121,7 @@ class API:
         None
         """
         try:
-            dotfile = find_dotenv()
+            dotfile = get_env_path()
             set_key(dotfile,
                     f"{self.prefix + self.prefix_provider()}USERNAME",
                     credentials[0])
@@ -141,7 +140,7 @@ class API:
         Returns:
         str
         """
-        dotfile = find_dotenv()
+        dotfile = get_env_path()
         return get_key(
             dotfile,
             self.prefix +
@@ -156,7 +155,7 @@ class API:
         Returns:
         None
         """
-        dotfile = find_dotenv()
+        dotfile = get_env_path()
         set_key(
             dotfile,
             self.prefix +
@@ -172,7 +171,7 @@ class API:
         Returns:
         str
         """
-        dotfile = find_dotenv()
+        dotfile = get_env_path()
         return get_key(
             dotfile,
             self.prefix +
@@ -186,7 +185,7 @@ class API:
         Returns:
         None
         """
-        dotfile = find_dotenv()
+        dotfile = get_env_path()
         set_key(dotfile, self.prefix + self.prefix_provider() + "API_KEY", key)
         print("[green]The API key updated successfully.[green]")
 
@@ -220,7 +219,7 @@ class API:
         [table.add_row(var.replace(self.prefix + self.prefix_provider(), ''), key) if
          var != self.prefix + self.prefix_provider() + "PASSWORD" else
          table.add_row(var.replace(self.prefix + self.prefix_provider(), ''), key[:3] + '***') for
-         (var, key) in filter_envs(self.prefix + self.prefix_provider()).items() if not
+         (var, key) in filter_dotenv(self.prefix + self.prefix_provider()).items() if not
          (var.startswith(self.prefix_ws) or var.startswith(self.prefix_loaded_ws) or var.replace(self.prefix + self.prefix_provider(), '').startswith('_'))]
         print(table)
 
@@ -242,7 +241,7 @@ class EscriptoriumAPI(API):
         None
         """
         return get_key(
-            find_dotenv(),
+            get_env_path(),
             self.prefix +
             self.prefix_provider() +
             "INSTANCE_NAME")
@@ -256,9 +255,8 @@ class EscriptoriumAPI(API):
         None
         """
         try:
-            dotfile = find_dotenv()
             set_key(
-                dotfile,
+                get_env_path(),
                 self.prefix +
                 self.prefix_provider() +
                 "INSTANCE_NAME",
@@ -275,7 +273,7 @@ class EscriptoriumAPI(API):
         None
         """
         return get_key(
-            find_dotenv(),
+            get_env_path(),
             self.prefix +
             self.prefix_provider() +
             "DOCUMENT_PK")
@@ -289,9 +287,8 @@ class EscriptoriumAPI(API):
         None
         """
         try:
-            dotfile = find_dotenv()
             set_key(
-                dotfile,
+                get_env_path(),
                 self.prefix +
                 self.prefix_provider() +
                 "DOCUMENT_PK",
@@ -309,7 +306,7 @@ class EscriptoriumAPI(API):
         None
         """
         return get_key(
-            find_dotenv(),
+            get_env_path(),
             self.prefix +
             self.prefix_provider() +
             "TRANSCRIPTION_PK")
@@ -323,9 +320,8 @@ class EscriptoriumAPI(API):
         None
         """
         try:
-            dotfile = find_dotenv()
             set_key(
-                dotfile,
+                get_env_path(),
                 self.prefix +
                 self.prefix_provider() +
                 "TRANSCRIPTION_PK",
@@ -363,7 +359,7 @@ class TranskribusAPI(API):
         Returns:
         str
         """
-        dotfile = find_dotenv()
+        dotfile = get_env_path()
         key = get_key(
             dotfile,
             self.prefix +
@@ -379,7 +375,7 @@ class TranskribusAPI(API):
         Returns:
         None
         """
-        dotfile = find_dotenv()
+        dotfile = get_env_path()
         set_key(
             dotfile,
             self.prefix +
@@ -397,7 +393,7 @@ class TranskribusAPI(API):
         Returns:
         str
         """
-        dotfile = find_dotenv()
+        dotfile = get_env_path()
         key = get_key(
             dotfile,
             self.prefix +
@@ -413,7 +409,7 @@ class TranskribusAPI(API):
         Returns:
         None
         """
-        dotfile = find_dotenv()
+        dotfile = get_env_path()
         set_key(
             dotfile,
             self.prefix +
@@ -430,7 +426,7 @@ class TranskribusAPI(API):
         None
         """
         return get_key(
-            find_dotenv(),
+            get_env_path(),
             self.prefix +
             self.prefix_provider() +
             "DOCUMENT_ID")
@@ -444,9 +440,8 @@ class TranskribusAPI(API):
         None
         """
         try:
-            dotfile = find_dotenv()
             set_key(
-                dotfile,
+                get_env_path(),
                 self.prefix +
                 self.prefix_provider() +
                 "DOCUMENT_ID",
@@ -464,7 +459,7 @@ class TranskribusAPI(API):
         None
         """
         return get_key(
-            find_dotenv(),
+            get_env_path(),
             self.prefix +
             self.prefix_provider() +
             "TRANSCRIPTION_ID")
@@ -478,9 +473,8 @@ class TranskribusAPI(API):
         None
         """
         try:
-            dotfile = find_dotenv()
             set_key(
-                dotfile,
+                get_env_path(),
                 self.prefix +
                 self.prefix_provider() +
                 "TRANSCRIPTION_ID",

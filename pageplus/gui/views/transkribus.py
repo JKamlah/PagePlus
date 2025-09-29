@@ -9,11 +9,12 @@ from pageplus.gui.cli_bridges.transkribus import TranskribusBridge
 from pageplus.gui.utils.picker import pick_directory, pick_files
 
 from pageplus.gui.utils.settings import Settings
+from pageplus.utils.constants import GUI_STORAGE_DIR
 
 
 def load_transkribus_ids() -> dict:
     """Load Transkribus IDs from storage."""
-    storage_file = Path(__file__).parent.parent / "storage" / "transkribus.json"
+    storage_file = GUI_STORAGE_DIR / "transkribus.json"
     if storage_file.exists():
         with open(storage_file, 'r') as f:
             try:
@@ -26,7 +27,7 @@ def load_transkribus_ids() -> dict:
 
 def save_transkribus_ids(ids: dict) -> None:
     """Save Transkribus IDs to storage."""
-    storage_file = Path(__file__).parent.parent / "storage" / "transkribus.json"
+    storage_file = GUI_STORAGE_DIR / "transkribus.json"
     storage_file.parent.mkdir(parents=True, exist_ok=True)
     with open(storage_file, 'w') as f:
         json.dump(ids, f, indent=4)
