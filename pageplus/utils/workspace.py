@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Type
+import zipfile
 
 import typer
 from dotenv import (dotenv_values, get_key, load_dotenv, set_key,
@@ -17,7 +18,6 @@ from typing_extensions import Annotated
 
 from pageplus.utils.constants import Environments, PagePlus
 from pageplus.utils.envs import filter_dotenv, str_to_env, get_env_path
-from pageplus.utils.fs import collect_xml_files
 from pageplus.io.logger import logging
 
 logger = logging.getLogger(__name__)
@@ -206,11 +206,10 @@ class Workspace:
             workspace: str = None,
             as_zip: bool = False) -> None:
         """
-        Create a backup of the xml files
-        Returns:
-        None
+        Create a backup of files in the workspace.
+        If as_zip is True, create a flat zip archive containing only XML files.
+        Otherwise, it backs up all files into a directory.
         """
-        from pageplus.utils.fs import collect_xml_files
         load_dotenv()
         envs = dotenv_values()
         workspace = envs.get(
@@ -218,22 +217,29 @@ class Workspace:
             '').replace(
             self.prefix_ws,
             '') if not workspace else str_to_env(workspace)
-        if workspace == '':
-            print("Please provide a valid workspace or load workspace.")
+        if not workspace:
+            print("Please provide a valid workspace or load a workspace.")
             return
+
         wsfolder = Path(get_key(get_env_path(), self.prefix_ws + workspace))
-        if wsfolder.exists():
-            backup_path = wsfolder.joinpath(backup_folder)
-            if as_zip:
-                shutil.make_archive(backup_path, 'zip', wsfolder)
-                print(f"Backup created: [bold green]{backup_folder}.zip[/bold green]")
-                return
-            Path(backup_path).mkdir(parents=True, exist_ok=True)
-            xml_files = collect_xml_files(map(Path, [workspace]))
-            for file in xml_files:
+        if not wsfolder.exists():
+            print(f"Workspace folder not found: {wsfolder}")
+            return
+
+        backup_path = wsfolder.joinpath(backup_folder)
+        if as_zip:
+            zip_path = wsfolder.joinpath(backup_folder).with_suffix('.zip')
+            with zipfile.ZipFile(zip_path, 'w') as zipf:
+                for file in wsfolder.glob("*.xml"):
+                    if file.is_file():
+                        zipf.write(file, file.name)
+            print(f"Backup created: [bold green]{zip_path.name}[/bold green]")
+        else:
+            backup_path.mkdir(parents=True, exist_ok=True)
+            files = [f for f in wsfolder.glob("*.xml") if f.is_file()]
+            for file in files:
                 shutil.copy(file, backup_path.joinpath(file.name))
-            print(
-                f"Backup created: [bold green]{len(xml_files)} XML-files[/bold green]")
+            print(f"Backup created: [bold green]{len(files)} files[/bold green]")
 
     def restore(
             self,
@@ -241,9 +247,7 @@ class Workspace:
             workspace: str = None,
             from_zip: bool = False) -> None:
         """
-        Restore a backup of the xml files
-        Returns:
-        None
+        Restore a backup of the workspace files.
         """
         load_dotenv()
         envs = dotenv_values()
@@ -252,21 +256,27 @@ class Workspace:
             '').replace(
             self.prefix_ws,
             '') if not workspace else str_to_env(workspace)
-        if workspace == '':
-            print("Please provide a valid workspace or load workspace.")
+        if not workspace:
+            print("Please provide a valid workspace or load a workspace.")
             return
+
         wsfolder = Path(get_key(get_env_path(), self.prefix_ws + workspace))
         if from_zip:
             backup_path = wsfolder.joinpath(backup_folder).with_suffix('.zip')
-            shutil.unpack_archive(backup_path, wsfolder)
-            print("Restored: [bold green] XML-files from zip[/bold green]")
-            return
-        backup_path = wsfolder.joinpath(backup_folder)
-        if wsfolder.exists() and backup_path.exists():
-            xml_files = collect_xml_files(map(Path, [backup_path]))
-            for file in xml_files:
-                shutil.copy(file, wsfolder)
-            print(f"Restored: [bold green]{len(xml_files)} XML-files[/bold green]")
+            if backup_path.exists():
+                shutil.unpack_archive(backup_path, wsfolder)
+                print("Restored: [bold green]files from zip[/bold green]")
+            else:
+                print(f"Backup zip not found: {backup_path}")
+        else:
+            backup_path = wsfolder.joinpath(backup_folder)
+            if wsfolder.exists() and backup_path.exists():
+                files = [f for f in backup_path.iterdir() if f.is_file()]
+                for file in files:
+                    shutil.copy(file, wsfolder)
+                print(f"Restored: [bold green]{len(files)} files[/bold green]")
+            else:
+                print(f"Backup folder not found: {backup_path}")
 
     def open(self,
              workspace: Annotated[str,
