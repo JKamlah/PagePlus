@@ -1,0 +1,99 @@
+{
+  "version": 1,
+  "rules": {
+    "forbidden": {
+      "OCRD1_PrivateUse": {
+        "sources": [
+          {
+            "hex": [
+            ]
+          }
+        ]
+      },
+      "OCRD1_Regex": {
+        "sources": [
+          {
+            "regex": [
+            ]
+          }
+        ]
+      },
+      "OCRD2_Glyphs": {
+        "sources": [
+          {
+            "hex": [
+              "0x017F",
+              "0xA75A-0xA75B",
+              "0x0132-0x0133",
+              "0xA728-0xA729",
+              "0xFB00-0xFB06"
+            ]
+          }
+        ]
+      },
+      "OCRD2_Regex": {
+        "sources": [
+          {
+            "regex": [
+              "[A-z][⸗][A-z]?"
+            ]
+          }
+        ]
+      },
+      "OCRD3_PrivateUse": {
+        "sources": [
+          {
+            "hex": [
+              "0xE000-0xF8FF"
+            ]
+          }
+        ]
+      },
+      "OCRD3_Regex": {
+        "sources": [
+          {
+            "regex": [
+            ]
+          }
+        ]
+      }
+    },
+    "exception": {
+      "OCRD1_Regex": {
+        "sources": [
+          {
+            "regex": [
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "profiles": {
+    "OCR-D-1": {
+      "rules": {
+        "forbidden": [
+          "OCRD3_PrivateUse",
+          "OCRD2_Glyphs",
+          "OCRD2_Regex"
+        ],
+        "exception": [
+        ]
+      }
+    },
+    "OCR-D-2": {
+      "rules": {
+        "forbidden": [
+          "OCRD3_PrivateUse",
+          "OCRD3_Regex"        
+        ]
+      }
+    },
+    "OCR-D-3": {
+      "rules": {
+        "forbidden": [
+        ]
+      }
+    }
+  }
+}

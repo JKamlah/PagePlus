@@ -1,0 +1,114 @@
+{
+  "version": 1,
+  "rules": {
+    "deterministic": {
+      "SharpS": {
+        "mode": "regex",
+        "mappings": [
+          {
+            "from": "sz",
+            "to": "ß"
+          }
+        ]
+      },
+      "LineSeparator": {
+        "mappings": [
+          {
+            "to": "¬",
+            "from": "="
+          },
+          {
+            "to": "¬",
+            "from": "¬"
+          },
+          {
+            "to": "¬",
+            "from": "₌"
+          },
+          {
+            "to": "¬",
+            "from": "—"
+          },
+          {
+            "to": "¬",
+            "from": "-"
+          },
+          {
+            "to": "¬",
+            "from": "⸗"
+          }
+        ]
+      },
+      "LongS": {
+        "mappings": [
+          {
+            "from": "ſ",
+            "to": "s"
+          }
+        ]
+      },
+      "RotundR": {
+        "mappings": [
+          {
+            "from": "ꝛ",
+            "to": "r"
+          }
+        ]
+      },
+      "OldUmlaut": {
+        "mappings": [
+          {
+            "from": "aͤ",
+            "to": "ä"
+          },
+          {
+            "from": "oͤ",
+            "to": "ö"
+          },
+          {
+            "from": "uͤ",
+            "to": "ü"
+          }
+        ]
+      }
+    },
+    "non-deterministic": {
+      "DoubleObliqueHyphen": {
+        "mappings": [
+          {
+            "from": "⸗",
+            "to": "¬"
+          },
+          {
+            "from": "⸗",
+            "to": "—"
+          },
+          {
+            "from": "⸗",
+            "to": "-"
+          }
+        ]
+      },
+      "JtoI": {
+        "mappings": [
+          {
+            "from": "J",
+            "to": "I"
+          }
+        ]
+      }
+    }
+  },
+  "profiles": {
+    "PagePlus-Normalization": {
+      "description": "Historic GT normalization rules",
+      "rules": {
+        "deterministic": [
+          "SharpS",
+          "LineSeparator",
+          "LongS"
+        ]
+      }
+    }
+  }
+}

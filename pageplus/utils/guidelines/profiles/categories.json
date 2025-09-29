@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "categories": {
+    "Fraktur": {
+      "rules": {
+        "Name": [
+          "FRAKTUR SMALL",
+          "FRAKTUR CAPTIAL",
+          "LATIN SMALL LETTER LONG S"
+        ]
+      }
+    },
+    "Good-Practice": {
+      "rules": {
+        "Name": [
+          "VULGAR FRACTION",
+          "ROMAN NUMERAL",
+          "SUPERSCRIPT",
+          "SUBSCRIPT",
+          "LETTER LONG S",
+          "COMBINING LATIN"
+        ],
+        "Regex": [
+          "uͤ"
+        ]
+      }
+    }
+  }
+}

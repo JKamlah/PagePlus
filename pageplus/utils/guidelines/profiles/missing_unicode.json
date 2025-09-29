@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "profiles": {
+    "Example": {
+      "rules": {
+        "Glyph": ["a", "b", "c", "d", "e", "f"],
+        "Hex": ["0x000-0x001"],
+        "Codepoint": ["10-15", "17"],
+        "Name": ["SMALL LETTER"],
+        "Name regex": ["COMBINING.*LETTER"],
+        "Block": ["Basic Latin"],
+        "Property": ["Quotation Mark"],
+        "Script": ["Latin"]
+      }
+    },
+    "BASIC-LATIN": {
+      "rules": {
+        "Hex": ["0x0021-0x007E"]
+      }
+    },
+    "GER": {
+      "rules": {
+        "Glyph": ["Ä", "ä", "Ö", "ö", "Ü", "ü", "ß"]
+      }
+    },
+    "OLD-GER": {
+      "rules": {
+        "Glyph": ["ſ", "æ", "œ", "Æ", "Œ", "Ꝛ", "ꝛ", "⸗"],
+        "Combined glyph": ["Aͤ", "aͤ", "Oͤ", "oͤ", "Uͤ", "uͤ"],
+        "Hex": ["0x0364"]
+      }
+    },
+    "HYPHENATION": {
+      "rules": {
+        "Glyph": ["-", "=", "‧", "¬"]
+      }
+    }
+  }
+}
