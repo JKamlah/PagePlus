@@ -6,8 +6,6 @@ import threading
 import time
 from io import StringIO
 from pathlib import Path
-import subprocess
-from typing import List, TYPE_CHECKING
 
 import pandas as pd
 import streamlit as st
@@ -16,8 +14,6 @@ from pageplus.gui.cli_bridges.gemini import GeminiBridge
 from pageplus.gui.utils.output_transform import rich_table_to_dataframe
 from pageplus.gui.utils.picker import pick_files, pick_directory
 from pageplus.gui.utils.settings import Settings
-from pageplus.utils.constants import Environments
-from pageplus.utils.workspace import Workspace
 from pageplus.utils.constants import GUI_STORAGE_DIR
 
 
@@ -184,7 +180,7 @@ def process_result(
 
     if result and result.get("success"):
         final_message = (
-            f"{final_output_value}\n" f"{process_type} completed successfully.\n{result.get('output','')}" f"{cost_report_str}")
+            f"{final_output_value}\n" f"{process_type} completed successfully.\n{result.get('output', '')}" f"{cost_report_str}")
         terminal_text += terminal_container.text_area(
             "Process Terminal",
             value=final_message,
@@ -422,7 +418,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
 
         if selected_main_task:
             system_prompts = templates.get(selected_main_task, {}).get("system", {})
-            user_prompts = templates.get(selected_main_task, {}).get("user", {})
+            # user_prompts = templates.get(selected_main_task, {}).get("user", {})
             prompt_names = list(system_prompts.keys())
 
             col1, col2 = st.columns(2)
@@ -479,7 +475,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                 "Select Image Directory",
                     key="select_image_dir_button"):
                 selected_dir = pick_directory()
-                
+
                 if selected_dir:
                     if selected_extensions:
                         selected_files = [
@@ -509,7 +505,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
             if st.button(
                 "Select Image Files",
                     key="select_image_files_button"):
-                
+
                 file_types = [
                     ("Image Files", " ".join(f"*{ext}" for ext in selected_extensions)),
                     ("All files", "*")
@@ -572,8 +568,8 @@ def show_gemini(bridge: "GeminiBridge") -> None:
             if st.button(
                 "Select Output Directory",
                     key="select_output_dir_button"):
-                picker_script_path = Path(__file__).parent.parent / "utils" / "picker.py"
-                command = [sys.executable, str(picker_script_path)]
+                # picker_script_path = Path(__file__).parent.parent / "utils" / "picker.py"
+                # command = [sys.executable, str(picker_script_path)]
                 selected_paths = pick_files(
                     initial_dir=get_loaded_workspace_dir(),
                     filetypes=[("All files", "*")]
@@ -674,7 +670,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                         output_queue = queue.Queue()
                         # Create a buffer to store all output
                         output_buffer = StringIO()
-                        
+
                         with st.spinner("Running OCR...", show_time=True):
 
                             # Run OCR with real-time output capture

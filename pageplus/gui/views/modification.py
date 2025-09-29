@@ -139,8 +139,8 @@ def show_modification(bridge: ModificationBridge) -> None:
                     last_change_date = st.date_input("Last Change Date", value=datetime.now(), key="metadata_last_change_date", disabled="Last Change" not in selected_options)
                     last_change_time = st.time_input("Last Change Time", value=datetime.now().time(), key="metadata_last_change_time", disabled="Last Change" not in selected_options)
 
-                created_datetime = datetime.combine(created_date, created_time).strftime("%Y-%m-%d %H:%M:%S")
-                last_change_datetime = datetime.combine(last_change_date, last_change_time).strftime("%Y-%m-%d %H:%M:%S")
+                # created_datetime = datetime.combine(created_date, created_time).strftime("%Y-%m-%d %H:%M:%S")
+                # last_change_datetime = datetime.combine(last_change_date, last_change_time).strftime("%Y-%m-%d %H:%M:%S")
 
                 col_opts1, col_opts2, col_opts3 = st.columns(3)
                 with col_opts1:

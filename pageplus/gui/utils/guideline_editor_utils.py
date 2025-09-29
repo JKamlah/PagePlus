@@ -168,7 +168,7 @@ class GuidelineManager:
                 "exception": exception_rules
             }
         self.data = self._merge_data()
-        
+
     def add_value_to_rule(self, rule_name: str, source: Dict[str, Any]):
         """This method seems unused in the profile editor but is kept for potential future use."""
         pass

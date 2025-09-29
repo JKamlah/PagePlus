@@ -152,7 +152,7 @@ def render_evaluation_results(results):
                         for detail in file_violation_details:
                             st.markdown(f"**Line:** `{detail['line_id']}`")
                             st.markdown(f"**Rule:** `{detail['rule']}`")
-                            st.markdown(f"**Content:**")
+                            st.markdown("**Content:**")
                             st.text(detail['content'])
                             if 'match' in detail:
                                 st.markdown(f"**Match:** `{detail['match']}`")

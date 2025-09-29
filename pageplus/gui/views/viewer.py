@@ -1,4 +1,3 @@
-from ast import Pass
 import streamlit as st
 from pathlib import Path
 from PIL import Image, ImageFile
@@ -36,12 +35,14 @@ def load_page_and_image(xml_path: Path, image_path: Path):
     image = load_images(image_path)
     return page, image
 
+
 @st.cache_resource
 def load_images(image_path: Path):
     """Loads and caches the Image object from file path."""
     image = Image.open(image_path)
     image.load()  # Eagerly load image data
     return image
+
 
 @st.dialog("Line Details", width="large")
 def line_detail_dialog(all_lines: list, image: Image.Image, start_index: int, page: Page, xml_path: Path):
@@ -110,7 +111,7 @@ def line_detail_dialog(all_lines: list, image: Image.Image, start_index: int, pa
 
             # Create a mask for the polygon area
             rr, cc = sk_polygon(translated_polygon[:, 1], translated_polygon[:, 0], shape=overlay.shape)
-            
+
             # Set the masked area to be fully transparent
             overlay[rr, cc] = (0, 0, 0, 0)
 
@@ -222,7 +223,7 @@ def draw_overlays(image: Image.Image, page: Page, show_regions: bool, show_lines
     # --- Step 2: Dilate masks and apply outlines to the overlay ---
     if show_regions:
         overlay[binary_dilation(region_outline_mask, disk(1))] = region_outline_color
-    
+
     if show_lines:
         overlay[line_outline_mask] = line_outline_color  # 1px thickness, no dilation needed
 
@@ -338,7 +339,7 @@ def show_viewer():
     if selected_xml_filename:
         with st.spinner("Processing image...", show_time=True):
             selected_xml_path = xml_file_map[selected_xml_filename]
-            
+
             try:
                 # --- Image Path Resolution ---
                 if (image_source_option == "Select File" and 'viewer_image_path' not in st.session_state) or \
@@ -362,7 +363,7 @@ def show_viewer():
                     if selected_image_path.name == image_filename:
                         image_path = selected_image_path
                     else:
-                        st.warning(f"The selected image file name '{selected_image_path.name}' does not match the expected name '{image_filename}'. Falling back to searching in the selected file's directory.")
+                        st.warning(f"The selected image file name '{selected_image_path.name}' does not match the expected name '{image_filename}' -> use file directory.")
                         image_path = find_image(image_filename, selected_image_path.parent)
 
                 elif image_source_option == "Select Directory" and 'viewer_image_folder' in st.session_state:
@@ -375,17 +376,17 @@ def show_viewer():
 
                 if image_path and image_path.exists():
                     st.subheader(f"Displaying: {image_path.name}")
-                    
+
                     # Step 1: Load data from the resource cache
                     page, image = load_page_and_image(selected_xml_path, image_path)
-                    
+
                     # Overlay selection
                     st.subheader("Overlay Options")
                     col1, col2 = st.columns(2)
                     with col1:
                         show_regions = st.checkbox("Show Text Regions")
                         show_lines = st.checkbox("Show Text Lines", value=True)
-                        show_baselines = st.checkbox("Show Baselines")         
+                        show_baselines = st.checkbox("Show Baselines")
                     with col2:
                         show_fulltext = st.checkbox("Show Fulltext", value=True)
 
@@ -409,7 +410,7 @@ def show_viewer():
                     cache_key = (selected_xml_path, image_path, show_regions, show_lines, show_baselines)
                     if cache_key not in st.session_state.overlay_cache:
                         st.session_state.overlay_cache[cache_key] = draw_overlays(image.copy(), page, show_regions, show_lines, show_baselines)
-                    
+
                     display_image = st.session_state.overlay_cache[cache_key]
 
                     if show_fulltext:
@@ -445,7 +446,7 @@ def show_viewer():
 
                             else:
                                 st.write("No text content found.")
-                            
+
                     else:
                         st.image(display_image, width='stretch')
 

@@ -4,6 +4,7 @@ import pandas as pd
 
 from pageplus.gui.utils.picker import pick_directory
 
+
 def show_iiif_downloader(cli_bridge):
     """Display the IIIF downloader page."""
     st.title("📑 IIIF")

@@ -12,6 +12,7 @@ from pageplus.gui.utils.settings import Settings
 from pageplus.utils.escriptorium.scripts import MAIN_SCRIPTS
 from pageplus.utils.constants import GUI_STORAGE_DIR
 
+
 def load_escriptorium_pks() -> dict:
     """Load eScriptorium PKs from storage."""
     storage_file = GUI_STORAGE_DIR / "escriptorium.json"
@@ -31,7 +32,7 @@ def load_escriptorium_pks() -> dict:
                     data["pks"] = migrated_pks
                     del data["pk"]
                     save_escriptorium_pks(data)
-                
+
                 # Migration to add project structure if missing
                 if "pks" in data:
                     for name, pk_data in data["pks"].items():
@@ -42,7 +43,7 @@ def load_escriptorium_pks() -> dict:
                         if "pk" not in pk_data.get("project", {}):
                             pk_data["project"]["pk"] = None
                     save_escriptorium_pks(data)
-                
+
                 return data
             except json.JSONDecodeError:
                 return {"pks": {}}
@@ -328,7 +329,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
                     pks_data = load_escriptorium_pks()
                     if 'pks' not in pks_data:
                         pks_data['pks'] = {}
-                    
+
                     pks_data['pks'][entry_name] = {
                         "project": {"name": project_name if project_name else "", "pk": None},  # Project PK not available in manual setting
                         "document": {"name": entry_name, "pk": doc_pk},
@@ -497,7 +498,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
             document_name = st.text_input("Document name", help="Name of the document to create")
 
         main_script = st.selectbox("Main Script", options=MAIN_SCRIPTS, index=MAIN_SCRIPTS.index("Latin"), help="Main script of the document")
-        
+
         col3, col4 = st.columns(2)
         with col3:
             st.subheader("Images")
@@ -506,7 +507,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
                 if image_files:
                     st.session_state.create_image_files = image_files
                     st.success(f"Selected {len(image_files)} image file(s)")
-            
+
             if 'create_image_files' in st.session_state:
                 st.write(f"Selected images: {len(st.session_state.create_image_files)} files")
                 for i, file_path in enumerate(st.session_state.create_image_files[:5]):  # Show first 5
@@ -520,7 +521,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
                 if xml_files:
                     st.session_state.create_xml_files = xml_files
                     st.success(f"Selected {len(xml_files)} XML file(s)")
-            
+
             if 'create_xml_files' in st.session_state:
                 st.write(f"Selected XML files: {len(st.session_state.create_xml_files)} files")
                 for i, file_path in enumerate(st.session_state.create_xml_files[:5]):  # Show first 5
@@ -595,11 +596,11 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
             project_name = st.text_input("Project Name", value=st.session_state.get("add_project_name", ""), help="Name of the project", key="add_project_name_input")
         with col2:
             project_pk = st.number_input(
-                "Project PK (optional)", 
-                min_value=0, 
-                step=1, 
-                value=st.session_state.get("add_project_pk") or 0, 
-                help="Primary key of the project (use if project name fails)", 
+                "Project PK (optional)",
+                min_value=0,
+                step=1,
+                value=st.session_state.get("add_project_pk") or 0,
+                help="Primary key of the project (use if project name fails)",
                 key="add_project_pk_input"
             )
             # Convert 0 to None for easier checking
@@ -616,7 +617,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
                 if image_files:
                     st.session_state.add_image_files = image_files
                     st.success(f"Selected {len(image_files)} image file(s)")
-            
+
             if 'add_image_files' in st.session_state:
                 st.write(f"Selected images: {len(st.session_state.add_image_files)} files")
                 for i, file_path in enumerate(st.session_state.add_image_files[:5]):  # Show first 5
@@ -630,7 +631,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
                 if xml_files:
                     st.session_state.add_xml_files = xml_files
                     st.success(f"Selected {len(xml_files)} XML file(s)")
-            
+
             if 'add_xml_files' in st.session_state:
                 st.write(f"Selected XML files: {len(st.session_state.add_xml_files)} files")
                 for i, file_path in enumerate(st.session_state.add_xml_files[:5]):  # Show first 5
@@ -657,7 +658,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
                     pks_data = load_escriptorium_pks()
                     if 'pks' not in pks_data:
                         pks_data['pks'] = {}
-                    
+
                     pks_data['pks'][manual_doc_name] = {
                         "project": {"name": manual_project_name if manual_project_name else "", "pk": None},  # Project PK not available in manual setting
                         "document": {"name": manual_doc_name, "pk": manual_doc_pk},
@@ -689,7 +690,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
                     with st.spinner("Adding parts to document..."):
                         # Debug information
                         st.write(f"Debug: project_name='{project_name}', project_pk={project_pk}, document_pk={document_pk}")
-                        
+
                         # Use project PK if available, otherwise use project name
                         if project_pk:
                             result = bridge.add_parts_by_pk(

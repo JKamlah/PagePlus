@@ -54,7 +54,6 @@ def show_transkribus(bridge: TranskribusBridge):
 
     settings = Settings()
 
-
     if 'transkribus_search_results_df' not in st.session_state:
         st.session_state.transkribus_search_results_df = None
 
@@ -378,9 +377,7 @@ def show_transkribus(bridge: TranskribusBridge):
                 st.session_state.transkribus_doc_id = doc_info.get("id")
                 st.rerun()
 
-        collection_id_up = st.number_input("Collection ID", min_value=1, step=1,
-                                            value=st.session_state.get("transkribus_col_id"),
-                                            key="transkribus_update_col_id")
+        collection_id_up = st.number_input("Collection ID", min_value=1, step=1, value=st.session_state.get("transkribus_col_id"), key="transkribus_update_col_id")
         document_id_up = st.number_input("Document ID", min_value=1, step=1,
                                          value=st.session_state.get("transkribus_doc_id"),
                                          key="transkribus_update_doc_id")
@@ -395,7 +392,6 @@ def show_transkribus(bridge: TranskribusBridge):
         if st.button("Update Document"):
             selected_files = [str(files.absolute()) for files in st.session_state.loaded_files]
             if version_update:    
-                from pathlib import Path
                 from pageplus.models.page import Page
                 tmp_folder = Path(selected_files[0]).parent.joinpath("storage/tmp")
                 tmp_folder.mkdir(parents=True, exist_ok=True)

@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import unicodedataplus as unicodedata
 
+
 def get_unicode_plane(codepoint):
     if 0x0000 <= codepoint <= 0xFFFF:
         return "Mehrsprachige Basis-Ebene (BMP)"
@@ -15,6 +16,7 @@ def get_unicode_plane(codepoint):
         return "Supplementäre Sonderebene (SSP)"
     else:
         return "N/A"
+
 
 def unicode_finder_view():
     st.header("Unicode Finder")
@@ -53,7 +55,7 @@ def unicode_finder_view():
                             })
                             seen_hex.add(hex_val)
                         except TypeError:
-                            continue # Skip invalid characters
+                            continue  # Skip invalid characters
                 elif search_by == "Codepoint":
                     try:
                         codepoint = int(search_term)

@@ -9,10 +9,6 @@ import streamlit as st
 
 from pageplus.cli.export import ReadingOrderMode
 from pageplus.gui.utils.picker import pick_directory
-from pageplus.utils.constants import Environments
-from pageplus.utils.workspace import Workspace
-from rich.prompt import Confirm
-from typing import TYPE_CHECKING
 
 
 def _run_picker_script(command: List[str]) -> List[str]:
@@ -37,7 +33,6 @@ def _run_picker_script(command: List[str]) -> List[str]:
         logging.error(f"An unexpected error occurred with the picker: {e}")
         st.error(f"An unexpected error occurred: {e}")
     return []
-
 
 def pick_directory(initial_dir: str = None) -> str:
     """Use a subprocess to open a native directory picker."""
@@ -82,6 +77,7 @@ def show_export(bridge):
     st.write(
         "Output directory: The default is to create a new folder in the input directory.")
     if st.button("Select Output Directory"):
+        from pageplus.gui.utils.workspace import get_loaded_workspace_dir
         selected_paths = pick_directory(initial_dir=get_loaded_workspace_dir())
         if selected_paths:
             st.session_state.export_dir = selected_paths
@@ -237,12 +233,6 @@ def show_export(bridge):
 
                 pdf_input = st.session_state.pdf_input
                 # TODO: Check if this is correct
-                if pdf_input['type'] == 'directory':
-                    image_folder = pdf_input['path']
-                else:
-                    # For files, we need to extract the directory from the
-                    # first file
-                    image_folder = str(Path(pdf_input['files'][0]).parent)
 
                 kwargs.update({
                     "images": pdf_input['files'],

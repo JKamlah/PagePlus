@@ -1,4 +1,3 @@
-import json
 import re
 from pathlib import Path
 
@@ -156,7 +155,7 @@ def show_mets(bridge: MetsBridge) -> None:
                         tags.append(row["USE"])
                     if row["ID"]:
                         tags.append(row["ID"])
-                
+
                 # Join unique tags
                 unique_tags = sorted(list(set(tags)))
                 st.session_state.mets_download_tag = ", ".join(unique_tags)

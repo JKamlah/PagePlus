@@ -13,7 +13,7 @@ def profile_editor_view():
 
         # --- Profile Management ---
         col1, col2 = st.columns([2, 1])
-        
+
         with col1:
             profile_names = evaluate_manager.get_profile_names()
             selected_profile = st.selectbox("Select Profile", [""] + profile_names, key="evaluate_profile_select")
@@ -33,7 +33,7 @@ def profile_editor_view():
         if not selected_profile:
             st.info("Please select or create a profile to continue.")
         else:
-                   
+
             st.markdown("---")
             st.subheader(f"Editing Profile: {selected_profile}")
 
@@ -47,7 +47,7 @@ def profile_editor_view():
             st.markdown("---")
             st.write(f"**Manage '{rule_type.capitalize()}' Rules in Profile**")
             profile_data = evaluate_manager.get_profile(selected_profile)
-        
+
             all_rules_of_type = evaluate_manager.get_rule_names_by_type(rule_type)
             profile_rules_of_type = profile_data.get("rules", {}).get(rule_type, [])
 
@@ -57,16 +57,16 @@ def profile_editor_view():
                 default=profile_rules_of_type,
                 key=f"{selected_profile}_{rule_type}_rules"
             )
-            
+
             st.markdown("---")
 
             # --- Rule Definition ---
             st.write(f"**Define or Edit a '{rule_type.capitalize()}' Rule**")
-        
+
             rule_names = [""] + evaluate_manager.get_rule_names_by_type(rule_type)
             selected_rule_name = st.selectbox("Select Existing Rule to Edit", rule_names, key=f"select_rule_{rule_type}")
             new_rule_name = st.text_input("Or Create New Rule Name", key=f"new_rule_name_{rule_type}")
-        
+
             rule_name_to_edit = new_rule_name if new_rule_name else selected_rule_name
 
             # Initialize or reset session state for rule sources
@@ -77,7 +77,7 @@ def profile_editor_view():
 
             if (rule_name_to_edit and st.session_state.get('current_rule') != rule_name_to_edit) or \
                (st.session_state.get('current_rule_type') != rule_type):
-            
+
                 st.session_state.rule_sources = []
                 if rule_name_to_edit:
                     rule_data = evaluate_manager.get_rule(rule_name_to_edit)
@@ -89,21 +89,21 @@ def profile_editor_view():
                                     st.session_state.rule_sources.append({"category": category, "value": value})
                             else:
                                 st.session_state.rule_sources.append({"category": category, "value": values})
-            
+
                 st.session_state.current_rule = rule_name_to_edit
                 st.session_state.current_rule_type = rule_type
 
             st.write("**Rule Sources**")
-        
+
             rule_categories = ["Hex", "Codepoint", "Glyph", "Name (Exact)", "Name (Contains)", "Regex"]
-        
+
             for i, source_item in enumerate(st.session_state.rule_sources):
                 cols = st.columns([3, 3, 1])
-                
+
                 current_category_key = source_item.get("category", "hex")
                 current_category_display = current_category_key.capitalize()
                 current_value = source_item.get("value", "")
-                
+
                 with cols[0]:
                     category = st.selectbox(
                         "Source Category",
@@ -121,7 +121,7 @@ def profile_editor_view():
                     if st.button("➖", key=f"remove_source_{i}"):
                         st.session_state.rule_sources.pop(i)
                         st.rerun()
-                
+
                 category_key = category.lower().split(' ')[0]
                 st.session_state.rule_sources[i] = {"category": category_key, "value": value}
 
@@ -138,7 +138,7 @@ def profile_editor_view():
                         if category not in grouped_sources:
                             grouped_sources[category] = []
                         grouped_sources[category].append(value)
-                
+
                     final_sources = []
                     for category, values in grouped_sources.items():
                         if category == "regex":
@@ -156,7 +156,7 @@ def profile_editor_view():
                     st.rerun()
                 else:
                     st.warning("Please select or create a rule to save.")
-                
+
             st.markdown("---")
             version_input = st.text_input("Rule Version", key="evaluate_version_input")
             if st.button("Set Version", key="evaluate_set_version"):
@@ -175,7 +175,7 @@ def profile_editor_view():
                     evaluate_manager.update_profile_rules(selected_profile, forbidden_rules=updated_rules, exception_rules=other_rules)
                 else:
                     evaluate_manager.update_profile_rules(selected_profile, forbidden_rules=other_rules, exception_rules=updated_rules)
-                    
+
                 evaluate_manager.save_data()
                 st.success(f"Profile '{selected_profile}' updated successfully.")
                 st.rerun()
@@ -231,11 +231,11 @@ def profile_editor_view():
 
             # --- Rule Definition for Normalization ---
             st.write(f"**Define or Edit a '{map_rule_type_display.capitalize()}' Rule**")
-            
+
             map_rule_names = [""] + mapping_manager.get_rule_names_by_type(map_rule_type)
             selected_map_rule = st.selectbox("Select Existing Rule to Edit", map_rule_names, key=f"select_map_rule_{map_rule_type}")
             new_map_rule_name = st.text_input("Or Create New Rule Name", key=f"new_map_rule_name_{map_rule_type}")
-            
+
             map_rule_to_edit = new_map_rule_name if new_map_rule_name else selected_map_rule
 
             if 'map_rule_mappings' not in st.session_state:
@@ -322,7 +322,7 @@ def profile_editor_view():
                     st.rerun()
                 else:
                     st.error("Profile name is invalid or already exists.")
-        
+
         if not selected_miss_profile:
             st.info("Please select or create a profile to continue.")
         else:
@@ -345,7 +345,7 @@ def profile_editor_view():
 
             st.write("**Rules**")
             rule_categories = ["Glyph", "Hex", "Codepoint", "Name", "Name regex", "Block", "Property", "Script", "Combined glyph"]
-            
+
             for i, rule in enumerate(st.session_state[session_key]):
                 cols = st.columns([2, 3, 1])
                 category = cols[0].selectbox("Category", rule_categories, index=rule_categories.index(rule['category']) if rule['category'] in rule_categories else 0, key=f"miss_cat_{i}")
@@ -368,7 +368,7 @@ def profile_editor_view():
                     if cat not in new_rules:
                         new_rules[cat] = []
                     new_rules[cat].append(val)
-                
+
                 # Update the profile data
                 missing_manager.data["profiles"][selected_miss_profile]["rules"] = new_rules
                 missing_manager.save_data()

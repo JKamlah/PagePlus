@@ -177,9 +177,9 @@ def show_workspace(cli_bridge):
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error deleting workspace: {str(e)}")
-                            st.session_state.confirming_delete = None # Reset on error
+                            st.session_state.confirming_delete = None
                     if st.button("Cancel"):
-                        st.session_state.confirming_delete = None # Reset confirmation state
+                        st.session_state.confirming_delete = None
                         st.rerun()
 
     # Copy workspace

@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from dotenv import dotenv_values, set_key
-from pageplus.utils.constants import ENV_FILE, GUI_STORAGE_DIR
+from pageplus.utils.constants import ENV_FILE
 
 
 class Settings:
