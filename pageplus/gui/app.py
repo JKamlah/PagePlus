@@ -91,6 +91,7 @@ from pageplus.gui.views.evaluation import show_evaluation
 from pageplus.gui.views.viewer import show_viewer
 from pageplus.gui.views.iiif import show_iiif_downloader
 from pageplus.gui.views.guidelines import show_guidelines
+from pageplus.gui.views.tesseract import show_tesseract
 from pageplus.gui.utils.settings import Settings
 from pageplus.gui.cli_bridges.gemini import GeminiBridge
 from pageplus.gui.cli_bridges.escriptorium import EscriptoriumBridge
@@ -98,6 +99,7 @@ from pageplus.gui.cli_bridges.transkribus import TranskribusBridge
 from pageplus.gui.cli_bridges.mets import MetsBridge
 from pageplus.gui.cli_bridges.dinglehopper import DinglehopperBridge
 from pageplus.gui.cli_bridges.iiif import IIIFBridge
+from pageplus.gui.cli_bridges.tesseract import TesseractBridge
 from pageplus.gui.cli_bridges import (
     CLIBridge,
     AnalysisBridge,
@@ -217,6 +219,7 @@ def main():
             'mets': MetsBridge(),
             'dinglehopper': DinglehopperBridge(),
             'iiif': IIIFBridge(),
+            'tesseract': TesseractBridge(),
         }
 
     # Initialize pages
@@ -245,9 +248,17 @@ def main():
         elif nav_type == 'external' and st.session_state.main_page_selection is not None:
             st.session_state.main_page_selection = None
 
+    # Check if Tesseract OCR is activated
+    settings = Settings()
+    tesseract_activated = settings.get("PAGEPLUS_OCR_TESSERACT", "False") == "True"
+    
     main_pages = ["✨ Home", "📂 Input", "🖼️ Viewer", "🔍 Analytics", "📝 Guidelines", "✅ Validation",
                   "📊 Evaluation", "🛠️ Modification", "🌟 Gemini", "📤 Export",
                   "🗂️ Workspace", "⚙️ Settings"]
+    
+    # Add Tesseract OCR page if activated
+    if tesseract_activated:
+        main_pages.insert(-4, "🔤 Tesseract OCR")  # Insert before Workspace
 
     st.sidebar.radio(
         "Select Page",
@@ -308,6 +319,8 @@ def main():
             st.warning("Please load files first in the 'Input' page.")
         else:
             show_modification(st.session_state.bridges['modification'])
+    elif page == "🔤 Tesseract OCR":
+        show_tesseract(st.session_state.bridges['tesseract'])
     elif page == "🌟 Gemini":
         if not st.session_state.loaded_files:
             st.warning("Please load files first in the 'Input' page.")
@@ -400,7 +413,7 @@ def show_home():
     ✅ Validation: Validate PAGE-XML files  
     📊 Evaluation: Evaluate PAGE-XML files  
     🛠️ Modification: Modify processed documents  
-    🖋️ OCR: Do OCR on PAGE-XML files with several OCR engines  
+    🔤 Tesseract OCR: Do OCR on PAGE-XML files with Tesseract (if activated)  
     🤖 LLM: Perform different tasks on PAGE-XML files with LLMs  
     🌟 Gemini: Use Gemini to process images and validate PAGE-XML output  
     📤 Export: Export PAGE-XML files to different formats (ALTO, PDF, Text)  

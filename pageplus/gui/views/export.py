@@ -65,14 +65,6 @@ def show_export(bridge):
         st.warning("Please load files first.")
         return
 
-    # Select export format
-    format_options = ["DSV", "ALTO", "Fulltext", "PDF"]
-    export_format = st.selectbox(
-        "Select Export Format",
-        options=format_options,
-        index=0
-    )
-
     # Select output directory
     st.write(
         "Output directory: The default is to create a new folder in the input directory.")
@@ -92,163 +84,183 @@ def show_export(bridge):
             label_visibility="visible"
         )
 
-    # Format-specific settings
-    with st.expander("Export Settings", expanded=True):
-        if export_format == "DSV":
-            delimiter = st.selectbox(
-                "Delimiter",
-                options=["\t", ",", ";", "|"],
-                index=0
-            )
-            dehyphenate = st.checkbox("Dehyphenate Text", value=False)
-            open_folder = st.checkbox("Open Folder After Export", value=True)
+    tab_dsv, tab_alto, tab_fulltext, tab_pdf = st.tabs(["DSV", "ALTO", "Fulltext", "PDF"])
 
-        elif export_format == "ALTO":
-            st.info("Converts PAGE XML files to ALTO XML files.")
-            st.info("No additional settings required for ALTO export.")
-
-        elif export_format == "Fulltext":
-            dehyphenate = st.checkbox("Dehyphenate Text", value=False)
-            ro = st.checkbox("Use Reading Order", value=False)
-            ro_mode = st.selectbox(
-                "Reading Order Mode",
-                options=["auto", "reading_order", "document"],
-                index=0
-            )
-            open_folder = st.checkbox("Open Folder After Export", value=True)
-
-        elif export_format == "PDF":
-            # Input selection
-            input_type = st.radio(
-                "Select Input Type",
-                ["Directory", "Files"],
-                horizontal=True
-            )
-
-            if input_type == "Directory":
-                st.write("Select Image Extensions to Search")
-                selected_extensions = st.multiselect(
-                    "Image Extensions",
-                    options=['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'],
-                    default=['.jpg', '.jpeg', '.png', '.tiff', '.tif']
-                )
-                if st.button("Select Image Directory",
-                             key="select_pdf_image_dir_button"):
-                    selected_dir = pick_directory(
-                        initial_dir=get_loaded_workspace_dir()
-                    )
-                    if selected_dir:
-                        if selected_extensions:
-                            selected_files = [
-                                str(f) for f in Path(selected_dir).glob('*')
-                                if f.suffix.lower() in selected_extensions
-                            ]
-                            if not selected_files:
-                                st.warning(
-                                    "No image files found in selected directory."
-                                )
-                            else:
-                                st.session_state.pdf_input = {
-                                    "type": "directory",
-                                    "path": selected_dir,
-                                    "files": selected_files,
-                                    "extensions": selected_extensions
-                                }
-                                st.success(
-                                    f"Found {len(selected_files)} image files."
-                                )
-                                st.rerun()
-                        else:
-                            st.warning(
-                                "Please select at least one image extension."
-                            )
-            else:  # Files
-                if st.button("Select Image Files",
-                             key="select_pdf_image_files_button"):
-                    selected_files = pick_files(
-                        initial_dir=get_loaded_workspace_dir(),
-                        filetypes=[
-                            ("All image files",
-                             "*.jpg *.jpeg *.png *.bmp *.tiff *.tif"),
-                            ("JPEG files", "*.jpg *.jpeg"),
-                            ("PNG files", "*.png"),
-                            ("BMP files", "*.bmp"),
-                            ("TIFF files", "*.tiff *.tif")
-                        ]
-                    )
-                    if selected_files:
-                        st.session_state.pdf_input = {
-                            "type": "files",
-                            "files": selected_files
-                        }
-                        st.success(f"Selected {len(selected_files)} files.")
-                        st.rerun()
-
-            # Display selected input info
-            if 'pdf_input' in st.session_state:
-                pdf_input = st.session_state.pdf_input
-                st.info(f"Selected: {pdf_input['type']} - "
-                        f"{len(pdf_input['files'])} files")
-
-            dpi = st.number_input(
-                "DPI", min_value=72, max_value=1200, value=None)
-            draw_options = ["baseline", "border", "textline", "textregion"]
-            draw = st.multiselect(
-                "Draw Elements",
-                options=draw_options,
-                default=[]
-            )
-            output_filename = st.text_input(
-                "Output Filename",
-                value="PagePlus"
-            )
-
-    # Export button
-    if st.button("Export"):
-        if 'export_dir' not in st.session_state:
-            st.session_state.export_dir = None
-        try:
-            # Prepare export parameters
-            kwargs = {}
-            if export_format == "DSV":
-                kwargs.update({
+    with tab_dsv:
+        st.header("DSV Export")
+        delimiter = st.selectbox(
+            "Delimiter",
+            options=["\t", ",", ";", "|"],
+            index=0
+        )
+        dehyphenate = st.checkbox("Dehyphenate Text", value=False)
+        open_folder = st.checkbox("Open Folder After Export", value=True)
+        if st.button("Export to DSV"):
+            if 'export_dir' not in st.session_state:
+                st.session_state.export_dir = None
+            try:
+                kwargs = {
                     "delimiter": delimiter,
                     "dehyphenate": dehyphenate,
                     "open_folder": open_folder,
-                })
-            elif export_format == "ALTO":
-                # No additional parameters needed for ALTO export
-                pass
-            elif export_format == "Fulltext":
-                kwargs.update({
+                }
+                bridge.export_files(
+                    files=st.session_state.loaded_files, format="DSV", output_dir=Path(
+                        st.session_state.export_dir) if st.session_state.export_dir else None, **kwargs)
+                st.success("Files exported successfully!")
+            except Exception as e:
+                st.error(f"Error during export: {str(e)}")
+
+    with tab_alto:
+        st.header("ALTO Export")
+        st.info("Converts PAGE XML files to ALTO XML files.")
+        st.info("No additional settings required for ALTO export.")
+        if st.button("Export to ALTO"):
+            if 'export_dir' not in st.session_state:
+                st.session_state.export_dir = None
+            try:
+                bridge.export_files(
+                    files=st.session_state.loaded_files, format="ALTO", output_dir=Path(
+                        st.session_state.export_dir) if st.session_state.export_dir else None)
+                st.success("Files exported successfully!")
+            except Exception as e:
+                st.error(f"Error during export: {str(e)}")
+
+    with tab_fulltext:
+        st.header("Fulltext Export")
+        dehyphenate = st.checkbox("Dehyphenate Text", value=False, key="ft_dehyphenate")
+        ro = st.checkbox("Use Reading Order", value=False)
+        ro_mode = st.selectbox(
+            "Reading Order Mode",
+            options=["auto", "reading_order", "document"],
+            index=0
+        )
+        open_folder = st.checkbox("Open Folder After Export", value=True, key="ft_open_folder")
+        if st.button("Export to Fulltext"):
+            if 'export_dir' not in st.session_state:
+                st.session_state.export_dir = None
+            try:
+                kwargs = {
                     "dehyphenate": dehyphenate,
                     "ro": ro,
                     "ro_mode": ro_mode,
                     "open_folder": open_folder,
-                })
-            elif export_format == "PDF":
-                if 'pdf_input' not in st.session_state:
-                    st.error("Please select image files or directory first.")
-                    return
+                }
+                bridge.export_files(
+                    files=st.session_state.loaded_files, format="Fulltext", output_dir=Path(
+                        st.session_state.export_dir) if st.session_state.export_dir else None, **kwargs)
+                st.success("Files exported successfully!")
+            except Exception as e:
+                st.error(f"Error during export: {str(e)}")
 
-                pdf_input = st.session_state.pdf_input
-                # TODO: Check if this is correct
+    with tab_pdf:
+        st.header("PDF Export")
+        # Input selection
+        input_type = st.radio(
+            "Select Input Type",
+            ["Directory", "Files"],
+            horizontal=True
+        )
 
-                kwargs.update({
-                    "images": pdf_input['files'],
-                    "max_resolution": None if dpi == 0 else dpi,
-                    "draw": draw,
-                    "output_filename": output_filename,
-                })
+        if input_type == "Directory":
+            st.write("Select Image Extensions to Search")
+            selected_extensions = st.multiselect(
+                "Image Extensions",
+                options=['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'],
+                default=['.jpg', '.jpeg', '.png', '.tiff', '.tif']
+            )
+            if st.button("Select Image Directory",
+                         key="select_pdf_image_dir_button"):
+                from pageplus.gui.utils.workspace import get_loaded_workspace_dir
+                selected_dir = pick_directory(
+                    initial_dir=get_loaded_workspace_dir()
+                )
+                if selected_dir:
+                    if selected_extensions:
+                        selected_files = [
+                            str(f) for f in Path(selected_dir).glob('*')
+                            if f.suffix.lower() in selected_extensions
+                        ]
+                        if not selected_files:
+                            st.warning(
+                                "No image files found in selected directory."
+                            )
+                        else:
+                            st.session_state.pdf_input = {
+                                "type": "directory",
+                                "path": selected_dir,
+                                "files": selected_files,
+                                "extensions": selected_extensions
+                            }
+                            st.success(
+                                f"Found {len(selected_files)} image files."
+                            )
+                            st.rerun()
+                    else:
+                        st.warning(
+                            "Please select at least one image extension."
+                        )
+        else:  # Files
+            if st.button("Select Image Files",
+                         key="select_pdf_image_files_button"):
+                from pageplus.gui.utils.workspace import get_loaded_workspace_dir
+                selected_files = pick_files(
+                    initial_dir=get_loaded_workspace_dir(),
+                    filetypes=[
+                        ("All image files",
+                         "*.jpg *.jpeg *.png *.bmp *.tiff *.tif"),
+                        ("JPEG files", "*.jpg *.jpeg"),
+                        ("PNG files", "*.png"),
+                        ("BMP files", "*.bmp"),
+                        ("TIFF files", "*.tiff *.tif")
+                    ]
+                )
+                if selected_files:
+                    st.session_state.pdf_input = {
+                        "type": "files",
+                        "files": selected_files
+                    }
+                    st.success(f"Selected {len(selected_files)} files.")
+                    st.rerun()
 
-            # Perform export
-            exported_files = bridge.export_files(
-                files=st.session_state.loaded_files, format=export_format, output_dir=Path(
-                    st.session_state.export_dir) if st.session_state.export_dir else None, **kwargs)
-            st.success("Files exported successfully!")
+        # Display selected input info
+        if 'pdf_input' in st.session_state:
+            pdf_input = st.session_state.pdf_input
+            st.info(f"Selected: {pdf_input['type']} - "
+                    f"{len(pdf_input['files'])} files")
 
-        except Exception as e:
-            st.error(f"Error during export: {str(e)}")
+        dpi = st.number_input(
+            "DPI", min_value=72, max_value=1200, value=None)
+        draw_options = ["baseline", "border", "textline", "textregion"]
+        draw = st.multiselect(
+            "Draw Elements",
+            options=draw_options,
+            default=[]
+        )
+        output_filename = st.text_input(
+            "Output Filfilename",
+            value="PagePlus"
+        )
+        if st.button("Export to PDF"):
+            if 'export_dir' not in st.session_state:
+                st.session_state.export_dir = None
+            if 'pdf_input' not in st.session_state:
+                st.error("Please select image files or directory first.")
+            else:
+                try:
+                    pdf_input = st.session_state.pdf_input
+                    kwargs = {
+                        "images": pdf_input['files'],
+                        "max_resolution": None if dpi == 0 else dpi,
+                        "draw": draw,
+                        "output_filename": output_filename,
+                    }
+                    bridge.export_files(
+                        files=st.session_state.loaded_files, format="PDF", output_dir=Path(
+                            st.session_state.export_dir) if st.session_state.export_dir else None, **kwargs)
+                    st.success("Files exported successfully!")
+                except Exception as e:
+                    st.error(f"Error during export: {str(e)}")
 
 
 def show_dsv_export(cli_bridge):

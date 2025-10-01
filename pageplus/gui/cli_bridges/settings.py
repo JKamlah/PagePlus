@@ -66,6 +66,24 @@ class SettingsBridge(CLIBridge):
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Failed to clean workspace directory: {e}")
 
+    def activate_tesseract(self) -> None:
+        """Activate Tesseract OCR."""
+        try:
+            from dotenv import set_key
+            from pageplus.utils.envs import get_env_path
+            set_key(get_env_path(), 'PAGEPLUS_OCR_TESSERACT', 'True')
+        except Exception as e:
+            raise RuntimeError(f"Failed to activate Tesseract OCR: {e}")
+
+    def deactivate_tesseract(self) -> None:
+        """Deactivate Tesseract OCR."""
+        try:
+            from dotenv import set_key
+            from pageplus.utils.envs import get_env_path
+            set_key(get_env_path(), 'PAGEPLUS_OCR_TESSERACT', 'False')
+        except Exception as e:
+            raise RuntimeError(f"Failed to deactivate Tesseract OCR: {e}")
+
     def get_export_files(self) -> dict[str, str]:
         """Returns a dictionary of configuration file names and their absolute paths."""
         files = {}

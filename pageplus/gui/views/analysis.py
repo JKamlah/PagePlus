@@ -16,16 +16,15 @@ def show_analysis(cli_bridge):
     st.subheader("Analysis Options")
 
     # Select analysis type
-    analysis_type = st.selectbox(
-        "Select Analysis Type",
+    tab1, tab2, tab3 = st.tabs(
         ["Text Statistics", "Confidences", "Tags"]
     )
 
-    if analysis_type == "Text Statistics":
+    with tab1:
         show_text_statistics(cli_bridge)
-    elif analysis_type == "Confidences":
+    with tab2:
         show_confidences(cli_bridge)
-    elif analysis_type == "Tags":
+    with tab3:
         show_tags(cli_bridge)
 
 

@@ -48,6 +48,10 @@ class Workspace:
             self.prefix_ws,
             '') if value is None else value
         dynamic_options = self.names()
+        # Check if value is empty or None before calling str_to_env
+        if not value or value.strip() == '':
+            raise typer.BadParameter(
+                f"Empty workspace name. Please provide a valid workspace name.")
         env_value = str_to_env(value)
         if env_value not in dynamic_options:
             raise typer.BadParameter(

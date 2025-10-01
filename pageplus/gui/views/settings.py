@@ -2,8 +2,11 @@ import streamlit as st
 import zipfile
 import io
 from datetime import datetime
+from pathlib import Path
 
 from pageplus.gui.utils.settings import Settings
+from dotenv import set_key
+from pageplus.utils.envs import get_env_path
 
 
 def show_settings(cli_bridge):
@@ -13,7 +16,7 @@ def show_settings(cli_bridge):
     # Initialize settings
     settings = Settings()
 
-    tab_credentials, tab_system, tab_backup = st.tabs(["Credentials", "System", "Backup & Restore"])
+    tab_credentials, tab_system, tab_ocr, tab_backup = st.tabs(["Credentials", "System", "OCR Engines", "Backup & Restore"])
 
     with tab_credentials:
         # API Keys
@@ -98,6 +101,174 @@ def show_settings(cli_bridge):
             except RuntimeError as e:
                 st.error(str(e))
 
+    with tab_ocr:
+        # OCR Engine Settings
+        st.subheader("OCR Engine Settings")
+        
+        # Tesseract OCR Settings
+        st.markdown("### 🔤 Tesseract OCR")
+        
+        # Check if Tesseract is activated
+        tesseract_activated = settings.get("PAGEPLUS_OCR_TESSERACT", "False") == "True"
+        
+        # Get default data path
+        from pageplus.gui.cli_bridges.tesseract import TesseractBridge
+        tesseract_bridge = TesseractBridge()
+        default_datapath = tesseract_bridge.get_default_datapath()
+        
+        # Tesseract Model Path setting
+        st.markdown("#### Model Path Configuration")
+        current_model_path = settings.get("TESSERACT_MODEL_PATH", default_datapath)
+        if (current_model_path == "" or current_model_path is None or Path(current_model_path).exists() is False) and default_datapath != "":
+            set_key(get_env_path(), "TESSERACT_MODEL_PATH", default_datapath)
+            current_model_path = default_datapath
+        col_path, col_detect, col_pick = st.columns([2, 1, 1])
+        
+        with col_path:
+            model_path = st.text_input(
+                "Tesseract Model Path",
+                value=current_model_path,
+                help="Path to the Tesseract models directory (tessdata)"
+            )
+        
+        with col_pick:
+            if st.button("📁 Pick Directory", help="Select directory using file picker"):
+                st.session_state.show_directory_picker = True
+        
+        # Directory picker
+        if st.session_state.get("show_directory_picker", False):
+            from pageplus.gui.utils.picker import pick_directory
+            selected_path = pick_directory(current_model_path)
+            if selected_path:
+                model_path = selected_path
+                st.session_state.show_directory_picker = False
+                st.rerun()
+        
+        # Save model path setting
+        if model_path != current_model_path:
+            if st.button("💾 Save Model Path", help="Save the Tesseract model path setting"):
+                try:
+                    settings.set("TESSERACT_MODEL_PATH", model_path)
+                    st.success("Model path saved successfully!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error saving model path: {e}")
+        
+        # Debug info (can be removed in production)
+        with st.expander("Debug Info"):
+            st.write(f"Current PAGEPLUS_OCR_TESSERACT value: {settings.get('PAGEPLUS_OCR_TESSERACT', 'Not set')}")
+            st.write(f"Tesseract activated: {tesseract_activated}")
+            st.write(f"Default data path: {default_datapath}")
+            st.write(f"Current model path: {current_model_path}")
+        
+        col1, col2 = st.columns([2, 1])
+        
+        with col1:
+            tesseract_enabled = st.checkbox(
+                "Enable Tesseract OCR",
+                value=tesseract_activated,
+                help="Enable Tesseract OCR functionality in the GUI"
+            )
+        
+        with col2:
+            if tesseract_enabled != tesseract_activated:
+                if st.button("Apply Tesseract Settings"):
+                    try:
+                        if tesseract_enabled:
+                            cli_bridge.activate_tesseract()
+                            st.success("Tesseract OCR activated!")
+                        else:
+                            cli_bridge.deactivate_tesseract()
+                            st.success("Tesseract OCR deactivated!")
+                        # Force a rerun to update the navigation
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error updating Tesseract settings: {e}")
+        
+        # Tesseract installation status
+        if tesseract_enabled:
+            st.markdown("#### Installation Status")
+            
+            try:
+                # Import the Tesseract bridge to check status
+                from pageplus.gui.cli_bridges.tesseract import TesseractBridge
+                tesseract_bridge = TesseractBridge()
+                
+                status = tesseract_bridge.check_tesseract_installation()
+                
+                # Show available models
+                if status["tesseract_installed"]:
+                    models = tesseract_bridge.get_available_models(model_path)
+                    if models:
+                        st.markdown("#### Available Language Models")
+                        
+                        # Create a dataframe with model information
+                        import pandas as pd
+                        
+                        # Process models to extract clean names and full paths
+                        model_data = []
+                        for model in models:
+                            clean_name = model.replace('.traineddata', '')
+                            model_data.append({
+                                "Language Code": clean_name,
+                                "Full Path": model,
+                                "Status": "Available"
+                            })
+                        
+                        # Sort by language code
+                        model_data.sort(key=lambda x: x["Language Code"])
+                        
+                        # Create dataframe
+                        df = pd.DataFrame(model_data)
+                        
+                        # Display the dataframe
+                        st.dataframe(
+                            df,
+                            hide_index=True,
+                            column_config={
+                                "Language Code": st.column_config.TextColumn(
+                                    "Language Code",
+                                    help="Language code used in Tesseract commands"
+                                ),
+                                "Full Path": st.column_config.TextColumn(
+                                    "Full Path",
+                                    help="Complete path to the model file"
+                                ),
+                                "Status": st.column_config.TextColumn(
+                                    "Status",
+                                    help="Model availability status"
+                                )
+                            }
+                        )
+                        
+                        st.info(f"Total models available: {len(models)}")
+
+                if status["status"] == "ready":
+                    st.success("✅ Tesseract OCR is ready to use")
+                    if status["tesseract_version"]:
+                        st.info(f"Tesseract version: {status['tesseract_version']}")
+                elif status["status"] == "missing_tesserocr":
+                    st.warning("⚠️ Tesseract is installed but tesserocr Python package is missing")
+                    if st.button("Install tesserocr"):
+                        try:
+                            if tesseract_bridge.install():
+                                st.success("tesserocr installed successfully!")
+                                st.rerun()
+                            else:
+                                st.error("Failed to install tesserocr")
+                        except Exception as e:
+                            st.error(f"Error installing tesserocr: {e}")
+                elif status["status"] == "missing_tesseract":
+                    st.error("❌ Tesseract is not installed on the system")
+                    st.info("Please install Tesseract OCR on your system first")
+                
+            except Exception as e:
+                st.error(f"Error checking Tesseract status: {e}")
+        
+        # Other OCR engines can be added here in the future
+        st.markdown("### Other OCR Engines")
+        st.info("Additional OCR engines will be added in future updates.")
+
     with tab_backup:
         st.subheader("Export Settings")
 
@@ -125,7 +296,8 @@ def show_settings(cli_bridge):
 
         except Exception as e:
             st.error(f"Could not get files for export: {e}")
-
+        from pageplus.utils.constants import USER_DATA_DIR
+        st.caption("Storage directory: " + str(USER_DATA_DIR))
         st.divider()
 
         st.subheader("Import Settings")

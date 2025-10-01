@@ -308,12 +308,16 @@ def collect_xml_files(inputpaths: Iterator[Path | str], exclude: Tuple[str, ...]
                 '.xml' and inputpath.name.upper() == 'METS.XML'):
             xml_files = collect_xml_files_by_mets(inputpath)
             return xml_files
-        elif (inputpath.is_file() and inputpath.suffix == '.xml' and inputpath.name not in exclude and
-                is_page_xml(inputpath)):
-            xml_files.append(inputpath)
+        elif (inputpath.is_file() and inputpath.suffix == '.xml' and inputpath.name not in exclude):
+            if is_page_xml(inputpath):
+                xml_files.append(inputpath)
+            else:
+                print(f"Debug: Skipped XML file (not PAGE XML): {inputpath.name}")
+                continue
         elif inputpath.is_dir():
             xml_files.extend([xml_file for xml_file in inputpath.glob(
                 '*.xml') if xml_file.name not in exclude and is_page_xml(xml_file)])
+            continue
         else:
             ws_name = str_to_env(inputpath.name)
             ws_folder = envs.get(
@@ -340,22 +344,42 @@ def is_page_xml(file_path: Path) -> bool:
     """
     Check if file is a page xml file
     """
+    print(f"Debug: Checking if {file_path.name} is PAGE XML")
+    
     if not file_path.suffix.lower() == '.xml':
+        print(f"Debug: {file_path.name} - Not an XML file")
+        return False
+
+    # Check if file exists and is not empty
+    if not file_path.exists():
+        print(f"Debug: {file_path.name} - File does not exist")
+        return False
+    
+    if file_path.stat().st_size == 0:
+        print(f"Warning: Empty XML file skipped: {file_path}")
         return False
 
     try:
         tree = ET.parse(file_path)
         root = tree.getroot()
+        print(f"Debug: {file_path.name} - Root tag: {root.tag}")
 
         # Check for PAGE XML namespace or specific elements
         # Typical namespace URI for PAGE is something like: "http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15"
         # Adjust the namespace URI according to the version of PAGE XML you're
         # expecting
         page_namespace = "http://schema.primaresearch.org/PAGE/gts/pagecontent/"
-        return (root.tag.startswith(f"{{{page_namespace}") or root.tag.startswith("PcGts"))
+        is_page = (root.tag.startswith(f"{{{page_namespace}") or root.tag.startswith("PcGts"))
+        print(f"Debug: {file_path.name} - Is PAGE XML: {is_page}")
+        return is_page
 
-    except ET.ParseError:
+    except ET.ParseError as e:
         # Not an XML file, or XML is malformed
+        print(f"Warning: Invalid XML file skipped: {file_path} - {e}")
+        return False
+    except Exception as e:
+        # Any other error (permission, etc.)
+        print(f"Warning: Error reading file {file_path}: {e}")
         return False
 
 

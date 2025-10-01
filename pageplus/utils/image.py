@@ -19,11 +19,8 @@ def get_image(image_path):
     # Open the image
     image = Image.open(image_path)
 
-    # Convert to RGBA to ensure transparency support (if needed)
-    image = image.convert("RGBA")
-
     # Extract file extension and determine format
-    ext = os.path.splitext(image_path)[1].lower().replace(".", "")
+    ext = os.path.splitext(str(image_path))[1].lower().replace(".", "")
     format_mapping = {
         "jpg": "JPEG",
         "jpeg": "JPEG",
@@ -34,6 +31,22 @@ def get_image(image_path):
         "webp": "WEBP"}
     # Default to PNG if format is unknown
     image_format = format_mapping.get(ext, "PNG")
+    
+    # Convert to RGB for formats that don't support transparency (BMP, JPEG)
+    if image_format in ["BMP", "JPEG"]:
+        if image.mode in ("RGBA", "LA", "P"):
+            # Create a white background for transparent images
+            background = Image.new("RGB", image.size, (255, 255, 255))
+            if image.mode == "P":
+                image = image.convert("RGBA")
+            background.paste(image, mask=image.split()[-1] if image.mode == "RGBA" else None)
+            image = background
+        else:
+            image = image.convert("RGB")
+    else:
+        # For formats that support transparency, convert to RGBA
+        image = image.convert("RGBA")
+    
     return image, image_format
 
 
