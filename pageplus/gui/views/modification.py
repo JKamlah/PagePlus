@@ -54,7 +54,7 @@ def show_modification(bridge: ModificationBridge) -> None:
         # Select output directory
         st.write("Output directory: The default is to overwrite the input files (recommended with backup strategy).")
         if st.button("Select Output Directory"):
-            selected_paths = pick_directory()
+            selected_paths = pick_directory(initial_dir=Path.home())
             if selected_paths:
                 st.session_state.modification_dir = selected_paths
             elif selected_paths is not None:
@@ -72,15 +72,15 @@ def show_modification(bridge: ModificationBridge) -> None:
                 st.rerun()
 
         # Operation tabs
-        tab_names = ["Format&Metadata Operations",
-                     "Text-Layout Operations",
-                     "Text-Attributes Operations",
-                     "Text-Content Operations",
-                     "Repair Operations"]
+        tab_names = ["🧾 Format & Metadata",
+                     "📐 Text-Layout",
+                     "✨ Text-Attributes",
+                     "📝 Text-Content",
+                     "🔧 Repair"]
         tabs = st.tabs(tab_names)
 
         with tabs[0]:  # Format&Metadata
-            st.subheader("Format&Metadata Operations")
+            st.subheader("Format & Metadata Operations")
             with st.expander("Set PAGE Version"):
                 st.write("Updates the PAGE XML version (xmlns and schemaLocation) of the input files.")
 

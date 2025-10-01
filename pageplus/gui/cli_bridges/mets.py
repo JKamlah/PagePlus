@@ -1,6 +1,5 @@
 from pathlib import Path
-from typing import Annotated, List, Optional
-import typer
+from typing import List
 
 from pageplus.cli.mets import (
     repair,

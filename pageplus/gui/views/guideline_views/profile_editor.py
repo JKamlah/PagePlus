@@ -5,7 +5,7 @@ from pageplus.gui.utils.guideline_editor_utils import GuidelineManager
 def profile_editor_view():
     st.header("Guideline Profile Editor")
 
-    tab1, tab2, tab3 = st.tabs(["Evaluate", "Mapping", "Missing Unicodes"])
+    tab1, tab2, tab3 = st.tabs(["📝 Evaluate", "🔄 Mapping", "❓ Missing Unicodes"])
 
     with tab1:
         st.write("Manage evaluation profiles and their rules.")

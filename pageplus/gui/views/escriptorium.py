@@ -81,7 +81,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
     settings = Settings()
 
     # Operation tabs
-    tab_names = ["Settings", "Find Documents", "Download Document", "Update Document", "Create Project/Document", "Upload new Images/Transcriptions"]
+    tab_names = ["⚙️ Settings", "🔍 Find Documents", "📥 Download Document", "📤 Update Document", "➕ Create Project/Document", "⬆️ Upload new Images/Transcriptions"]
     tabs = st.tabs(tab_names)
 
     with tabs[0]:  # Settings

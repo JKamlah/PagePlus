@@ -233,7 +233,7 @@ def show_guidelines():
         st.warning("No files loaded. Please load some files first in the 'Load Files' view.")
         return
 
-    tab1, tab2, tab3, tab4 = st.tabs(["Evaluate", "Mapping", "Profile Editor", "Unicode Finder"])
+    tab1, tab2, tab3, tab4 = st.tabs(["📝 Evaluate", "🔄 Mapping", "✍️ Profile Editor", "🔍 Unicode Finder"])
 
     with tab1:
         st.header("Evaluate Text")

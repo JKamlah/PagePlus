@@ -57,7 +57,7 @@ def show_transkribus(bridge: TranskribusBridge):
     if 'transkribus_search_results_df' not in st.session_state:
         st.session_state.transkribus_search_results_df = None
 
-    tab1, tab2, tab3, tab4 = st.tabs(["Settings", "Find Documents", "Download Document", "Update Document"])
+    tab1, tab2, tab3, tab4 = st.tabs(["⚙️ Settings", "🔍 Find Documents", "📥 Download Document", "📤 Update Document"])
 
     with tab1:
         st.header("Settings")
@@ -226,7 +226,7 @@ def show_transkribus(bridge: TranskribusBridge):
                 st.session_state.transkribus_config_name_input = ""
 
             # Name field for configuration
-            st.text_input("Name (for saving/loading configuration)", 
+            st.text_input("Name (for saving/loading configuration)",
                           key="transkribus_config_name_input",
                           help="Enter a name to save this configuration for future use")
             col1, col2, col3, col4 = st.columns(4)
@@ -245,7 +245,7 @@ def show_transkribus(bridge: TranskribusBridge):
                 col_name = st.session_state.transkribus_col_name_input
                 doc_name = st.session_state.transkribus_doc_name_input
                 config_name = st.session_state.transkribus_config_name_input
-                
+
                 if config_name and config_name.strip():
                     ids_data = load_transkribus_ids()
                     if 'ids' not in ids_data:
@@ -391,7 +391,7 @@ def show_transkribus(bridge: TranskribusBridge):
 
         if st.button("Update Document"):
             selected_files = [str(files.absolute()) for files in st.session_state.loaded_files]
-            if version_update:    
+            if version_update:
                 from pageplus.models.page import Page
                 tmp_folder = Path(selected_files[0]).parent.joinpath("storage/tmp")
                 tmp_folder.mkdir(parents=True, exist_ok=True)

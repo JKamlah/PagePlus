@@ -17,7 +17,7 @@ def show_analysis(cli_bridge):
 
     # Select analysis type
     tab1, tab2, tab3 = st.tabs(
-        ["Text Statistics", "Confidences", "Tags"]
+        ["📊 Text Statistics", "👍 Confidences", "🏷️ Tags"]
     )
 
     with tab1:

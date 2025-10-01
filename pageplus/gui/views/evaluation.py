@@ -1,11 +1,13 @@
 import streamlit as st
 import pandas as pd
+from pathlib import Path
+from typing import List, Tuple
+
+from pageplus.gui.views.load_files import get_loaded_workspace_dir
 from pageplus.gui.cli_bridges.dinglehopper import DinglehopperBridge
 from pageplus.gui.components.help_button import help_button
 from pageplus.gui.utils.picker import pick_directory, pick_files
 from pageplus.utils.fs import collect_xml_files
-from pathlib import Path
-from typing import List, Tuple
 
 
 def _get_matched_files(gt_path: List[Path], ocr_files: List[Path]) -> List[Tuple[Path, Path]]:
@@ -115,7 +117,7 @@ def show_evaluation():
             "textequiv_level": "line"
         }
 
-    tab1, tab2, tab3 = st.tabs(["Data Selection", "Dinglehopper", "PagePlus"])
+    tab1, tab2, tab3 = st.tabs(["📊 Data Selection", "🦉 Dinglehopper", "➕ PagePlus"])
 
     with tab1:
         data_selection_tab()
@@ -137,12 +139,12 @@ def data_selection_tab():
 
     if gt_path_selection_method == "Directory":
         if st.button("Select GT Directory"):
-            selected_path = pick_directory()
+            selected_path = pick_directory(initial_dir=get_loaded_workspace_dir())
             if selected_path:
                 st.session_state.gt_path = collect_xml_files([Path(selected_path)])
     else:
         if st.button("Select GT Files"):
-            selected_files = pick_files()
+            selected_files = pick_files(initial_dir=get_loaded_workspace_dir())
             if selected_files:
                 st.session_state.gt_path = [Path(f) for f in selected_files]
 

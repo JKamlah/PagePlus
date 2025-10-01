@@ -1,7 +1,5 @@
 from importlib import util
 from typing import Any, Dict, List, Optional
-from pathlib import Path
-from datetime import datetime
 
 from pageplus.cli.modification import (delete_text, delete_textlines,
                                        extend_lines, fit_into_parent,

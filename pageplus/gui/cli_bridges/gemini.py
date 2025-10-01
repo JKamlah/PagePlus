@@ -103,17 +103,15 @@ class GeminiBridge:
                     potential_xml_path = Path(outputdir) / xml_name if outputdir else img_path.with_suffix('.xml')
                     if potential_xml_path.exists():
                         xml_files_to_backup.append(potential_xml_path)
-                
+
                 if xml_files_to_backup:
                     UndoManager.add_undo_state("OCR", file_paths=xml_files_to_backup)
-            ocr(
-                inputs=files,
+            ocr(inputs=files,
                 outputdir=outputdir,
                 image_extension=image_extension,
                 jobs=jobs,
                 calls_per_minute=calls_per_minute,
-                dry_run=dry_run
-            )
+                dry_run=dry_run)
             return {"success": True, "output": "OCR completed successfully."}
         except Exception as e:
             return {"success": False, "output": str(e)}

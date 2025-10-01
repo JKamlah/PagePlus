@@ -40,7 +40,7 @@ class IIIFBridge(CLIBridge):
                 cmd.extend(["--max-dim", str(max_dim)])
             if min_dim is not None:
                 cmd.extend(["--min-dim", str(min_dim)])
-            
+
             result = subprocess.run(cmd, check=True, capture_output=True, text=True)
             return {"success": True, "output": result.stdout}
         except subprocess.CalledProcessError as e:

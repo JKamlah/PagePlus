@@ -15,6 +15,7 @@ from pageplus.gui.utils.output_transform import rich_table_to_dataframe
 from pageplus.gui.utils.picker import pick_files, pick_directory
 from pageplus.gui.utils.settings import Settings
 from pageplus.utils.constants import GUI_STORAGE_DIR
+from pageplus.gui.views.load_files import get_loaded_workspace_dir
 
 
 def strip_ansi_codes(text_to_clean):
@@ -231,14 +232,6 @@ def save_prompt_templates(templates: dict) -> None:
         json.dump(templates, f, indent=4)
 
 
-def get_loaded_workspace_dir() -> Path:
-    """Get the path of the loaded workspace directory."""
-    loaded_workspace = st.session_state.get("loaded_workspace")
-    if loaded_workspace:
-        return Path(loaded_workspace)
-    return Path.cwd()
-
-
 def show_gemini(bridge: "GeminiBridge") -> None:
     """Show Gemini view."""
     st.title("✨ Gemini")
@@ -254,9 +247,9 @@ def show_gemini(bridge: "GeminiBridge") -> None:
     settings = Settings()
 
     # Operation tabs
-    tab_names = ["Settings", "Prompt Editor", "I/O"]
+    tab_names = ["⚙️ Settings", "✍️ Prompt Editor", "📁 I/O"]
     if 'modification_input' in st.session_state:
-        tab_names.extend(["OCR", "ReOCR"])
+        tab_names.extend(["🔡 OCR", "🔄 ReOCR"])
     tabs = st.tabs(tab_names)
 
     with tabs[0]:  # Settings
@@ -474,7 +467,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
             if st.button(
                 "Select Image Directory",
                     key="select_image_dir_button"):
-                selected_dir = pick_directory()
+                selected_dir = pick_directory(initial_dir=get_loaded_workspace_dir())
 
                 if selected_dir:
                     if selected_extensions:

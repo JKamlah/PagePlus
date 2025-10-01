@@ -3,6 +3,8 @@ from pathlib import Path
 
 from pageplus.gui.cli_bridges.tesseract import TesseractBridge
 from pageplus.utils.constants import TesseractLanguageNames
+from pageplus.gui.views.load_files import get_loaded_workspace_dir
+from pageplus.gui.utils.picker import pick_directory
 
 
 def show_tesseract(cli_bridge: TesseractBridge):
@@ -41,11 +43,8 @@ def show_tesseract(cli_bridge: TesseractBridge):
         if input_type == "Directory":
             st.write("Select Image Extensions to Search")
 
-            if st.button(
-                "Select Image Directory",
-                key="select_image_dir_button"):
-                from pageplus.gui.utils.picker import pick_directory
-                selected_dir = pick_directory()
+            if st.button("Select Image Directory", key="select_image_dir_button"):
+                selected_dir = pick_directory(initial_dir=get_loaded_workspace_dir())
 
                 if selected_dir:
                     if selected_extensions:
@@ -73,9 +72,7 @@ def show_tesseract(cli_bridge: TesseractBridge):
                             "Please select at least one image extension."
                         )
         else:  # Files
-            if st.button(
-                "Select Image Files",
-                key="select_image_files_button"):
+            if st.button("Select Image Files", key="select_image_files_button"):
                 from pageplus.gui.utils.picker import pick_files
                 from pageplus.gui.cli_bridges.workspace import WorkspaceBridge
 
@@ -87,7 +84,7 @@ def show_tesseract(cli_bridge: TesseractBridge):
                     ("All files", "*")
                 ]
                 selected_paths = pick_files(
-                    initial_dir=initial_dir,
+                    initial_dir=get_loaded_workspace_dir(),
                     filetypes=file_types
                 )
                 if selected_paths:
@@ -136,16 +133,14 @@ def show_tesseract(cli_bridge: TesseractBridge):
                 ])
                 st.dataframe(files_df, width='stretch')
 
-            selected_files_for_ocr = st.session_state.tesseract_input["files"]
+            # selected_files_for_ocr = st.session_state.tesseract_input["files"]
 
             # Select output directory
             st.subheader("Output Directory")
             st.write(
                 "Output directory: The default is to overwrite the input files "
                 "(recommended with backup strategy).")
-            if st.button(
-                "Select Output Directory",
-                key="select_output_dir_button"):
+            if st.button("Select Output Directory", key="select_output_dir_button"):
                 from pageplus.gui.utils.picker import pick_files
                 from pageplus.gui.cli_bridges.workspace import WorkspaceBridge
 
@@ -168,9 +163,8 @@ def show_tesseract(cli_bridge: TesseractBridge):
                     disabled=True,
                     label_visibility="visible"
                 )
-                if st.button(
-                    "Clear Output Directory",
-                    key="clear_output_dir_button"):
+                if st.button("Clear Output Directory",
+                             key="clear_output_dir_button"):
                     del st.session_state.tesseract_output_dir
                     st.rerun()
 
@@ -205,7 +199,6 @@ def show_tesseract(cli_bridge: TesseractBridge):
             """)
         # Configuration section
         st.subheader("🔧 Configuration")
-
 
         # Get model path from settings
         from pageplus.gui.utils.settings import Settings
@@ -346,7 +339,7 @@ def show_tesseract(cli_bridge: TesseractBridge):
                 default=["PageXML"],
                 help="Select the output formats for Page-level processing"
             )
-            
+
             # PageXML specific options
             if "PageXML" in output_formats:
                 create_polygon = st.checkbox(
@@ -356,15 +349,15 @@ def show_tesseract(cli_bridge: TesseractBridge):
                 )
             else:
                 create_polygon = False
-                
+
             # Initialize session state for parameters if not exists
             if 'tesseract_custom_params' not in st.session_state:
                 st.session_state.tesseract_custom_params = []
-            
+
             # Display existing parameters
             for i, param in enumerate(st.session_state.tesseract_custom_params):
                 col_key, col_value, col_remove = st.columns([2, 2, 1])
-                
+
                 with col_key:
                     param_key = st.text_input(
                         "Parameter Key",
@@ -372,7 +365,7 @@ def show_tesseract(cli_bridge: TesseractBridge):
                         key=f"param_key_{i}",
                         placeholder="e.g., tessedit_create_page_xml"
                     )
-                
+
                 with col_value:
                     param_value = st.text_input(
                         "Parameter Value",
@@ -380,18 +373,18 @@ def show_tesseract(cli_bridge: TesseractBridge):
                         key=f"param_value_{i}",
                         placeholder="e.g., 1"
                     )
-                
+
                 with col_remove:
                     if st.button("➖", key=f"param_remove_{i}"):
                         st.session_state.tesseract_custom_params.pop(i)
                         st.rerun()
-                
+
                 # Update the parameter in session state
                 st.session_state.tesseract_custom_params[i] = {
                     "key": param_key,
                     "value": param_value
                 }
-            
+
             # Add new parameter button
             if st.button("➕ Add Parameter", key="param_add"):
                 st.session_state.tesseract_custom_params.append({"key": "", "value": ""})
@@ -437,7 +430,7 @@ def show_tesseract(cli_bridge: TesseractBridge):
                 "outputdir": st.session_state.get('tesseract_output_dir', None),
                 "dry_run": dry_run
             }
-            
+
             # Add Page-level specific parameters
             if processing_level == "Page":
                 params["output_formats"] = output_formats
@@ -448,7 +441,7 @@ def show_tesseract(cli_bridge: TesseractBridge):
             try:
                 # Create progress containers
                 progress_container = st.container()
-                status_container = st.container()
+                # status_container = st.container()
 
                 with progress_container:
                     st.write("**OCR Processing Progress**")
@@ -493,5 +486,3 @@ def show_tesseract(cli_bridge: TesseractBridge):
 
             except Exception as e:
                 st.error(f"❌ Error during OCR processing: {str(e)}")
-
-

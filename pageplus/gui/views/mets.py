@@ -6,6 +6,7 @@ import pandas as pd
 
 from pageplus.gui.cli_bridges.mets import MetsBridge
 from pageplus.gui.utils.picker import pick_directory, pick_files
+from pageplus.gui.views.load_files import get_loaded_workspace_dir
 
 
 def show_mets(bridge: MetsBridge) -> None:
@@ -46,7 +47,7 @@ def show_mets(bridge: MetsBridge) -> None:
         output_dir_url = st.text_input("Output directory", key="mets_output_dir_url")
 
         if st.button("Select Directory", key="select_dir_url"):
-            selected_dir = pick_directory()
+            selected_dir = pick_directory(initial_dir=get_loaded_workspace_dir())
             if selected_dir:
                 st.session_state.mets_dir_selected = selected_dir
                 st.session_state.mets_dir_key = "mets_output_dir_url"
@@ -81,7 +82,7 @@ def show_mets(bridge: MetsBridge) -> None:
         output_dir_oai = st.text_input("Output directory", key="mets_output_dir_oai")
 
         if st.button("Select Directory", key="select_dir_oai"):
-            selected_dir = pick_directory()
+            selected_dir = pick_directory(initial_dir=get_loaded_workspace_dir())
             if selected_dir:
                 st.session_state.mets_dir_selected = selected_dir
                 st.session_state.mets_dir_key = "mets_output_dir_oai"
@@ -117,7 +118,7 @@ def show_mets(bridge: MetsBridge) -> None:
         mets_file_show = st.text_input("Path to METS XML file", key="mets_file_show")
 
         if st.button("Select File", key="select_mets_show"):
-            selected_file = pick_files(filetypes=[("XML files", "*.xml")])[0]
+            selected_file = pick_files(initial_dir=get_loaded_workspace_dir(), filetypes=[("XML files", "*.xml")])[0]
             if selected_file:
                 st.session_state.mets_file_selected = selected_file
                 st.session_state.mets_df = pd.DataFrame()  # Reset dataframe on new file
@@ -166,14 +167,14 @@ def show_mets(bridge: MetsBridge) -> None:
         st.subheader("Download Files Referenced in a METS File")
         mets_file_download = st.text_input("Path to METS XML file", key="mets_file_download")
         if st.button("Select File", key="select_mets_download"):
-            selected_file = pick_files(filetypes=[("XML files", "*.xml")])[0]
+            selected_file = pick_files(initial_dir=get_loaded_workspace_dir(), filetypes=[("XML files", "*.xml")])[0]
             if selected_file:
                 st.session_state.mets_file_selected = selected_file
                 st.rerun()
 
         output_dir_download = st.text_input("Output directory", key="output_dir_download")
         if st.button("Select Directory", key="select_dir_download"):
-            selected_dir = pick_directory()
+            selected_dir = pick_directory(initial_dir=get_loaded_workspace_dir())
             if selected_dir:
                 st.session_state.mets_dir_selected = selected_dir
                 st.session_state.mets_dir_key = "output_dir_download"
@@ -218,7 +219,7 @@ def show_mets(bridge: MetsBridge) -> None:
         st.subheader("Repair METS File Namespace")
         mets_file_repair = st.text_input("Path to METS XML file to repair", key="mets_file_repair")
         if st.button("Select File", key="select_mets_repair"):
-            selected_file = pick_files(filetypes=[("XML files", "*.xml")])[0]
+            selected_file = pick_files(initial_dir=get_loaded_workspace_dir(), filetypes=[("XML files", "*.xml")])[0]
             if selected_file:
                 st.session_state.mets_file_selected = selected_file
                 st.rerun()

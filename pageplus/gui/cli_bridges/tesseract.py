@@ -17,7 +17,7 @@ else:
 
 class TesseractBridge(CLIBridge):
     """Bridge for Tesseract OCR functionality."""
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.logger = logging.getLogger(__name__)
@@ -138,7 +138,6 @@ class TesseractBridge(CLIBridge):
                 "success": False,
                 "error": str(e)
             }
-
 
     def get_available_models(self, model_path: str = None) -> List[str]:
         """Get list of available Tesseract models."""

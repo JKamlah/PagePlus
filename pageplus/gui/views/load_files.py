@@ -23,6 +23,17 @@ def set_loaded_files_in_session_state(files: List[Path]):
     st.session_state.loaded_files = files
 
 
+def get_loaded_workspace_dir() -> Path:
+    """Get the path of the loaded workspace directory."""
+    ws = Workspace(Environments.PAGEPLUS)
+    loaded_workspace = ws.loaded()
+    if loaded_workspace:
+        loaded_workspace_path = Path(ws.path(loaded_workspace))
+        if loaded_workspace_path.exists():
+            return loaded_workspace_path
+    return Path.home()
+
+
 class LoadFilesPage:
     """Page for loading PAGE XML files from a directory or file selection."""
 

@@ -3,13 +3,14 @@ from pathlib import Path
 import pandas as pd
 
 from pageplus.gui.utils.picker import pick_directory
+from pageplus.gui.views.load_files import get_loaded_workspace_dir
 
 
 def show_iiif_downloader(cli_bridge):
     """Display the IIIF downloader page."""
     st.title("📑 IIIF")
 
-    tab_names = ["Download Images", "Inspect Resources"]
+    tab_names = ["📥 Download Images", "🔍 Inspect Resources"]
     tabs = st.tabs(tab_names)
 
     with tabs[0]:  # Download Images
@@ -33,7 +34,7 @@ def show_iiif_downloader(cli_bridge):
         )
 
         if st.button("Select Directory", key="select_dir_iiif"):
-            selected_dir = pick_directory()
+            selected_dir = pick_directory(initial_dir=get_loaded_workspace_dir())
             if selected_dir:
                 st.session_state.iiif_dir_selected = selected_dir
                 st.rerun()
