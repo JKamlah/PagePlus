@@ -9,7 +9,7 @@ from rich.console import Console
 app = typer.Typer()
 console = Console()
 
-EXTRAS = ["dinglehopper", "transkribus", "escriptorium"]
+EXTRAS = ["dinglehopper", "transkribus", "escriptorium", "tesseract"]
 
 
 def install_package(package: str):
@@ -20,6 +20,9 @@ def install_package(package: str):
         # command = [sys.executable, "-m", "pageplus", package, "install"] # This seems wrong as pageplus is a typer app.
         subprocess.run(command, check=True, capture_output=True, text=True)
         console.print(f"[green]Successfully installed {package}[/green]")
+        if package == "tesseract":
+            console.print("[green]Activating Tesseract OCR...[/green]")
+            subprocess.run(["poetry", "run", "pageplus", "tesseract", "activate"], check=True, capture_output=True, text=True)
     except subprocess.CalledProcessError as e:
         console.print(f"[red]Failed to install {package}.[/red]")
         console.print(f"Stderr: {e.stderr}")
@@ -43,7 +46,7 @@ def main(
     """
     Installs optional extras for pageplus.
     """
-    console.print(f"[green]Uninstalling litellm...[/green]")
+    console.print("[green]Uninstalling litellm...[/green]")
     subprocess.check_call([sys.executable, "-m", "pip", "uninstall", "litellm", "-y"])
     if "all" in packages:
         packages_to_install = EXTRAS

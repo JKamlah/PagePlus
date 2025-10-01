@@ -21,6 +21,7 @@ from pageplus.utils.validation import validate_version_compatibility
 
 from typing import Dict, Any
 
+
 @dataclass
 class Regions:
     textregions: Optional[List[TextRegion]] = field(default=None)
