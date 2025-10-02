@@ -53,7 +53,7 @@ def pick_files(initial_dir: str = None, filetypes: List[Tuple[str, str]] = None)
 
 def select_directory(initial_dir: str = None) -> List[str]:
     """Opens a directory selection dialog and returns the selected path."""
-    #app = QApplication.instance() or QApplication(sys.argv)
+    app = QApplication.instance() or QApplication(sys.argv)
     if not initial_dir:
         initial_dir = str(Path.home())
     directory = QFileDialog.getExistingDirectory(
@@ -69,7 +69,7 @@ def select_files(initial_dir: str = None, filetypes: List[Tuple[str, str]] = Non
     if filetypes is None:
         filetypes = [("XML files", "*.xml"), ("All files", "*.*")]
 
-    # app = QApplication.instance() or QApplication(sys.argv)
+    app = QApplication.instance() or QApplication(sys.argv)
     if not initial_dir:
         initial_dir = str(Path.home())
 

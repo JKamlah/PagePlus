@@ -61,15 +61,17 @@ def show_mets(bridge: MetsBridge) -> None:
                     st.session_state.mets_success_message = "METS XML downloaded successfully."
 
                     # --- AUTO-POPULATE OTHER TABS ---
-                    match = re.search(r"Downloaded METS XML to: (.+)", result["output"])
-                    if match:
-                        new_mets_path = match.group(1).strip()
-                        st.session_state.mets_file_show = new_mets_path
-                        st.session_state.mets_file_download = new_mets_path
-                        st.session_state.mets_file_repair = new_mets_path
+                    if result.get("output") and isinstance(result["output"], str):
+                        match = re.search(r"Downloaded METS XML to: (.+)", result["output"])
+                        if match:
+                            new_mets_path = match.group(1).strip()
+                            st.session_state.mets_file_show = new_mets_path
+                            st.session_state.mets_file_download = new_mets_path
+                            st.session_state.mets_file_repair = new_mets_path
                     st.rerun()
                 else:
-                    st.error(result["output"])
+                    error_msg = result.get("output", "An error occurred")
+                    st.error(error_msg if isinstance(error_msg, str) else str(error_msg))
             else:
                 st.warning("Please provide a URL and an output directory.")
 
@@ -96,15 +98,17 @@ def show_mets(bridge: MetsBridge) -> None:
                     st.session_state.mets_success_message = "METS XML downloaded successfully."
 
                     # --- AUTO-POPULATE OTHER TABS ---
-                    match = re.search(r"Saved METS XML to: (.+)", result["output"])
-                    if match:
-                        new_mets_path = match.group(1).strip()
-                        st.session_state.mets_file_show = new_mets_path
-                        st.session_state.mets_file_download = new_mets_path
-                        st.session_state.mets_file_repair = new_mets_path
+                    if result.get("output") and isinstance(result["output"], str):
+                        match = re.search(r"Saved METS XML to: (.+)", result["output"])
+                        if match:
+                            new_mets_path = match.group(1).strip()
+                            st.session_state.mets_file_show = new_mets_path
+                            st.session_state.mets_file_download = new_mets_path
+                            st.session_state.mets_file_repair = new_mets_path
                     st.rerun()
                 else:
-                    st.error(result["output"])
+                    error_msg = result.get("output", "An error occurred")
+                    st.error(error_msg if isinstance(error_msg, str) else str(error_msg))
             else:
                 st.warning("Please provide all required OAI parameters.")
 
@@ -133,9 +137,10 @@ def show_mets(bridge: MetsBridge) -> None:
                     result = bridge.show_filegrps(mets_file_show, strict_show, verbose_show)
                 if result["success"]:
                     st.success("Successfully inspected file groups.")
-                    st.session_state.mets_df = result["output"]
+                    st.session_state.mets_df = result.get("output")
                 else:
-                    st.error(result["output"])
+                    error_msg = result.get("output", "An error occurred")
+                    st.error(error_msg if isinstance(error_msg, str) else str(error_msg))
             else:
                 st.warning("Please provide a valid METS file path.")
 
@@ -208,7 +213,8 @@ def show_mets(bridge: MetsBridge) -> None:
                     if result["success"]:
                         st.success("Files downloaded successfully.")
                     else:
-                        st.error(result["output"])
+                        error_msg = result.get("output", "An error occurred")
+                        st.error(error_msg if isinstance(error_msg, str) else str(error_msg))
                 except ValueError:
                     st.error("Invalid format for 'Filter by document number'. Please use comma-separated numbers (e.g., 1, 2, 4).")
             else:
@@ -232,6 +238,7 @@ def show_mets(bridge: MetsBridge) -> None:
                 if result["success"]:
                     st.success("METS file repaired successfully.")
                 else:
-                    st.error(result["output"])
+                    error_msg = result.get("output", "An error occurred")
+                    st.error(error_msg if isinstance(error_msg, str) else str(error_msg))
             else:
                 st.warning("Please provide a valid METS file path.")

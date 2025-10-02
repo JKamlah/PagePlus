@@ -248,9 +248,49 @@ def get_loaded_workspace_dir() -> Path:
     return Path.cwd()
 
 
+def _show_page_statistics(page: Page, image_path: Path):
+    """Display statistics about the current page."""
+    # Count regions and lines
+    num_regions = len(page.regions.textregions)
+    num_lines = sum(len(region.textlines) for region in page.regions.textregions)
+
+    # Count total characters
+    total_chars = 0
+    total_words = 0
+    for region in page.regions.textregions:
+        for line in region.textlines:
+            text = line.get_text()
+            if text:
+                total_chars += len(text)
+                total_words += len(text.split())
+
+    # Get image dimensions
+    try:
+        img = Image.open(image_path)
+        img_width, img_height = img.size
+        img_size_mb = image_path.stat().st_size / (1024 * 1024)
+    except Exception:
+        img_width = img_height = 0
+        img_size_mb = 0
+
+    # Display statistics in columns
+    with st.expander("📊 Statistics", expanded=False):
+        col1, col2, col3, col4, col5 = st.columns(5)
+        with col1:
+            st.metric("📄 Regions", num_regions)
+        with col2:
+            st.metric("📝 Lines", num_lines)
+        with col3:
+            st.metric("📊 Words", total_words)
+        with col4:
+            st.metric("📐 Image Size", f"{img_width}×{img_height}")
+        with col5:
+            st.metric("💾 File Size", f"{img_size_mb:.2f} MB")
+
+
 def show_viewer():
     """Display the viewer page."""
-    st.header("🖼️ Page XML Viewer")
+    st.title("🖼️ Page XML Viewer")
 
     if 'overlay_cache' not in st.session_state:
         st.session_state.overlay_cache = {}
@@ -258,12 +298,12 @@ def show_viewer():
     loaded_files = st.session_state.get('loaded_files', [])
 
     if not loaded_files:
-        st.warning("Please load some PAGE XML files in the 'Input' page first.")
+        st.info("📭 No PAGE XML files loaded. Please load files in the 'Load Files' page first.")
         return
 
     xml_files = [f for f in loaded_files if f.suffix == ".xml"]
     if not xml_files:
-        st.warning("No XML files found in loaded files. Please load PAGE XML files.")
+        st.warning("⚠️ No XML files found in loaded files. Please load PAGE XML files.")
         return
 
     # Create a mapping from filename to full path for the selectbox
@@ -284,57 +324,76 @@ def show_viewer():
             current_file_index = None
             st.session_state.viewer_selected_xml = None
 
-    selected_xml_filename = st.selectbox(
-        "Select a PAGE XML file to view",
-        options=xml_display_options,
-        index=current_file_index,
-        placeholder="Select a file to view...",
-        key="viewer_file_selector"
-    )
-    # Update state if selectbox changes
-    st.session_state.viewer_selected_xml = selected_xml_filename
+    # File navigation at the top
+    col1, col2, col3 = st.columns([1, 4, 1])
 
-    st.subheader("Image Source")
-    image_source_option = st.radio(
-        "Select how to find the image for the PAGE XML",
-        ("Default (same folder as XML)", "Select Directory", "Select File"),
-        key="viewer_image_source"
-    )
+    with col1:
+        if st.button("⬅️ Previous", disabled=current_file_index is None or current_file_index <= 0, use_container_width=True):
+            st.session_state.viewer_selected_xml = xml_display_options[current_file_index - 1]
+            st.rerun()
 
-    match_by_extension_cb = st.checkbox(
-        "Match by filename and image extension (ignores filename in PAGE XML)",
-        key="viewer_match_by_extension"
-    )
-    if match_by_extension_cb:
-        image_extensions = [".jpg", ".jpeg", ".png", ".tif", ".tiff"]
-        st.selectbox(
-            label="Select image extension",
-            options=image_extensions,
-            key="viewer_image_extension_select"
+    with col2:
+        selected_xml_filename = st.selectbox(
+            "Select a PAGE XML file to view",
+            options=xml_display_options,
+            index=current_file_index,
+            placeholder="Select a file to view...",
+            key="viewer_file_selector",
+            label_visibility="collapsed"
+        )
+        # Update state if selectbox changes
+        st.session_state.viewer_selected_xml = selected_xml_filename
+
+    with col3:
+        if st.button("Next ➡️", disabled=current_file_index is None or current_file_index >= len(xml_display_options) - 1, use_container_width=True):
+            st.session_state.viewer_selected_xml = xml_display_options[current_file_index + 1]
+            st.rerun()
+
+    st.divider()
+
+    # Image source configuration in expander
+    with st.expander("⚙️ Image Source Configuration", expanded=False):
+        image_source_option = st.radio(
+            "Select how to find the image for the PAGE XML",
+            ("Default (same folder as XML)", "Select Directory", "Select File"),
+            key="viewer_image_source",
+            horizontal=True
         )
 
-    if image_source_option == "Select Directory":
-        if st.button("Select Image Directory"):
-            selected_dir = pick_directory(initial_dir=str(Path(xml_files[0]).parent) if xml_files else None)
-            if selected_dir:
-                st.session_state.viewer_image_folder = selected_dir
-                if 'viewer_image_path' in st.session_state:
-                    del st.session_state.viewer_image_path
-        if 'viewer_image_folder' in st.session_state:
-            st.text_input("Selected Directory", st.session_state.viewer_image_folder, disabled=True)
-
-    elif image_source_option == "Select File":
-        if st.button("Select Image File"):
-            selected_files = pick_files(
-                initial_dir=str(Path(xml_files[0]).parent) if xml_files else None,
-                filetypes=[("Image files", "*.jpg *.jpeg *.png *.tif *.tiff"), ("All files", "*.*")]
+        match_by_extension_cb = st.checkbox(
+            "Match by filename and image extension (ignores filename in PAGE XML)",
+            key="viewer_match_by_extension"
+        )
+        if match_by_extension_cb:
+            image_extensions = [".jpg", ".jpeg", ".png", ".tif", ".tiff"]
+            st.selectbox(
+                label="Select image extension",
+                options=image_extensions,
+                key="viewer_image_extension_select"
             )
-            if selected_files:
-                st.session_state.viewer_image_path = selected_files[0]
-                if 'viewer_image_folder' in st.session_state:
-                    del st.session_state.viewer_image_folder
-        if 'viewer_image_path' in st.session_state:
-            st.text_input("Selected File", st.session_state.viewer_image_path, disabled=True)
+
+        if image_source_option == "Select Directory":
+            if st.button("📁 Select Image Directory", use_container_width=True):
+                selected_dir = pick_directory(initial_dir=str(Path(xml_files[0]).parent) if xml_files else None)
+                if selected_dir:
+                    st.session_state.viewer_image_folder = selected_dir
+                    if 'viewer_image_path' in st.session_state:
+                        del st.session_state.viewer_image_path
+            if 'viewer_image_folder' in st.session_state:
+                st.text_input("Selected Directory", st.session_state.viewer_image_folder, disabled=True)
+
+        elif image_source_option == "Select File":
+            if st.button("📄 Select Image File", use_container_width=True):
+                selected_files = pick_files(
+                    initial_dir=str(Path(xml_files[0]).parent) if xml_files else None,
+                    filetypes=[("Image files", "*.jpg *.jpeg *.png *.tif *.tiff"), ("All files", "*.*")]
+                )
+                if selected_files:
+                    st.session_state.viewer_image_path = selected_files[0]
+                    if 'viewer_image_folder' in st.session_state:
+                        del st.session_state.viewer_image_folder
+            if 'viewer_image_path' in st.session_state:
+                st.text_input("Selected File", st.session_state.viewer_image_path, disabled=True)
 
     if selected_xml_filename:
         with st.spinner("Processing image...", show_time=True):
@@ -375,37 +434,20 @@ def show_viewer():
                     image_path = find_image(image_filename, image_folder)
 
                 if image_path and image_path.exists():
-                    st.subheader(f"Displaying: {image_path.name}")
-
                     # Step 1: Load data from the resource cache
                     page, image = load_page_and_image(selected_xml_path, image_path)
 
-                    # Overlay selection
-                    st.subheader("Overlay Options")
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        show_regions = st.checkbox("Show Text Regions")
-                        show_lines = st.checkbox("Show Text Lines", value=True)
-                        show_baselines = st.checkbox("Show Baselines")
-                    with col2:
-                        show_fulltext = st.checkbox("Show Fulltext", value=True)
+                    # Display statistics
+                    _show_page_statistics(page, image_path)
 
-                    # Recalculate index after selection to ensure buttons appear on the same run
-                    try:
-                        current_file_index = xml_display_options.index(st.session_state.viewer_selected_xml)
-                    except (ValueError, TypeError):
-                        current_file_index = None
+                    # Display and overlay options
+                    with st.expander("🎨 Overlays", expanded=False):
+                        show_regions = st.checkbox("Text Regions", key="show_regions")
+                        show_lines = st.checkbox("Text Lines", value=True, key="show_lines")
+                        show_baselines = st.checkbox("Baselines", key="show_baselines")
 
-                    if current_file_index is not None:
-                        nav_cols = st.columns(2)
-                        with nav_cols[0]:
-                            if st.button("⬅️ Previous Page", disabled=current_file_index <= 0):
-                                st.session_state.viewer_selected_xml = xml_display_options[current_file_index - 1]
-                                st.rerun()
-                        with nav_cols[1]:
-                            if st.button("Next Page ➡️", disabled=current_file_index >= len(xml_display_options) - 1):
-                                st.session_state.viewer_selected_xml = xml_display_options[current_file_index + 1]
-                                st.rerun()
+                    show_fulltext = st.checkbox("📝 Show Fulltext Panel", value=True, key="show_fulltext")
+
                     # Step 2: Use dynamic session cache for drawn overlays
                     cache_key = (selected_xml_path, image_path, show_regions, show_lines, show_baselines)
                     if cache_key not in st.session_state.overlay_cache:
@@ -413,18 +455,22 @@ def show_viewer():
 
                     display_image = st.session_state.overlay_cache[cache_key]
 
+                    # Main display area
                     if show_fulltext:
-                        left_col, right_col = st.columns([2, 1])
-                        with left_col:
+                        img_col, text_col = st.columns([2, 1])
+                        with img_col:
                             st.image(display_image, width='stretch')
-                        with right_col:
-                            st.subheader("Fulltext")
+                        with text_col:
+                            st.subheader("📝 Fulltext")
 
                             all_lines = []
                             for region in page.regions.textregions:
                                 all_lines.extend(region.textlines)
 
                             if all_lines:
+                                # Show line count
+                                st.caption(f"Total lines: {len(all_lines)}")
+
                                 df_data = {
                                     "ID": [line.get_id() for line in all_lines],
                                     "Tag": [line.get_tag() for line in all_lines],
@@ -438,6 +484,7 @@ def show_viewer():
                                     on_select="rerun",
                                     selection_mode="single-row",
                                     hide_index=True,
+                                    height=600
                                 )
 
                                 if "line_editor" in st.session_state and st.session_state.line_editor['selection']['rows']:
@@ -445,7 +492,7 @@ def show_viewer():
                                     line_detail_dialog(all_lines, image, selected_index, page, selected_xml_path)
 
                             else:
-                                st.write("No text content found.")
+                                st.info("No text content found.")
 
                     else:
                         st.image(display_image, width='stretch')
