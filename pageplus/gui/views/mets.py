@@ -191,30 +191,79 @@ def show_mets(bridge: MetsBridge) -> None:
         selection_str = st.text_input("Filter by document number (e.g., 1, 2, 4)")
 
         st.markdown("##### Options")
-        strict_download = st.checkbox("Strict parsing", key="strict_download")
-        verbose_download = st.checkbox("Verbose output", key="verbose_download")
+        col_opts1, col_opts2, col_opts3 = st.columns(3)
+        with col_opts1:
+            strict_download = st.checkbox("Strict parsing", key="strict_download")
+        with col_opts2:
+            verbose_download = st.checkbox("Verbose output", key="verbose_download")
+        with col_opts3:
+            batch_size = st.number_input(
+                "Batch Size",
+                min_value=1,
+                max_value=50,
+                value=25,
+                key="batch_size_mets",
+                help="Number of files to download in parallel"
+            )
 
         if st.button("Download", key="download_files_button"):
             if mets_file_download and Path(mets_file_download).exists() and output_dir_download:
                 try:
                     selection = [int(s.strip()) for s in selection_str.split(',')] if selection_str else None
                     tags = [t.strip() for t in tag.split(',')] if tag else [tag.strip()]
+                    
                     for idx, tag in enumerate(tags):
-                        with st.spinner(f"Downloading files for tag: {tag} ({idx + 1}/{len(tags)})...", show_time=True):
-                            result = bridge.download(
-                                mets=mets_file_download,
-                                strict=strict_download,
-                                verbose=verbose_download,
-                                tag=tag,
-                                nametag=nametag,
-                                selection=selection,
-                                outputdir=Path(output_dir_download)
-                            )
-                    if result["success"]:
-                        st.success("Files downloaded successfully.")
-                    else:
-                        error_msg = result.get("output", "An error occurred")
-                        st.error(error_msg if isinstance(error_msg, str) else str(error_msg))
+                        st.write(f"**Processing tag: {tag} ({idx + 1}/{len(tags)})**")
+                        
+                        # Create progress containers
+                        progress_container = st.container()
+                        with progress_container:
+                            st.write("**Download Progress**")
+                            progress_bar = st.progress(0)
+                            status_text = st.empty()
+                            stats_text = st.empty()
+
+                        # Define progress callback
+                        def update_progress(completed, total, successful, failed, exists):
+                            if total > 0:
+                                progress = completed / total
+                                progress_bar.progress(progress)
+                                status_text.text(f"Downloaded {completed} of {total} files")
+                                stats_text.text(f"✅ Success: {successful} | 📁 Exists: {exists} | ❌ Failed: {failed}")
+
+                        # Start download
+                        result = bridge.download(
+                            mets=mets_file_download,
+                            strict=strict_download,
+                            verbose=verbose_download,
+                            tag=tag,
+                            nametag=nametag,
+                            selection=selection,
+                            outputdir=Path(output_dir_download),
+                            batch_size=batch_size,
+                            progress_callback=update_progress
+                        )
+                        
+                        if result["success"]:
+                            progress_bar.progress(1.0)
+                            stats = result.get("stats", {})
+                            st.success(f"✅ {result['output']}")
+                            if stats:
+                                col1, col2, col3, col4 = st.columns(4)
+                                with col1:
+                                    st.metric("Total", stats.get('total', 0))
+                                with col2:
+                                    st.metric("Downloaded", stats.get('successful', 0))
+                                with col3:
+                                    st.metric("Already Exists", stats.get('exists', 0))
+                                with col4:
+                                    st.metric("Failed", stats.get('failed', 0))
+                        else:
+                            error_msg = result.get("output", "An error occurred")
+                            st.error(f"❌ {error_msg if isinstance(error_msg, str) else str(error_msg)}")
+                    
+                    st.info(f"📄 Download statistics saved to {Path(output_dir_download) / 'info.txt'}")
+                    
                 except ValueError:
                     st.error("Invalid format for 'Filter by document number'. Please use comma-separated numbers (e.g., 1, 2, 4).")
             else:

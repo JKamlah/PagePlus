@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Annotated, List
+import asyncio
 import requests
 import urllib.parse
 
@@ -97,7 +98,8 @@ def download(
         tag: Annotated[str, typer.Option(help="Filter FileGrp by USE or ID tag.")] = "",
         nametag: Annotated[str, typer.Option(help="Use the original filename or the USE or ID tag for filename. (default: all)")] = None,
         selection: Annotated[List[int], typer.Option(help="The documents that should be downloaded, e.g 0,1,3 .")] = None,
-        outputdir: Annotated[Path, typer.Option(help="Directory to save the files. If not specified, files will be saved in the same directory as the METS file.")] = None):
+        outputdir: Annotated[Path, typer.Option(help="Directory to save the files. If not specified, files will be saved in the same directory as the METS file.")] = None,
+        batch_size: Annotated[int, typer.Option("--batch-size", help="Number of files to download in parallel.")] = 25):
     """
     Download files referenced in a METS XML document by <fileGrp>.
     """
@@ -110,40 +112,85 @@ def download(
     mets_files = parse_mets_xml_multiple_roots(mets, loose=not strict, verbose=verbose)
     base_output = Path(mets).parent if outputdir is None else Path(outputdir)
 
-    for idx, doc in track(enumerate(mets_files), description="Downloading files.."):
-        # Determine output directory
-        if selection and idx + 1 not in selection:
-            continue
-        output_dir = base_output if len(
-            mets_files) == 1 else base_output / f"{(idx + 1):03}"
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        for file_grp in doc.recursive_find(doc, "fileGrp"):
-            use = file_grp.attributes.get("USE")
-            grp_id = file_grp.attributes.get("ID")
-
-            if tag and tag not in {use, grp_id}:
+    # Use async downloads if batch_size > 1
+    if batch_size > 1:
+        from pageplus.utils.download import download_files_async
+        download_tasks = []
+        
+        for idx, doc in enumerate(mets_files):
+            if selection and idx + 1 not in selection:
                 continue
+            output_dir = base_output if len(mets_files) == 1 else base_output / f"{(idx + 1):03}"
+            output_dir.mkdir(parents=True, exist_ok=True)
 
-            # Define output subfolder
-            grp_folder = output_dir / (use or grp_id or "unknown")
-            grp_folder.mkdir(parents=True, exist_ok=True)
+            for file_grp in doc.recursive_find(doc, "fileGrp"):
+                use = file_grp.attributes.get("USE")
+                grp_id = file_grp.attributes.get("ID")
 
-            for child in track(file_grp.children,
-                               f"{idx + 1}. Document: Downloading {tag or 'all'}..."):
-                if isinstance(child, FileGrp):
-                    # Handle nested FileGrp
-                    nested_use = child.attributes.get("USE")
-                    nested_id = child.attributes.get("ID")
-                    nested_folder = grp_folder / \
-                        (nested_use or nested_id or "nested")
-                    nested_folder.mkdir(parents=True, exist_ok=True)
+                if tag and tag not in {use, grp_id}:
+                    continue
 
-                    for file in child.children:
-                        if isinstance(file, File):
-                            download_file_from_flocat(file, nested_folder, nametag, overwrite=True)
-                elif isinstance(child, File):
-                    download_file_from_flocat(child, grp_folder, nametag, overwrite=True)
+                grp_folder = output_dir / (use or grp_id or "unknown")
+                grp_folder.mkdir(parents=True, exist_ok=True)
+
+                for child in file_grp.children:
+                    if isinstance(child, FileGrp):
+                        nested_use = child.attributes.get("USE")
+                        nested_id = child.attributes.get("ID")
+                        nested_folder = grp_folder / (nested_use or nested_id or "nested")
+                        nested_folder.mkdir(parents=True, exist_ok=True)
+
+                        for file in child.children:
+                            if isinstance(file, File):
+                                download_tasks.append((file, nested_folder, nametag))
+                    elif isinstance(child, File):
+                        download_tasks.append((child, grp_folder, nametag))
+        
+        if download_tasks:
+            stats = asyncio.run(download_files_async(download_tasks, batch_size, base_output))
+            print("\n📊 Download Summary:")
+            print(f"   Total: {stats['total']}")
+            print(f"   ✅ Downloaded: {stats['successful']}")
+            print(f"   📁 Already exists: {stats['exists']}")
+            print(f"   ❌ Failed: {stats['failed']}")
+            if base_output:
+                print(f"   📄 Details saved to: {base_output / 'info.txt'}")
+    else:
+        # Use synchronous downloads
+        for idx, doc in track(enumerate(mets_files), description="Downloading files.."):
+            # Determine output directory
+            if selection and idx + 1 not in selection:
+                continue
+            output_dir = base_output if len(
+                mets_files) == 1 else base_output / f"{(idx + 1):03}"
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            for file_grp in doc.recursive_find(doc, "fileGrp"):
+                use = file_grp.attributes.get("USE")
+                grp_id = file_grp.attributes.get("ID")
+
+                if tag and tag not in {use, grp_id}:
+                    continue
+
+                # Define output subfolder
+                grp_folder = output_dir / (use or grp_id or "unknown")
+                grp_folder.mkdir(parents=True, exist_ok=True)
+
+                for child in track(file_grp.children,
+                                   f"{idx + 1}. Document: Downloading {tag or 'all'}..."):
+                    if isinstance(child, FileGrp):
+                        # Handle nested FileGrp
+                        nested_use = child.attributes.get("USE")
+                        nested_id = child.attributes.get("ID")
+                        nested_folder = grp_folder / \
+                            (nested_use or nested_id or "nested")
+                        nested_folder.mkdir(parents=True, exist_ok=True)
+
+                        for file in child.children:
+                            if isinstance(file, File):
+                                download_file_from_flocat(file, nested_folder, nametag, overwrite=True)
+                    elif isinstance(child, File):
+                        download_file_from_flocat(child, grp_folder, nametag, overwrite=True)
 
 
 @app.command()

@@ -1282,13 +1282,8 @@ def add_dynamic_tag(tag_name: str):
     return new_class
 
 
-def download_file_from_flocat(
-        file: File,
-        output_folder: Path,
-        nametag: str = None,
-        overwrite: bool = False):
-    requests.packages.urllib3.disable_warnings()
-
+def get_files_from_flocat(file: File, nametag: str = None):
+    """Extract href and filename from a File element's FLocat child."""
     mimetype = file.attributes.get("MIMETYPE", "image/jpeg").lower()
     img_ext = MIME_IMAGE_EXTENSIONS.get(mimetype, "")
 
@@ -1300,48 +1295,63 @@ def download_file_from_flocat(
         if not href:
             continue
 
-        try:
-            # Determine base filename
-            if nametag:
-                filename = file.attributes.get(nametag)
-                if not filename:
-                    print(
-                        f"Warning: Attribute '{nametag}' not found. Falling back to filename from href.")
-                    filename = Path(href).name
-                else:
-                    # Add extension from href if it exists
-                    href_ext = Path(href).suffix
-                    filename += href_ext if href_ext else img_ext
-            else:
+        # Determine base filename
+        if nametag:
+            filename = file.attributes.get(nametag)
+            if not filename:
                 filename = Path(href).name
+            else:
+                # Add extension from href if it exists
+                href_ext = Path(href).suffix
+                filename += href_ext if href_ext else img_ext
+        else:
+            filename = Path(href).name
 
-            # Ensure file has extension
-            if not Path(filename).suffix and img_ext:
-                filename += img_ext
+        # Ensure file has extension
+        if not Path(filename).suffix and img_ext:
+            filename += img_ext
 
-            target_path = output_folder / filename
-            print(f"Downloading {href} -> {target_path}")
+        return href, filename
 
-            if target_path.exists() and not overwrite:
-                print(
-                    "Already exists and skipped! Use 'overwrite=True' to force download.")
-                continue
-            user_agent = os.getenv("PAGEPLUS_USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-            headers = {"User-Agent": user_agent}
+    return None, None
 
-            response = requests.get(
-                href,
-                timeout=20,
-                verify=False,
-                headers=headers
-            )
-            response.raise_for_status()
 
-            with open(target_path, "wb") as f:
-                f.write(response.content)
+def download_file_from_flocat(
+        file: File,
+        output_folder: Path,
+        nametag: str = None,
+        overwrite: bool = False):
+    requests.packages.urllib3.disable_warnings()
 
-        except Exception as e:
-            print(f"Failed to download {href}: {e}")
+    href, filename = get_files_from_flocat(file, nametag)
+    
+    if not href:
+        return
+
+    target_path = output_folder / filename
+    print(f"Downloading {href} -> {target_path}")
+
+    if target_path.exists() and not overwrite:
+        print("Already exists and skipped! Use 'overwrite=True' to force download.")
+        return
+    
+    try:
+        user_agent = os.getenv("PAGEPLUS_USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        headers = {"User-Agent": user_agent}
+
+        response = requests.get(
+            href,
+            timeout=20,
+            verify=False,
+            headers=headers
+        )
+        response.raise_for_status()
+
+        with open(target_path, "wb") as f:
+            f.write(response.content)
+
+    except Exception as e:
+        print(f"Failed to download {href}: {e}")
 
 
 def parse_mets_xml_multiple_roots(

@@ -122,17 +122,19 @@ def show_settings(cli_bridge):
         if (current_model_path == "" or current_model_path is None or Path(current_model_path).exists() is False) and default_datapath != "":
             set_key(get_env_path(), "TESSERACT_MODEL_PATH", default_datapath)
             current_model_path = default_datapath
-        col_path, col_detect, col_pick = st.columns([2, 1, 1])
+
+        col_path, col_pick = st.columns([3, 1])
 
         with col_path:
             model_path = st.text_input(
                 "Tesseract Model Path",
                 value=current_model_path,
-                help="Path to the Tesseract models directory (tessdata)"
+                help="Path to the Tesseract models directory (tessdata)",
+                key="tesseract_model_path_input"
             )
 
         with col_pick:
-            if st.button("📁 Pick Directory", help="Select directory using file picker"):
+            if st.button("📁 Pick Directory", help="Select directory using file picker", key="pick_tesseract_dir"):
                 st.session_state.show_directory_picker = True
 
         # Directory picker
@@ -140,19 +142,33 @@ def show_settings(cli_bridge):
             from pageplus.gui.utils.picker import pick_directory
             selected_path = pick_directory(current_model_path)
             if selected_path:
-                model_path = selected_path
+                st.session_state.tesseract_new_path = selected_path
                 st.session_state.show_directory_picker = False
                 st.rerun()
 
-        # Save model path setting
-        if model_path != current_model_path:
-            if st.button("💾 Save Model Path", help="Save the Tesseract model path setting"):
+        # Update model_path if a new path was selected
+        if st.session_state.get("tesseract_new_path"):
+            model_path = st.session_state.tesseract_new_path
+
+        # Save model path setting - Always show button for clarity
+        col_save, col_status = st.columns([1, 3])
+        with col_save:
+            if st.button("💾 Save Model Path", help="Save the Tesseract model path setting", use_container_width=True, key="save_tesseract_path"):
                 try:
                     settings.set("TESSERACT_MODEL_PATH", model_path)
+                    # Clear the temporary new path
+                    if "tesseract_new_path" in st.session_state:
+                        del st.session_state.tesseract_new_path
                     st.success("Model path saved successfully!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error saving model path: {e}")
+
+        with col_status:
+            if model_path != current_model_path:
+                st.warning("⚠️ Path has been modified. Click 'Save Model Path' to apply changes.")
+            elif Path(model_path).exists():
+                st.success("✅ Current path is valid and saved")
 
         # Debug info (can be removed in production)
         with st.expander("Debug Info"):

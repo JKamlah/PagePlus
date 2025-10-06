@@ -71,23 +71,33 @@ def show_workspace(cli_bridge):
                     except Exception as e:
                         st.error(f"Could not retrieve workspace path: {e}")
 
-            col1, col2 = st.columns(2)
+            col1, col2, col3 = st.columns(3)
             with col1:
                 if selected_workspace:
                     # Remove green dot from selected workspace name for processing
-                    selected_workspace = selected_workspace.replace("🟢 ", "")
+                    clean_selected_workspace = selected_workspace.replace("🟢 ", "")
 
                     # Load workspace button
                     if st.button("Load Selected Workspace"):
                         try:
-                            cli_bridge.load_workspace(selected_workspace)
+                            cli_bridge.load_workspace(clean_selected_workspace)
                             st.success(
-                                f"Workspace '{selected_workspace}' loaded successfully!")
+                                f"Workspace '{clean_selected_workspace}' loaded successfully!")
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error loading workspace: {str(e)}")
-
+            
             with col2:
+                if selected_workspace:
+                    clean_selected_workspace = selected_workspace.replace("🟢 ", "")
+                    if st.button("Open Workspace Folder"):
+                        try:
+                            cli_bridge.open_workspace(clean_selected_workspace)
+                            st.success(f"Opened folder for workspace '{clean_selected_workspace}'.")
+                        except Exception as e:
+                            st.error(f"Error opening workspace folder: {str(e)}")
+
+            with col3:
                 if loaded_workspace:
                     if st.button("Reset Loaded Workspace"):
                         try:
@@ -114,7 +124,12 @@ def show_workspace(cli_bridge):
         if st.button("Select Directory"):
             selected_paths = pick_directory()
             if selected_paths:
+                from pathlib import Path
                 st.session_state.workspace_dir = selected_paths
+                # Suggest the last folder name as workspace name
+                folder_name = Path(selected_paths).name
+                st.session_state.workspace_name_suggestion = folder_name
+                st.rerun()
             elif selected_paths is not None:
                 st.info("Directory selection cancelled.")
 
@@ -126,10 +141,14 @@ def show_workspace(cli_bridge):
                 label_visibility="visible" if 'workspace_dir' in st.session_state else "hidden"
             )
 
+        # Use suggested name if available, otherwise empty
+        default_name = st.session_state.get('workspace_name_suggestion', '')
         workspace_name = st.text_input(
             "Workspace Name",
+            value=default_name,
             placeholder="Enter workspace name",
-            label_visibility="visible"
+            label_visibility="visible",
+            key="workspace_name_input"
         )
 
         if st.button("Add Workspace"):
@@ -138,6 +157,11 @@ def show_workspace(cli_bridge):
                     cli_bridge.load_local_document(
                         st.session_state.workspace_dir, workspace_name, False)
                     st.success(f"Workspace '{workspace_name}' added successfully!")
+                    # Clear the suggestion after successful creation
+                    if 'workspace_name_suggestion' in st.session_state:
+                        del st.session_state.workspace_name_suggestion
+                    if 'workspace_dir' in st.session_state:
+                        del st.session_state.workspace_dir
                     st.rerun()
                 except Exception as e:
                     st.error(f"Error adding workspace: {str(e)}")
@@ -151,7 +175,12 @@ def show_workspace(cli_bridge):
         if st.button("Select Destination Directory", key="copy_select_dir"):
             selected_paths = pick_directory()
             if selected_paths:
+                from pathlib import Path
                 st.session_state.copy_destination_dir = selected_paths
+                # Suggest the last folder name as new workspace name
+                folder_name = Path(selected_paths).name
+                st.session_state.copy_workspace_name_suggestion = folder_name
+                st.rerun()
             elif selected_paths is not None:
                 st.info("Directory selection cancelled.")
 
@@ -167,9 +196,13 @@ def show_workspace(cli_bridge):
             if destination_path:
                 st.session_state.copy_destination_dir = destination_path
         with col2:
+            # Use suggested name if available, otherwise empty
+            default_copy_name = st.session_state.get('copy_workspace_name_suggestion', '')
             new_workspace = st.text_input(
                 "New Workspace Name (optional)",
-                label_visibility="visible"
+                value=default_copy_name,
+                label_visibility="visible",
+                key="copy_workspace_name_input"
             )
 
         if workspace_names:
@@ -187,6 +220,11 @@ def show_workspace(cli_bridge):
                                 new_workspace
                             )
                             st.success("Workspace copied successfully!")
+                            # Clear the suggestion after successful copy
+                            if 'copy_workspace_name_suggestion' in st.session_state:
+                                del st.session_state.copy_workspace_name_suggestion
+                            if 'copy_destination_dir' in st.session_state:
+                                del st.session_state.copy_destination_dir
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error copying workspace: {str(e)}")

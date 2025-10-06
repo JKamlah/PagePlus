@@ -1,6 +1,5 @@
 import asyncio
 import gc
-import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import unquote
@@ -16,6 +15,7 @@ from pageplus.utils.iiif.utils import (
     sanitize_str,
 )
 from pageplus.utils.logger import logging
+from pageplus.utils.download_helpers import create_download_info_file, ProgressTracker
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +72,8 @@ class IIIFManifest:
         keep_original_size: bool = True,
         max_dim: Optional[int] = None,
         min_dim: Optional[int] = None,
+        batch_size: int = 25,
+        progress_callback=None,
         **kwargs,
     ):
         self.url = unquote(url)
@@ -88,6 +90,8 @@ class IIIFManifest:
         self.keep_original_size = keep_original_size
         self.max_dim = max_dim
         self.min_dim = min_dim
+        self.batch_size = batch_size
+        self.progress_callback = progress_callback
 
     @property
     def save_dir(self) -> Path:
@@ -285,19 +289,50 @@ class IIIFManifest:
                 return self
 
             logger.info(f"Downloading {len(images)} images from {self.url} inside {self.save_dir}")
-            
+
+            # Initialize progress tracker
+            tracker = ProgressTracker(total=len(images), callback=self.progress_callback)
+            tracker.initialize()
+
+            # Create a semaphore to limit concurrent downloads
+            semaphore = asyncio.Semaphore(self.batch_size)
+
+            async def download_with_semaphore(image):
+                async with semaphore:
+                    result = await image.save()
+                    if result:
+                        tracker.report_success()
+                    else:
+                        tracker.report_failed(f"Image #{image.idx}: {image.sized_url()}")
+                        logger.error(f"Failed to download image #{image.idx} ({image.sized_url()})")
+                    # if self.config.is_logged:
+                    #     self._manifest_info["images"][image.img_name] = image.sized_url()
+                    return result
+
             # Create a list of tasks
-            tasks = [image.save() for image in images]
-            
-            # Run tasks concurrently
-            results = await asyncio.gather(*tasks)
-            
-            for image, success in zip(images, results):
-                if not success:
-                    logger.error(f"Failed to download image #{image.idx} ({image.sized_url()})")
-                    continue
-                # if self.config.is_logged:
-                #     self._manifest_info["images"][image.img_name] = image.sized_url()
+            tasks = [download_with_semaphore(image) for image in images]
+
+            # Run tasks concurrently with batch size limit
+            await asyncio.gather(*tasks)
+
+            # Get final statistics
+            stats = tracker.get_stats()
+
+            # Create info.txt with statistics
+            additional_info = {
+                "Manifest URL": self.url,
+                "Batch size": str(self.batch_size)
+            }
+            info_path = create_download_info_file(
+                self.save_dir,
+                stats,
+                "IIIF Download Statistics",
+                additional_info
+            )
+
+            logger.info(f"Download statistics saved to {info_path}")
+            print(f"\n✅ Successfully downloaded: {stats.successful}/{len(images)}")
+            print(f"❌ Failed: {stats.failed}/{len(images)}")
 
             self.save_log()
             return self

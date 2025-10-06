@@ -51,7 +51,7 @@ class Workspace:
         # Check if value is empty or None before calling str_to_env
         if not value or value.strip() == '':
             raise typer.BadParameter(
-                f"Empty workspace name. Please provide a valid workspace name.")
+                "Empty workspace name. Please provide a valid workspace name.")
         env_value = str_to_env(value)
         if env_value not in dynamic_options:
             raise typer.BadParameter(
@@ -100,14 +100,16 @@ class Workspace:
 
     def loaded(self):
         """
-        Get name of the oaded workspace
+        Get name of the loaded workspace
         Returns:
+            str or None: The loaded workspace name, or None if no workspace is loaded
         """
-        return [
+        loaded_workspaces = [
             val.replace(
                 self.prefix_ws,
                 '') for val in filter_dotenv(
-                self.prefix_loaded_ws).values()][0]
+                self.prefix_loaded_ws).values()]
+        return loaded_workspaces[0] if loaded_workspaces else None
 
     def path(self, workspace: str) -> str:
         """
@@ -115,7 +117,7 @@ class Workspace:
         Returns:
         """
         return get_key(get_env_path(), self.prefix_ws + workspace)
-  
+
     def update_path(self, workspace: str, path: str) -> None:
         """
         Set path of a workspace
@@ -282,30 +284,36 @@ class Workspace:
             else:
                 print(f"Backup folder not found: {backup_path}")
 
-    def open(self,
-             workspace: Annotated[str,
-                                  typer.Argument(str,
-                                                 help="Workspace name pointing to an existing path",
-                                                 callback=validate)] = None) -> None:
+    def open(self, workspace: str = None) -> None:
         """
         Open a workspace folder in the file explorer, works for Windows, macOS, and Linux.
         """
         load_dotenv()
-        envs = dotenv_values()
-        workspace = envs.get(
-            self.prefix_loaded_ws,
-            '').replace(
-            self.prefix_ws,
-            '') if not workspace else str_to_env(workspace)
-        if workspace == '':
-            print("Please provide a valid workspace or load workspace.")
+
+        # If no workspace is provided, try to use the loaded one.
+        if not workspace:
+            workspace = self.loaded()
+
+        # If still no workspace, inform the user and exit.
+        if not workspace:
+            print("No workspace specified or loaded. Please load a workspace first.")
             return
-        wsfolder = Path(envs.get(self.prefix_ws + workspace, None))
-        if wsfolder == '' or wsfolder is None or not Path(wsfolder).exists():
-            print(f"{wsfolder} can't be opened!")
+
+        # Get the path for the workspace.
+        wsfolder_path_str = self.path(workspace)
+
+        # Check if the path is valid.
+        if not wsfolder_path_str:
+            print(f"Path for workspace '{workspace}' not found.")
             return
+
+        wsfolder = Path(wsfolder_path_str)
+        if not wsfolder.exists():
+            print(f"Path '{wsfolder}' does not exist. It can't be opened!")
+            return
+
+        # Open the folder using the appropriate command for the OS.
         if sys.platform == "win32":
-            # Windows
             os.startfile(wsfolder)
         elif sys.platform == "darwin":
             # macOS

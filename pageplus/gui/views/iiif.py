@@ -45,7 +45,7 @@ def show_iiif_downloader(cli_bridge):
             key="page_range_iiif"
         )
 
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         with col1:
             filename_strategy = st.selectbox(
                 "Filename Strategy",
@@ -56,6 +56,15 @@ def show_iiif_downloader(cli_bridge):
             )
         with col2:
             keep_original_size = st.checkbox("Keep original size", value=True, key="keep_size_iiif")
+        with col3:
+            batch_size = st.number_input(
+                "Batch Size",
+                min_value=1,
+                max_value=50,
+                value=25,
+                key="batch_size_iiif",
+                help="Number of images to download in parallel"
+            )
 
         if filename_strategy == "index":
             prefix = st.text_input(
@@ -85,22 +94,43 @@ def show_iiif_downloader(cli_bridge):
             elif not output_dir:
                 st.warning("Please select an output directory.")
             else:
-                with st.spinner("Downloading images..."):
-                    result = cli_bridge.download_manifest(
-                        manifest_url_dl,
-                        Path(output_dir),
-                        prefix,
-                        leading_zeros,
-                        page_range,
-                        filename_strategy,
-                        keep_original_size,
-                        max_dim,
-                        min_dim,
-                    )
+                # Create progress containers
+                progress_container = st.container()
+                with progress_container:
+                    st.write("**Download Progress**")
+                    progress_bar = st.progress(0)
+                    status_text = st.empty()
+                    stats_text = st.empty()
+
+                # Define progress callback
+                def update_progress(completed, total, successful, failed, exists):
+                    if total > 0:
+                        progress = completed / total
+                        progress_bar.progress(progress)
+                        status_text.text(f"Downloaded {completed} of {total} images")
+                        stats_text.text(f"✅ Success: {successful} | 📁 Exists: {exists} | ❌ Failed: {failed}")
+
+                # Start download
+                result = cli_bridge.download_manifest(
+                    manifest_url_dl,
+                    Path(output_dir),
+                    prefix,
+                    leading_zeros,
+                    page_range,
+                    filename_strategy,
+                    keep_original_size,
+                    max_dim,
+                    min_dim,
+                    batch_size,
+                    progress_callback=update_progress,
+                )
+
                 if result["success"]:
-                    st.success(f"Images downloaded successfully to {output_dir}!")
+                    progress_bar.progress(1.0)
+                    st.success(f"✅ Images downloaded successfully to {output_dir}!")
+                    st.info(f"📄 Download statistics saved to {Path(output_dir) / 'info.txt'}")
                 else:
-                    st.error(result["output"])
+                    st.error(f"❌ {result['output']}")
 
     with tabs[1]:  # Inspect Resources
         st.subheader("Inspect image resources in a manifest")

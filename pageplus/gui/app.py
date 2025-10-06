@@ -252,9 +252,9 @@ def main():
     settings = Settings()
     tesseract_activated = settings.get("PAGEPLUS_OCR_TESSERACT", "False") == "True"
     
-    main_pages = ["✨ Home", "📂 Input", "🖼️ Viewer", "🔍 Analytics", "📝 Guidelines", "✅ Validation",
+    main_pages = ["✨ Home", "🗂️ Workspace", "📂 Input", "🖼️ Viewer", "🔍 Analytics", "📝 Guidelines", "✅ Validation",
                   "📊 Evaluation", "🛠️ Modification", "🌟 Gemini", "📤 Export",
-                  "🗂️ Workspace", "⚙️ Settings"]
+                  "⚙️ Settings"]
     
     # Add Tesseract OCR page if activated
     if tesseract_activated:

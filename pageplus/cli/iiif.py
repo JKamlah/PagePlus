@@ -49,6 +49,7 @@ def download(
     keep_original_size: Annotated[bool, typer.Option("--keep-original-size/--no-keep-original-size", help="Keep original image size (full resolution).")] = True,
     max_dim: Annotated[Optional[int], typer.Option("--max-dim", help="Maximum dimension for resized images.")] = None,
     min_dim: Annotated[Optional[int], typer.Option("--min-dim", help="Minimum dimension for resized images.")] = None,
+    batch_size: Annotated[int, typer.Option("--batch-size", help="Number of images to download in parallel.")] = 25,
 ):
     """
     Download all images from a IIIF manifest.
@@ -63,6 +64,7 @@ def download(
         keep_original_size=keep_original_size,
         max_dim=max_dim,
         min_dim=min_dim,
+        batch_size=batch_size,
     )
     manifest.download()
 

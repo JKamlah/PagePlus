@@ -7,9 +7,9 @@ import aiofiles
 import aiohttp
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn, TimeElapsedColumn
 
-from pageplus.utils.constants import MIME_IMAGE_EXTENSIONS
-from pageplus.utils.mets_mods import File, FLocat, get_files_from_flocat
+from pageplus.utils.mets_mods import File, get_files_from_flocat
 from pageplus.utils.logger import logging
+from pageplus.utils.download_helpers import DownloadStats, create_download_info_file, print_download_summary, ProgressTracker
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,8 @@ async def download_file_from_flocat_async(
             return href, f"failed: {e}"
 
 
-async def download_files_async(download_tasks: List[Tuple[File, Path, str]], batch_size: int):
+async def download_files_async(download_tasks: List[Tuple[File, Path, str]], batch_size: int, output_dir: Path = None):
+    """Download METS files asynchronously with progress tracking (CLI version)."""
     progress_columns = [
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -60,10 +61,12 @@ async def download_files_async(download_tasks: List[Tuple[File, Path, str]], bat
         TimeElapsedColumn(),
     ]
 
+    stats = DownloadStats(total=len(download_tasks))
     semaphore = asyncio.Semaphore(batch_size)
+
     async with aiohttp.ClientSession() as session:
         with Progress(*progress_columns, transient=False) as progress:
-            task = progress.add_task("[cyan]Downloading...", total=len(download_tasks))
+            task = progress.add_task(f"[cyan]Downloading (batch size: {batch_size})...", total=len(download_tasks))
             async_tasks = [
                 download_file_from_flocat_async(
                     session,
@@ -74,9 +77,71 @@ async def download_files_async(download_tasks: List[Tuple[File, Path, str]], bat
                     semaphore=semaphore) for file,
                 folder,
                 nametag in download_tasks]
+
             for future in asyncio.as_completed(async_tasks):
-                result = await future
+                href, status = await future
                 progress.update(task, advance=1)
+
+                if status == "downloaded":
+                    stats.update_success()
+                elif status == "exists":
+                    stats.update_exists()
+                elif status.startswith("failed"):
+                    stats.update_failed(f"Failed: {href} - {status}")
+                elif status == "no_href":
+                    stats.update_failed("Failed: No href found")
+
+    # Create info.txt with statistics
+    if output_dir:
+        info_path = create_download_info_file(output_dir, stats, "METS Download Statistics")
+        logger.info(f"Download statistics saved to {info_path}")
+
+    # Print summary
+    print_download_summary(stats)
+
+    return stats.to_dict()
+
+
+async def download_files_async_with_progress(download_tasks: List[Tuple[File, Path, str]], batch_size: int, output_dir: Path = None, progress_callback=None):
+    """
+    Download METS files asynchronously with progress callback support for GUI.
+    """
+    tracker = ProgressTracker(total=len(download_tasks), callback=progress_callback)
+    tracker.initialize()
+
+    semaphore = asyncio.Semaphore(batch_size)
+
+    async with aiohttp.ClientSession() as session:
+        async def download_with_callback(file, folder, nametag):
+            href, status = await download_file_from_flocat_async(
+                session, file, folder, nametag, overwrite=True, semaphore=semaphore
+            )
+
+            if status == "downloaded":
+                tracker.report_success()
+            elif status == "exists":
+                tracker.report_exists()
+            elif status.startswith("failed"):
+                tracker.report_failed(f"Failed: {href} - {status}")
+            elif status == "no_href":
+                tracker.report_failed("Failed: No href found")
+
+            return href, status
+
+        async_tasks = [
+            download_with_callback(file, folder, nametag)
+            for file, folder, nametag in download_tasks
+        ]
+
+        await asyncio.gather(*async_tasks)
+
+    # Create info.txt with statistics
+    if output_dir:
+        stats = tracker.get_stats()
+        info_path = create_download_info_file(output_dir, stats, "METS Download Statistics")
+        logger.info(f"Download statistics saved to {info_path}")
+
+    return tracker.get_stats().to_dict()
 
 
 async def download_iiif_images_async(images: List, batch_size: int, re_download: bool = False):
