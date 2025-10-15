@@ -78,10 +78,10 @@ def get_resources(
     Inspect a IIIF manifest and show image resources.
     """
     manifest = IIIFManifest(url=manifest_url)
-    
+
     async def _load_manifest():
         await manifest.load()
-    
+
     asyncio.run(_load_manifest())
 
     resources = manifest.get_resources()

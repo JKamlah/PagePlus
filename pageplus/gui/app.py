@@ -251,11 +251,11 @@ def main():
     # Check if Tesseract OCR is activated
     settings = Settings()
     tesseract_activated = settings.get("PAGEPLUS_OCR_TESSERACT", "False") == "True"
-    
+
     main_pages = ["✨ Home", "🗂️ Workspace", "📂 Input", "🖼️ Viewer", "🔍 Analytics", "📝 Guidelines", "✅ Validation",
                   "📊 Evaluation", "🛠️ Modification", "🌟 Gemini", "📤 Export",
                   "⚙️ Settings"]
-    
+
     # Add Tesseract OCR page if activated
     if tesseract_activated:
         main_pages.insert(-4, "🔤 Tesseract OCR")  # Insert before Workspace
@@ -268,7 +268,7 @@ def main():
     )
 
     with st.sidebar.expander("External Resources"):
-        external_pages = ["📜 eScriptorium", "🐇 Transkribus", "📚 METS", "📑 IIIF"]
+        external_pages = ["📜 eScriptorium", "🐇 Transkribus", "🏛️ METS", "📑 IIIF"]
         st.radio(
             "Select External Ressource Page",
             external_pages,
@@ -288,7 +288,7 @@ def main():
         show_escriptorium(st.session_state.bridges['escriptorium'])
     elif page == "🐇 Transkribus":
         show_transkribus(st.session_state.bridges['transkribus'])
-    elif page == "📚 METS":
+    elif page == "🏛️ METS":
         show_mets(st.session_state.bridges['mets'])
     elif page == "📑 IIIF":
         show_iiif_downloader(st.session_state.bridges['iiif'])
@@ -423,7 +423,7 @@ def show_home():
     External Resources:  
     📜 eScriptorium: Work with eScriptorium  
     🐇 Transkribus: Work with Transkribus  
-    📚 METS Tools: Work with METS/MODS files   
+    🏛️ METS Tools: Work with METS/MODS files   
     📑 IIIF: Download images from IIIF manifests  
     """)
 

@@ -25,8 +25,8 @@ class MetsBridge(CLIBridge):
     def show_filegrps(self, mets: str, strict: bool, verbose: bool) -> dict:
         """Inspect <fileGrp> entries in a METS XML file."""
         try:
-            df = show_filegrps(mets=mets, strict=strict, verbose=verbose)
-            return {"success": True, "output": df}
+            data = show_filegrps(mets=mets, strict=strict, verbose=verbose)
+            return {"success": True, "output": data}
         except Exception as e:
             return {"success": False, "output": str(e)}
 
@@ -100,11 +100,14 @@ class MetsBridge(CLIBridge):
         except Exception as e:
             return {"success": False, "output": str(e)}
 
-    def get_oai(self, base_url: str, identifier: str, output_dir: Path, metadata_prefix: str) -> dict:
+    def get_oai(self, base_url: str, identifier: str, output_dir: Path, metadata_prefix: str, token: Optional[str] = None) -> dict:
         """Download METS XML from an OAI endpoint."""
         try:
-            output = get_oai(base_url, identifier, output_dir, metadata_prefix)
-            return {"success": True, "output": output}
+            output = get_oai(base_url=base_url, identifier=identifier, output_dir=output_dir, metadata_prefix=metadata_prefix, token=token)
+            if output:
+                return {"success": True, "output": f"✅ Saved METS XML to: {output}"}
+            else:
+                return {"success": False, "output": "❌ Failed to download METS XML from OAI"}
         except Exception as e:
             return {"success": False, "output": str(e)}
 

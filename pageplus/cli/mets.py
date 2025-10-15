@@ -1,21 +1,23 @@
 from pathlib import Path
-from typing import Annotated, List
+from typing import Annotated, List, Optional
 import asyncio
+import os
 import requests
 import urllib.parse
+from lxml import etree
 
 import typer
-import pandas as pd
 from rich import print
-from rich.progress import track
+from rich.table import Table
 
+from pageplus.utils.download import download_files_async
 from pageplus.utils.mets_mods import (
     parse_mets_xml_multiple_roots,
     FileGrp,
     File,
     repair_namespace,
     validate_mets,
-    download_file_from_flocat,)
+)
 
 app = typer.Typer()
 
@@ -55,7 +57,7 @@ def show_filegrps(
         for file_grp in file_grps:
             attrs = file_grp.attributes.copy()
             row = {
-                "Document": idx + 1,
+                "Document": str(idx + 1),
                 "ID": attrs.get("ID", ""),
                 "USE": attrs.get("USE", ""),
                 "Type": "",
@@ -78,12 +80,22 @@ def show_filegrps(
 
     if not data_rows:
         print("No file groups found.")
-        return pd.DataFrame()
+        return data_rows
 
-    df = pd.DataFrame(data_rows)
-    print("--- File Groups Summary ---")
-    print(df)
-    return df
+    # Print table for CLI, return data for GUI
+    import sys
+    if __name__ == "__main__" or "typer" in str(sys.modules.get("typer")):
+        table = Table(title="File Groups Summary")
+        headers = list(data_rows[0].keys())
+        for header in headers:
+            table.add_column(header)
+
+        for row in data_rows:
+            table.add_row(*row.values())
+
+        print(table)
+
+    return data_rows
 
 
 @app.command()
@@ -112,85 +124,47 @@ def download(
     mets_files = parse_mets_xml_multiple_roots(mets, loose=not strict, verbose=verbose)
     base_output = Path(mets).parent if outputdir is None else Path(outputdir)
 
-    # Use async downloads if batch_size > 1
-    if batch_size > 1:
-        from pageplus.utils.download import download_files_async
-        download_tasks = []
+    # Use async downloads
+    download_tasks = []
 
-        for idx, doc in enumerate(mets_files):
-            if selection and idx + 1 not in selection:
+    for idx, doc in enumerate(mets_files):
+        if selection and idx + 1 not in selection:
+            continue
+        output_dir = base_output if len(mets_files) == 1 else base_output / f"{(idx + 1):03}"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        for file_grp in doc.recursive_find(doc, "fileGrp"):
+            use = file_grp.attributes.get("USE")
+            grp_id = file_grp.attributes.get("ID")
+
+            if tag and tag not in {use, grp_id}:
                 continue
-            output_dir = base_output if len(mets_files) == 1 else base_output / f"{(idx + 1):03}"
-            output_dir.mkdir(parents=True, exist_ok=True)
 
-            for file_grp in doc.recursive_find(doc, "fileGrp"):
-                use = file_grp.attributes.get("USE")
-                grp_id = file_grp.attributes.get("ID")
+            grp_folder = output_dir / (use or grp_id or "unknown")
+            grp_folder.mkdir(parents=True, exist_ok=True)
 
-                if tag and tag not in {use, grp_id}:
-                    continue
+            for child in file_grp.children:
+                if isinstance(child, FileGrp):
+                    nested_use = child.attributes.get("USE")
+                    nested_id = child.attributes.get("ID")
+                    nested_folder = grp_folder / (nested_use or nested_id or "nested")
+                    nested_folder.mkdir(parents=True, exist_ok=True)
 
-                grp_folder = output_dir / (use or grp_id or "unknown")
-                grp_folder.mkdir(parents=True, exist_ok=True)
+                    for file in child.children:
+                        if isinstance(file, File):
+                            download_tasks.append((file, nested_folder, nametag))
+                elif isinstance(child, File):
+                    download_tasks.append((child, grp_folder, nametag))
 
-                for child in file_grp.children:
-                    if isinstance(child, FileGrp):
-                        nested_use = child.attributes.get("USE")
-                        nested_id = child.attributes.get("ID")
-                        nested_folder = grp_folder / (nested_use or nested_id or "nested")
-                        nested_folder.mkdir(parents=True, exist_ok=True)
-
-                        for file in child.children:
-                            if isinstance(file, File):
-                                download_tasks.append((file, nested_folder, nametag))
-                    elif isinstance(child, File):
-                        download_tasks.append((child, grp_folder, nametag))
-
-        if download_tasks:
-            stats = asyncio.run(download_files_async(download_tasks, batch_size, base_output))
-            print("\n📊 Download Summary:")
-            print(f"   Total: {stats['total']}")
-            print(f"   ✅ Downloaded: {stats['successful']}")
-            print(f"   📁 Already exists: {stats['exists']}")
-            print(f"   ❌ Failed: {stats['failed']}")
-            if base_output:
-                print(f"   📄 Details saved to: {base_output / 'info.txt'}")
-    else:
-        # Use synchronous downloads
-        for idx, doc in track(enumerate(mets_files), description="Downloading files.."):
-            # Determine output directory
-            if selection and idx + 1 not in selection:
-                continue
-            output_dir = base_output if len(
-                mets_files) == 1 else base_output / f"{(idx + 1):03}"
-            output_dir.mkdir(parents=True, exist_ok=True)
-
-            for file_grp in doc.recursive_find(doc, "fileGrp"):
-                use = file_grp.attributes.get("USE")
-                grp_id = file_grp.attributes.get("ID")
-
-                if tag and tag not in {use, grp_id}:
-                    continue
-
-                # Define output subfolder
-                grp_folder = output_dir / (use or grp_id or "unknown")
-                grp_folder.mkdir(parents=True, exist_ok=True)
-
-                for child in track(file_grp.children,
-                                   f"{idx + 1}. Document: Downloading {tag or 'all'}..."):
-                    if isinstance(child, FileGrp):
-                        # Handle nested FileGrp
-                        nested_use = child.attributes.get("USE")
-                        nested_id = child.attributes.get("ID")
-                        nested_folder = grp_folder / \
-                            (nested_use or nested_id or "nested")
-                        nested_folder.mkdir(parents=True, exist_ok=True)
-
-                        for file in child.children:
-                            if isinstance(file, File):
-                                download_file_from_flocat(file, nested_folder, nametag, overwrite=True)
-                    elif isinstance(child, File):
-                        download_file_from_flocat(child, grp_folder, nametag, overwrite=True)
+    if download_tasks:
+        stats = asyncio.run(download_files_async(download_tasks, batch_size, base_output))
+        print("\n📊 Download Summary:")
+        print(f"   Total: {stats['total']}")
+        print(f"   ✅ Downloaded: {stats['successful']}")
+        print(f"   📁 Already exists: {stats['exists']}")
+        print(f"   ❌ Failed: {stats['failed']}")
+        if base_output:
+            print(f"   📄 Details saved to: {base_output / 'info.txt'}")
 
 
 @app.command()
@@ -198,11 +172,14 @@ def get_oai(
     base_url: Annotated[str, typer.Argument(help="Base OAI URL, e.g. https://www.example.de/oai")],
     identifier: Annotated[str, typer.Argument(help="OAI identifier, e.g. 12311123")],
     output_dir: Annotated[Path, typer.Option("--output-dir", "-o", help="Directory to save the METS XML file.")] = Path("."),
-    metadata_prefix: Annotated[str, typer.Option(help="Metadata prefix, typically 'mets'.")] = "mets"
+    metadata_prefix: Annotated[str, typer.Option(help="Metadata prefix, typically 'mets'.")] = "mets",
+    token: Annotated[Optional[str], typer.Option(help="Bearer token for OAI endpoint authorization. Can also be set via OAI_TOKEN environment variable.")] = None
 ):
     """
     Download METS XML from an OAI endpoint using identifier and save as {identifier}.xml.
     """
+    if token is None:
+        token = os.getenv("OAI_TOKEN")
 
     params = {
         "verb": "GetRecord",
@@ -211,18 +188,46 @@ def get_oai(
     }
     full_url = f"{base_url}?{urllib.parse.urlencode(params)}"
 
+    headers = {
+        "User-Agent": os.getenv("PAGEPLUS_USER_AGENT", "PagePlus (https://github.com/berd-nfdi/PagePlus)")
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
     try:
         print(f"🔗 Fetching: {full_url}")
-        response = requests.get(full_url, timeout=10)
+        response = requests.get(full_url, timeout=20, headers=headers)
         response.raise_for_status()
+
+        # Check for OAI-PMH errors in the XML response
+        xml_content = response.content
+        tree = etree.fromstring(xml_content)
+        ns = {'oai': 'http://www.openarchives.org/OAI/2.0/'}
+        error_element = tree.find('oai:error', ns)
+        if error_element is not None:
+            error_code = error_element.get('code', 'unknown')
+            error_message = error_element.text or "No error message provided."
+            print(f"[red]❌ OAI-PMH Error (code: {error_code}): {error_message.strip()}[/red]")
+            return None
 
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / f"{identifier}.xml"
-        output_path.write_text(response.text, encoding="utf-8")
+        output_path.write_bytes(xml_content)
 
         print(f"✅ Saved METS XML to: {output_path}")
-    except Exception as e:
+        return output_path
+    except requests.exceptions.HTTPError as e:
+        print(f"[red]❌ HTTP Error: {e.response.status_code} {e.response.reason}[/red]")
+        return None
+    except requests.exceptions.RequestException as e:
         print(f"[red]❌ Failed to download METS XML from OAI: {e}[/red]")
+        return None
+    except etree.XMLSyntaxError as e:
+        print(f"[red]❌ Failed to parse XML response: {e}[/red]")
+        return None
+    except Exception as e:
+        print(f"[red]❌ An unexpected error occurred: {e}[/red]")
+        return None
 
 
 @app.command()

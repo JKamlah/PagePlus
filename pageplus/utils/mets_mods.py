@@ -1,10 +1,10 @@
+from __future__ import annotations
+
 import re
 from io import BytesIO
 from pathlib import Path
 from typing import List, Optional
-import os
 
-import requests
 import typer
 from lxml import etree
 from lxml.etree import Element, tostring
@@ -1314,44 +1314,6 @@ def get_files_from_flocat(file: File, nametag: str = None):
         return href, filename
 
     return None, None
-
-
-def download_file_from_flocat(
-        file: File,
-        output_folder: Path,
-        nametag: str = None,
-        overwrite: bool = False):
-    requests.packages.urllib3.disable_warnings()
-
-    href, filename = get_files_from_flocat(file, nametag)
-
-    if not href:
-        return
-
-    target_path = output_folder / filename
-    print(f"Downloading {href} -> {target_path}")
-
-    if target_path.exists() and not overwrite:
-        print("Already exists and skipped! Use 'overwrite=True' to force download.")
-        return
-
-    try:
-        user_agent = os.getenv("PAGEPLUS_USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        headers = {"User-Agent": user_agent}
-
-        response = requests.get(
-            href,
-            timeout=20,
-            verify=False,
-            headers=headers
-        )
-        response.raise_for_status()
-
-        with open(target_path, "wb") as f:
-            f.write(response.content)
-
-    except Exception as e:
-        print(f"Failed to download {href}: {e}")
 
 
 def parse_mets_xml_multiple_roots(
