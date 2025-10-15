@@ -57,8 +57,6 @@ def show_settings(cli_bridge):
                 settings.update({
                     "OPENAI_API_KEY": openai_key,
                     "GEMINI_API_KEY": gemini_key,
-                    "TESSERACT_MODEL_PATH": tesseract_path,
-                    "KRAKEN_MODEL_PATH": kraken_path,
                     "OUTPUT_DIRECTORY": output_dir,
                     "PAGEPLUS_REDIRECT_URL": redirect_url,
                     "PAGEPLUS_USER_AGENT": user_agent,
