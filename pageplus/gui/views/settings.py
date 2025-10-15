@@ -33,17 +33,6 @@ def show_settings(cli_bridge):
         )
 
     with tab_system:
-        # OCR Settings
-        st.subheader("OCR Settings")
-        tesseract_path = st.text_input(
-            "Tesseract Model Path",
-            value=settings.get("TESSERACT_MODEL_PATH", "")
-        )
-        kraken_path = st.text_input(
-            "Kraken Model Path",
-            value=settings.get("KRAKEN_MODEL_PATH", "")
-        )
-
         # Output Settings
         st.subheader("Output Settings")
         output_dir = st.text_input(

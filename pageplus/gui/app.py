@@ -19,6 +19,7 @@ from pageplus.utils.constants import GUI_STORAGE_DIR, ENV_FILE, LOGO_PATH, LOADI
 # Constants
 STORAGE_FILE = GUI_STORAGE_DIR / "loaded_files.json"
 
+
 def monitor_sessions():
     """
     Monitors active Streamlit sessions and shuts down the server if no sessions
@@ -29,7 +30,7 @@ def monitor_sessions():
     """
     # Grace period to allow for initial connections
     time.sleep(10)
-    
+
     inactivity_period = 30  # seconds
     check_interval = 5      # seconds
     max_inactive_checks = inactivity_period // check_interval
@@ -39,7 +40,7 @@ def monitor_sessions():
         try:
             # THIS IS AN UNDOCUMENTED, INTERNAL STREAMLIT API.
             active_sessions = st.runtime.get_instance()._session_mgr.list_active_sessions()
-            
+
             if not active_sessions:
                 inactive_checks += 1
             else:
