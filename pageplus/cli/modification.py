@@ -2099,7 +2099,7 @@ def merge_overlapping_textregions(
 
                     # Delete region2
                     page.delete_element(region2.xml_element)
-                    
+
                     if recalculate_convex_hull:
                         logging.info(f"Recalculating convex hull for merged region {region1.get_id()}")
                         textline_coords = []
@@ -2107,7 +2107,7 @@ def merge_overlapping_textregions(
                             coords = line.get_coordinates(returntype="tuple")
                             if coords:
                                 textline_coords.extend(coords)
-                        
+
                         if textline_coords:
                             from shapely.geometry import MultiPoint
                             hull = MultiPoint(textline_coords).convex_hull

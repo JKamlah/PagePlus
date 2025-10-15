@@ -116,7 +116,7 @@ def download(
     if batch_size > 1:
         from pageplus.utils.download import download_files_async
         download_tasks = []
-        
+
         for idx, doc in enumerate(mets_files):
             if selection and idx + 1 not in selection:
                 continue
@@ -145,7 +145,7 @@ def download(
                                 download_tasks.append((file, nested_folder, nametag))
                     elif isinstance(child, File):
                         download_tasks.append((child, grp_folder, nametag))
-        
+
         if download_tasks:
             stats = asyncio.run(download_files_async(download_tasks, batch_size, base_output))
             print("\n📊 Download Summary:")

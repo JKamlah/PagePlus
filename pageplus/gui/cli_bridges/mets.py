@@ -50,17 +50,17 @@ class MetsBridge(CLIBridge):
                 File
             )
             from pageplus.utils.download import download_files_async_with_progress
-            
+
             if mets.startswith("http"):
                 output_path = get_url(mets, outputdir.joinpath('mets.xml'))
                 if output_path:
                     mets = str(output_path)
                 else:
                     return {"success": False, "output": "Failed to download METS from URL"}
-            
+
             mets_files = parse_mets_xml_multiple_roots(mets, loose=not strict, verbose=verbose)
             base_output = Path(mets).parent if outputdir is None else Path(outputdir)
-            
+
             # Collect download tasks
             download_tasks = []
             for idx, doc in enumerate(mets_files):
@@ -91,7 +91,7 @@ class MetsBridge(CLIBridge):
                                     download_tasks.append((file, nested_folder, nametag))
                         elif isinstance(child, File):
                             download_tasks.append((child, grp_folder, nametag))
-            
+
             if download_tasks:
                 stats = asyncio.run(download_files_async_with_progress(download_tasks, batch_size, base_output, progress_callback))
                 return {"success": True, "output": f"Downloaded {stats['successful']} files successfully", "stats": stats}

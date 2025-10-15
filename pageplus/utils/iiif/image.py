@@ -19,6 +19,7 @@ MIMETYPE_TO_EXTENSION = {
     "image/jp2": ".jp2",
 }
 
+
 class IIIFImage:
     """Represents a single IIIF image with its properties and download capabilities."""
 
@@ -72,7 +73,7 @@ class IIIFImage:
 
     def get_width(self) -> Optional[int]:
         return get_size(self.resource, "width")
-    
+
     def get_sleep_time(self, url: Optional[str] = None) -> float:
         """Get sleep time for a specific URL."""
         if url and "gallica" in url:
@@ -91,7 +92,7 @@ class IIIFImage:
         try:
             if not re_download and self.check():
                 return True
-            
+
             return await self.download()
         except Exception as e:
             logger.error(f"Failed to save image {self.sized_url()}", exc_info=e)

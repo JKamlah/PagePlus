@@ -247,7 +247,7 @@ class LoadFilesPage:
         dir_counts = defaultdict(int)
         for f in files:
             dir_counts[f.parent] += 1
-        
+
         columns = st.columns(3) if show_stats else st.columns(2)
 
         with columns[0]:
@@ -336,7 +336,7 @@ class LoadFilesPage:
                     end_index = start_index + page_size
                     paginated_files = dir_files[start_index:end_index]
                     st.caption(f"Showing files {start_index + 1} to {min(end_index, total_files_in_dir)}")
-                    
+
                     for file_path in paginated_files:
                         self._show_file_row(file_path, show_stats)
                 else:
@@ -378,7 +378,6 @@ class LoadFilesPage:
         paginated_files = sorted(files, key=lambda x: x.name)[start_index:end_index]
 
         st.info(f"Showing files {start_index + 1} to {min(end_index, total_files)} of {total_files}")
-
 
         # Create a scrollable container
         for file_path in paginated_files:

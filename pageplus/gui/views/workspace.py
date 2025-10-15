@@ -88,7 +88,7 @@ def show_workspace(cli_bridge):
                             st.rerun()
                         except Exception as e:
                             st.error(f"Error loading workspace: {str(e)}")
-            
+
             with col2:
                 if selected_workspace:
                     clean_selected_workspace = selected_workspace.replace("🟢 ", "")

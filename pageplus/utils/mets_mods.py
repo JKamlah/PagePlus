@@ -1324,7 +1324,7 @@ def download_file_from_flocat(
     requests.packages.urllib3.disable_warnings()
 
     href, filename = get_files_from_flocat(file, nametag)
-    
+
     if not href:
         return
 
@@ -1334,7 +1334,7 @@ def download_file_from_flocat(
     if target_path.exists() and not overwrite:
         print("Already exists and skipped! Use 'overwrite=True' to force download.")
         return
-    
+
     try:
         user_agent = os.getenv("PAGEPLUS_USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         headers = {"User-Agent": user_agent}

@@ -590,20 +590,20 @@ class ModificationBridge(CLIBridge):
             if not dry_run:
                 UndoManager.add_undo_state("Set PAGE Version")
             from pageplus.utils.constants import PcGtsVersion
-            
+
             # Convert string to enum
             version_enum = None
             for v in PcGtsVersion:
                 if v.value == version:
                     version_enum = v
                     break
-            
+
             if version_enum is None:
                 return {
                     "success": False,
                     "output": f"Invalid version: {version}. Valid versions: {[v.value for v in PcGtsVersion]}"
                 }
-            
+
             set_page_version(
                 inputs=files,
                 version=version_enum,

@@ -11,7 +11,6 @@ import aiofiles
 from aiohttp import ClientResponse, ClientSession, ClientSSLError, ClientTimeout, ContentTypeError
 
 
-
 def check_dir(path):
     path = Path(path)
     if not path.exists():
