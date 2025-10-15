@@ -52,6 +52,16 @@ class LoadFilesPage:
             st.session_state.search_filter = ""
         if "group_by_directory" not in st.session_state:
             st.session_state.group_by_directory = True
+        if "show_file_stats" not in st.session_state:
+            st.session_state.show_file_stats = False
+        if 'page_size' not in st.session_state:
+            st.session_state.page_size = 100
+        if 'current_page' not in st.session_state:
+            st.session_state.current_page = 1
+        if 'grouped_page_size' not in st.session_state:
+            st.session_state.grouped_page_size = 25
+        if 'grouped_current_page' not in st.session_state:
+            st.session_state.grouped_current_page = 1
 
     def show(self):
         """Display the Load Files page."""
@@ -169,7 +179,8 @@ class LoadFilesPage:
             return
 
         # Summary statistics
-        self._show_file_statistics(loaded_files)
+        show_stats = st.checkbox("Show statistics", key="show_file_stats")
+        self._show_file_statistics(loaded_files, show_stats)
 
         st.divider()
 
@@ -210,13 +221,13 @@ class LoadFilesPage:
 
         # Show files based on grouping preference
         if st.session_state.group_by_directory:
-            self._show_files_grouped(filtered_files)
+            self._show_files_grouped(filtered_files, show_stats)
         else:
-            self._show_files_flat(filtered_files)
+            self._show_files_flat(filtered_files, show_stats)
 
+        st.divider()
         # Remove selected files button
         if st.session_state.files_to_remove:
-            st.divider()
             col1, col2 = st.columns([1, 4])
             with col1:
                 if st.button(
@@ -231,23 +242,27 @@ class LoadFilesPage:
                     st.session_state.files_to_remove = set()
                     st.rerun()
 
-    def _show_file_statistics(self, files: List[Path]):
+    def _show_file_statistics(self, files: List[Path], show_stats: bool):
         """Show summary statistics for loaded files."""
-        total_size = sum(f.stat().st_size for f in files if f.exists())
-        total_size_mb = total_size / (1024 * 1024)
-
-        # Group by parent directory
         dir_counts = defaultdict(int)
         for f in files:
             dir_counts[f.parent] += 1
+        
+        columns = st.columns(3) if show_stats else st.columns(2)
 
-        col1, col2, col3 = st.columns(3)
-        with col1:
+        with columns[0]:
             st.metric("📊 Total Files", len(files))
-        with col2:
-            st.metric("💾 Total Size", f"{total_size_mb:.2f} MB")
-        with col3:
-            st.metric("📁 Directories", len(dir_counts))
+
+        if show_stats:
+            with columns[1]:
+                total_size = sum(f.stat().st_size for f in files if f.exists())
+                total_size_mb = total_size / (1024 * 1024)
+                st.metric("💾 Total Size", f"{total_size_mb:.2f} MB")
+            with columns[2]:
+                st.metric("📁 Directories", len(dir_counts))
+        else:
+            with columns[1]:
+                st.metric("📁 Directories", len(dir_counts))
 
     def _filter_files(self, files: List[Path], search_term: str) -> List[Path]:
         """Filter files based on search term."""
@@ -260,7 +275,7 @@ class LoadFilesPage:
             if search_lower in f.name.lower() or search_lower in str(f).lower()
         ]
 
-    def _show_files_grouped(self, files: List[Path]):
+    def _show_files_grouped(self, files: List[Path], show_stats: bool):
         """Show files grouped by directory."""
         # Group files by parent directory
         grouped = defaultdict(list)
@@ -270,6 +285,19 @@ class LoadFilesPage:
         # Sort directories
         sorted_dirs = sorted(grouped.keys(), key=lambda x: str(x))
 
+        # Pagination for files within each directory
+        page_size = st.number_input(
+            "Items per page (inside directories)",
+            min_value=10,
+            max_value=1000,
+            value=st.session_state.grouped_page_size,
+            step=10,
+            key="grouped_page_size_input"
+        )
+        st.session_state.grouped_page_size = page_size
+
+        st.info(f"Showing all {len(sorted_dirs)} directories. Files inside directories with more than {page_size} items will be paginated.")
+
         for directory in sorted_dirs:
             dir_files = sorted(grouped[directory], key=lambda x: x.name)
 
@@ -277,20 +305,91 @@ class LoadFilesPage:
                 f"📁 {directory} ({len(dir_files)} files)",
                 expanded=len(sorted_dirs) <= 3
             ):
-                for file_path in dir_files:
-                    self._show_file_row(file_path)
+                total_files_in_dir = len(dir_files)
 
-    def _show_files_flat(self, files: List[Path]):
+                if total_files_in_dir > page_size:
+                    dir_page_key = f"grouped_page_for_{directory}"
+                    if dir_page_key not in st.session_state:
+                        st.session_state[dir_page_key] = 1
+
+                    total_pages = (total_files_in_dir + page_size - 1) // page_size
+                    if st.session_state[dir_page_key] > total_pages:
+                        st.session_state[dir_page_key] = 1
+                    current_page = st.session_state[dir_page_key]
+
+                    # Pagination controls
+                    c1, c2, c3 = st.columns([2, 8, 2])
+                    with c1:
+                        if st.button("◀️ Previous", key=f"prev_{directory}", use_container_width=True):
+                            if current_page > 1:
+                                st.session_state[dir_page_key] -= 1
+                                st.rerun()
+                    with c3:
+                        if st.button("Next ▶️", key=f"next_{directory}", use_container_width=True):
+                            if current_page < total_pages:
+                                st.session_state[dir_page_key] += 1
+                                st.rerun()
+                    with c2:
+                        st.markdown(f"<p style='text-align: center; vertical-align: middle;'>Page {current_page} of {total_pages}</p>", unsafe_allow_html=True)
+
+                    start_index = (current_page - 1) * page_size
+                    end_index = start_index + page_size
+                    paginated_files = dir_files[start_index:end_index]
+                    st.caption(f"Showing files {start_index + 1} to {min(end_index, total_files_in_dir)}")
+                    
+                    for file_path in paginated_files:
+                        self._show_file_row(file_path, show_stats)
+                else:
+                    for file_path in dir_files:
+                        self._show_file_row(file_path, show_stats)
+
+    def _show_files_flat(self, files: List[Path], show_stats: bool):
         """Show files in a flat list."""
         st.markdown("### Files")
 
-        # Create a scrollable container
-        for file_path in sorted(files, key=lambda x: x.name):
-            self._show_file_row(file_path)
+        # Pagination for flat file list
+        total_files = len(files)
+        page_size = st.number_input(
+            "Files per page",
+            min_value=10,
+            max_value=1000,
+            value=st.session_state.page_size,
+            step=10,
+            key="page_size_input"
+        )
+        st.session_state.page_size = page_size
 
-    def _show_file_row(self, file_path: Path):
+        total_pages = (total_files + page_size - 1) // page_size if total_files > 0 else 1
+
+        if st.session_state.current_page > total_pages:
+            st.session_state.current_page = 1
+
+        current_page = st.number_input(
+            "Page",
+            min_value=1,
+            max_value=total_pages,
+            value=st.session_state.current_page,
+            key="page_input"
+        )
+        st.session_state.current_page = current_page
+
+        start_index = (current_page - 1) * page_size
+        end_index = start_index + page_size
+        paginated_files = sorted(files, key=lambda x: x.name)[start_index:end_index]
+
+        st.info(f"Showing files {start_index + 1} to {min(end_index, total_files)} of {total_files}")
+
+
+        # Create a scrollable container
+        for file_path in paginated_files:
+            self._show_file_row(file_path, show_stats)
+
+    def _show_file_row(self, file_path: Path, show_stats: bool):
         """Show a single file row with checkbox and metadata."""
-        col1, col2, col3, col4 = st.columns([0.3, 3, 1.5, 1])
+        if show_stats:
+            col1, col2, col3, col4 = st.columns([0.3, 3, 1.5, 1])
+        else:
+            col1, col2 = st.columns([0.3, 5.5])
 
         with col1:
             is_selected = str(file_path) in st.session_state.files_to_remove
@@ -308,20 +407,21 @@ class LoadFilesPage:
             st.markdown(f"**{file_path.name}**")
             # st.caption(f"📍 {file_path.parent}")
 
-        with col3:
-            if file_path.exists():
-                file_size = file_path.stat().st_size / 1024  # KB
-                if file_size > 1024:
-                    st.caption(f"💾 {file_size / 1024:.2f} MB")
-                else:
-                    st.caption(f"💾 {file_size:.2f} KB")
+        if show_stats:
+            with col3:
+                if file_path.exists():
+                    file_size = file_path.stat().st_size / 1024  # KB
+                    if file_size > 1024:
+                        st.caption(f"💾 {file_size / 1024:.2f} MB")
+                    else:
+                        st.caption(f"💾 {file_size:.2f} KB")
 
-        with col4:
-            if file_path.exists():
-                mod_time = datetime.fromtimestamp(file_path.stat().st_mtime)
-                st.caption(f"🕐 {mod_time.strftime('%Y-%m-%d')}")
-            else:
-                st.caption("⚠️ Missing")
+            with col4:
+                if file_path.exists():
+                    mod_time = datetime.fromtimestamp(file_path.stat().st_mtime)
+                    st.caption(f"🕐 {mod_time.strftime('%Y-%m-%d')}")
+                else:
+                    st.caption("⚠️ Missing")
 
     def _remove_selected_files(self):
         """Remove selected files from the loaded files list."""

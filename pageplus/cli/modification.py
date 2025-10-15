@@ -7,6 +7,7 @@ from importlib import util
 import subprocess
 import sys
 import re
+import itertools
 
 from rich import print
 from rich.progress import track
@@ -19,6 +20,7 @@ from pageplus.utils.fs import collect_xml_files, determine_output_path, transfor
 from pageplus.models.page import Page
 from pageplus.utils.converter import strings_to_enum
 from pageplus.utils.constants import TextLevel, PcGtsVersion
+from shapely.ops import unary_union
 
 app = typer.Typer()
 
@@ -1430,6 +1432,190 @@ def rectangularize(
 
 
 @app.command()
+def reduce_polygon_points(
+        inputs: Annotated[List[str], typer.Argument(exists=True,
+                                                    help="Paths or workspace to the files to be validated.",
+                                                    callback=transform_inputs)] = None,
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Filename of the output directory. Default is creating an output directory, "
+            "called PagePlusOutput, in the input directory.", callback=transform_output)] = None,
+        level: Annotated[List[TextLevel], typer.Option(
+            help="Granularity levels to process: 'TextRegion', 'TableRegion', 'Textline', "
+            " (default: TextRegion, Textline).")] = ("TextRegion", "Textline"),
+        tolerance: Annotated[int, typer.Option(help="Tolerance for reducing polygon points.")] = 2,
+        dry_run: Annotated[bool, typer.Option(help="Perform a dry run without writing any files.")] = False):
+    """
+    Reduces the number of points in the polygon by a specified tolerance.
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError('No xml files found in input directory')
+
+    for xml_file in track(
+            sorted(xml_files),
+            description="Reducing polygon points in files..."):
+        filename = xml_file.name
+        print('[green]Processing file:[/green] ' + filename)
+
+        page = Page(xml_file)
+
+        # Process TextRegions
+        if 'TextRegion' in level:
+            for region in page.regions.textregions:
+                region.reduce_polygon_points(tolerance=tolerance)
+                print(
+                    f"[yellow]Reducing polygon points in TextRegion: {region.get_id()}[/yellow]")
+        # Process TableRegions
+        if 'TableRegion' in level:
+            for tableregion in page.regions.tableregions:
+                tableregion.reduce_polygon_points(tolerance=tolerance)
+                print(
+                    f"[yellow]Reducing polygon points in TableRegion: {tableregion.get_id()}[/yellow]")
+                for cell in tableregion.tablecells:
+                    cell.reduce_polygon_points(tolerance=tolerance)
+                    print(
+                        f"[yellow]Reducing polygon points in TableCell: {cell.get_id()}[/yellow]")
+
+        # Process Textlines
+        if 'Textline' in level:
+            for region in [
+                *page.regions.textregions,
+                    *page.regions.tableregions]:
+                for line in region.textlines:
+                    line.reduce_polygon_points(tolerance=tolerance)
+                    print(
+                        f"[yellow]Reducing polygon points in Textline: {line.get_id()}[/yellow]")
+
+        if not dry_run:
+            fout = xml_file if outputdir is None else determine_output_path(
+                xml_file, outputdir, filename)
+            logging.info(
+                f'Wrote modified xml file to output directory: {fout}')
+            page.save_xml(fout)
+
+
+@app.command()
+def simplify_polygon(
+        inputs: Annotated[List[str], typer.Argument(exists=True,
+                                                    help="Paths or workspace to the files to be validated.",
+                                                    callback=transform_inputs)] = None,
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Filename of the output directory. Default is creating an output directory, "
+            "called PagePlusOutput, in the input directory.", callback=transform_output)] = None,
+        level: Annotated[List[TextLevel], typer.Option(
+            help="Granularity levels to process: 'TextRegion', 'TableRegion', 'Textline', "
+            " (default: TextRegion, Textline).")] = ("TextRegion", "Textline"),
+        tolerance: Annotated[int, typer.Option(help="Tolerance for reducing polygon points.")] = 2,
+        dry_run: Annotated[bool, typer.Option(help="Perform a dry run without writing any files.")] = False):
+    """
+    Simplifies the polygon by a specified tolerance.
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError('No xml files found in input directory')
+
+    for xml_file in track(
+            sorted(xml_files),
+            description="Simplifying polygon in files..."):
+        filename = xml_file.name
+        print('[green]Processing file:[/green] ' + filename)
+
+        page = Page(xml_file)
+
+        # Process TextRegions
+        if 'TextRegion' in level:
+            for region in page.regions.textregions:
+                region.simplify_polygon(tolerance=tolerance)
+                print(
+                    f"[yellow]Simplifying polygon in TextRegion: {region.get_id()}[/yellow]")
+        # Process TableRegions
+        if 'TableRegion' in level:
+            for tableregion in page.regions.tableregions:
+                tableregion.simplify_polygon(tolerance=tolerance)
+                print(
+                    f"[yellow]Simplifying polygon in TableRegion: {tableregion.get_id()}[/yellow]")
+                for cell in tableregion.tablecells:
+                    cell.simplify_polygon(tolerance=tolerance)
+                    print(
+                        f"[yellow]Simplifying polygon in TableCell: {cell.get_id()}[/yellow]")
+
+        # Process Textlines
+        if 'Textline' in level:
+            for region in [
+                *page.regions.textregions,
+                    *page.regions.tableregions]:
+                for line in region.textlines:
+                    line.simplify_polygon(tolerance=tolerance)
+                    print(
+                        f"[yellow]Simplifying polygon in Textline: {line.get_id()}[/yellow]")
+
+        if not dry_run:
+            fout = xml_file if outputdir is None else determine_output_path(
+                xml_file, outputdir, filename)
+            logging.info(
+                f'Wrote modified xml file to output directory: {fout}')
+            page.save_xml(fout)
+
+
+@app.command()
+def recalculate_textregion_polygon(
+        inputs: Annotated[List[str], typer.Argument(exists=True,
+                                                    help="Paths or workspace to the files to be validated.",
+                                                    callback=transform_inputs)] = None,
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Filename of the output directory. Default is creating an output directory, "
+            "called PagePlusOutput, in the input directory.", callback=transform_output)] = None,
+        rectangle: Annotated[bool, typer.Option(help="If True, the function will calculate a new convex hull from textlines.")] = False,
+        min_textlines: Annotated[int, typer.Option(help="Minimum number of textlines to recalculate the polygon.")] = 1,
+        dry_run: Annotated[bool, typer.Option(help="Perform a dry run without writing any files.")] = False):
+    """
+    Calculates a new convex hull from textlines if the region has textlines
+    1. Calculating a new convex hull from textlines if the region has textlines
+    2. Deleting the region if it has no textlines
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError('No xml files found in input directory')
+
+    for xml_file in track(
+            sorted(xml_files),
+            description="Recalculating textregion polygon in files..."):
+        filename = xml_file.name
+        print('[green]Processing file:[/green] ' + filename)
+
+        page = Page(xml_file)
+
+        # Process TextRegions
+        for region in page.regions.textregions:
+            # Check if region has valid coordinates
+            if len(region.textlines) >= min_textlines:
+                print(
+                    f"[yellow]Recalculating textregion polygon in TextRegion: {region.get_id()}[/yellow]")
+                # Calculate new convex hull from textlines
+                textline_coords = []
+                for line in region.textlines:
+                    textline_coords.extend(
+                        line.get_coordinates(
+                            returntype="tuple"))
+                if textline_coords:
+                    # Create convex hull from textline coordinates
+                    from shapely.geometry import MultiPoint
+                    hull = MultiPoint(textline_coords).convex_hull
+                    region.update_coordinates(hull, 'polygon')
+                    if rectangle:
+                        region.buffer(distance=0, direction='all', rectangle=True)
+                    else:
+                        region.simplify_polygon(tolerance=2)
+
+        if not dry_run:
+            fout = xml_file if outputdir is None else determine_output_path(
+                xml_file, outputdir, filename)
+            logging.info(
+                f'Wrote modified xml file to output directory: {fout}')
+            page.save_xml(fout)
+
+
+@app.command()
 def repair_dummy_region(
         inputs: Annotated[List[str], typer.Argument(exists=True,
                                                     help="Paths or workspace to the files to be validated.",
@@ -1829,6 +2015,125 @@ def match_textlines_to_region(
         fout = xml_file if outputdir is None else determine_output_path(xml_file, outputdir)
         logging.info('Wrote modified xml file to output directory: ' + str(fout))
         page.save_xml(fout)
+
+
+@app.command()
+def merge_overlapping_textregions(
+    inputs: Annotated[List[str], typer.Argument(
+        exists=True,
+        help="Paths or workspace to the PAGE XML files to be processed.",
+        callback=transform_inputs
+    )] = None,
+    outputdir: Annotated[Optional[str], typer.Option(
+        help="Filename of the output directory. If not specified, input files will be overwritten.",
+        callback=transform_output
+    )] = None,
+    min_overlap_percentage: Annotated[float, typer.Option(
+        help="Minimum overlap percentage to merge two text regions.",
+        min=0.0,
+        max=100.0
+    )] = 50.0,
+    dry_run: Annotated[bool, typer.Option(
+        help="Perform a dry run without writing any files."
+    )] = False,
+    recalculate_convex_hull: Annotated[bool, typer.Option(
+        help="Recalculate convex hull from textlines after merging."
+    )] = False
+):
+    """
+    Merges overlapping TextRegions based on a minimum overlap percentage.
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError('No XML files found in the input paths.')
+
+    for xml_file in track(xml_files, description="Merging overlapping regions..."):
+        filename = xml_file.name
+        logging.info(f'Processing file: {filename}')
+
+        try:
+            page = Page(xml_file)
+        except Exception as e:
+            logging.error(f'Error processing file {filename}: {str(e)}')
+            continue
+
+        while True:
+            merged_in_pass = False
+            text_regions = list(page.regions.textregions)
+            if len(text_regions) < 2:
+                break
+
+            for region1, region2 in itertools.combinations(text_regions, 2):
+                poly1 = region1.get_coordinates(returntype="polygon")
+                poly2 = region2.get_coordinates(returntype="polygon")
+
+                if poly1 is None or poly2 is None or not poly1.is_valid or not poly2.is_valid:
+                    continue
+
+                if not poly1.intersects(poly2):
+                    continue
+
+                intersection_area = poly1.intersection(poly2).area
+                min_area = min(poly1.area, poly2.area)
+
+                if min_area == 0:
+                    continue
+
+                overlap = (intersection_area / min_area) * 100
+
+                if overlap >= min_overlap_percentage:
+                    logging.info(f"Merging regions {region1.get_id()} and {region2.get_id()} with overlap {overlap:.2f}%")
+
+                    # Merge polygons
+                    new_poly = unary_union([poly1, poly2])
+                    region1.update_coordinates(new_poly, 'polygon')
+
+                    # Move textlines from region2 to region1
+                    for line in region2.textlines:
+                        region2.xml_element.remove(line.xml_element)
+                        region1.xml_element.append(line.xml_element)
+                        line.parent = region1
+
+                    # Update region1 textlines list
+                    region1.textlines.extend(region2.textlines)
+
+                    # Delete region2
+                    page.delete_element(region2.xml_element)
+                    
+                    if recalculate_convex_hull:
+                        logging.info(f"Recalculating convex hull for merged region {region1.get_id()}")
+                        textline_coords = []
+                        for line in region1.textlines:
+                            coords = line.get_coordinates(returntype="tuple")
+                            if coords:
+                                textline_coords.extend(coords)
+                        
+                        if textline_coords:
+                            from shapely.geometry import MultiPoint
+                            hull = MultiPoint(textline_coords).convex_hull
+                            region1.update_coordinates(hull, 'polygon')
+                            region1.simplify_polygon(tolerance=2)
+
+                    # Reload regions as the structure has changed
+                    page.load_regions()
+
+                    merged_in_pass = True
+                    break  # Restart combinations with updated regions
+
+            if merged_in_pass:
+                continue  # Restart while loop for another pass
+            else:
+                break  # No merges in this pass, exit while loop
+
+        if not dry_run:
+            fout = xml_file if outputdir is None else determine_output_path(
+                xml_file, outputdir, filename)
+            logging.info(
+                f'Wrote modified xml file to output directory: {fout}')
+            page.save_xml(fout)
+        else:
+            logging.info(
+                f'[DRY RUN] Would write modified xml file to: {xml_file}')
 
 
 if __name__ == "__main__":

@@ -177,6 +177,22 @@ class CoordElement:
         """ Returns the reading direction. """
         if 'readingDirection' in self.xml_element.attrib:
             return self.xml_element.attrib['readingDirection']
+ 
+    def reduce_polygon_points(self, tolerance: int = 2):
+        """
+        Reduces the number of points in the polygon by a specified tolerance.
+        """
+        coords = self.get_coordinates(returntype="polygon")
+        reduced_coords = remove_repeated_points(coords, tolerance=tolerance)
+        self.update_coordinates(reduced_coords, "polygon")
+
+    def simplify_polygon(self, tolerance: int = 2):
+        """
+        Simplifies the polygon by a specified tolerance.
+        """
+        coords = self.get_coordinates(returntype="polygon")
+        simplified_coords = simplify(coords, tolerance=tolerance)
+        self.update_coordinates(simplified_coords, "polygon")
 
     def update_coordinates(self, data, inputtype: str = "polygon"):
         """

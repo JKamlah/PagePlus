@@ -274,6 +274,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                     else:
                         st.error(result["output"])
 
+            st.subheader("Recalculate Polygon Operations")
             # Rectangularize Coordinates
             with st.expander("Rectangularize"):
                 st.write(
@@ -301,7 +302,72 @@ def show_modification(bridge: ModificationBridge) -> None:
                     else:
                         st.error(result["output"])
 
-            st.subheader("Recalculate Polygon Operations")
+            # Reduce Polygon Points
+            with st.expander("Reduce Polygon Points"):
+                st.write(
+                    """Reduces the number of points in the polygon by a specified tolerance.""")
+                levels = st.multiselect(
+                    "Level",
+                    [TextLevel.TextRegion.name, TextLevel.Textline.name, TextLevel.TableRegion.name],
+                    default=[TextLevel.TextRegion.name, TextLevel.Textline.name],
+                    key="reduce_polygon_points_level"
+                )
+                tolerance = st.number_input(
+                    "Tolerance",
+                    min_value=0,
+                    value=2,
+                    key="reduce_polygon_points_tolerance"
+                )
+                dry_run = st.checkbox("Dry run", key="reduce_polygon_points_dry_run")
+                if st.button("Reduce Polygon Points"):
+                    params = {
+                        "level": [TextLevel[name] for name in levels],
+                        "tolerance": tolerance,
+                        "dry_run": dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("reduce_polygon_points", **params)
+                    with st.spinner("Reducing polygon points...", show_time=True):
+                        result = bridge.reduce_polygon_points(
+                            files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
+
+            # Simplify Polygon
+            with st.expander("Simplify Polygon"):
+                st.write(
+                    """Simplifies the polygon by a specified tolerance.""")
+                levels = st.multiselect(
+                    "Level",
+                    [TextLevel.TextRegion.name, TextLevel.Textline.name, TextLevel.TableRegion.name],
+                    default=[TextLevel.TextRegion.name, TextLevel.Textline.name],
+                    key="simplify_polygon_level"
+                )
+                tolerance = st.number_input(
+                    "Tolerance",
+                    min_value=0,
+                    value=2,
+                    key="simplify_polygon_tolerance"
+                )
+                dry_run = st.checkbox("Dry run", key="simplify_polygon_dry_run")
+                if st.button("Simplify Polygon"):
+                    params = {
+                        "level": [TextLevel[name] for name in levels],
+                        "tolerance": tolerance,
+                        "dry_run": dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("simplify_polygon", **params)
+                    with st.spinner("Simplifying polygon...", show_time=True):
+                        result = bridge.simplify_polygon(
+                            files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
+
             # Pseudoline Polygon
             with st.expander("Pseudoline Polygon"):
                 if st.button("Pseudoline Polygon"):
@@ -309,6 +375,42 @@ def show_modification(bridge: ModificationBridge) -> None:
                     record_operation("pseudolinepolygon", **params)
                     with st.spinner("Generating pseudo-line polygons...", show_time=True):
                         result = bridge.pseudolinepolygon(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
+
+            # Recalculate TextRegion Polygon
+            with st.expander("Recalculate TextRegion Polygon"):
+                st.write(
+                    """Recalculates the polygon of a TextRegion, either from its textlines (convex hull) or by its minimal bounding box (rectangular)."""
+                )
+                rectangular = st.checkbox(
+                    "Rectangular",
+                    key="recalculate_textregion_polygon_rectangular"
+                )
+                min_textlines = st.number_input(
+                    "Minimum Textlines",
+                    min_value=0,
+                    value=0,
+                    key="recalculate_textregion_polygon_min_textlines"
+                )
+                dry_run = st.checkbox(
+                    "Dry run",
+                    key="recalculate_textregion_polygon_dry_run"
+                )
+                if st.button("Recalculate TextRegion Polygon"):
+                    params = {
+                        "rectangular": rectangular,
+                        "min_textlines": min_textlines,
+                        "dry_run": dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("recalculate_textregion_polygon", **params)
+                    with st.spinner("Recalculating TextRegion polygon...", show_time=True):
+                        result = bridge.recalculate_textregion_polygon(
+                            files=selected_files, **params
+                        )
                     if result["success"]:
                         st.success(result["output"])
                     else:
@@ -462,6 +564,40 @@ def show_modification(bridge: ModificationBridge) -> None:
                     record_operation("split_big_regions_vertical", **params)
                     with st.spinner("Splitting large regions...", show_time=True):
                         result = bridge.split_big_regions_vertical(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
+
+            # Merge Overlapping TextRegions
+            with st.expander("Merge Overlapping TextRegions"):
+                st.write(
+                    """Merges overlapping TextRegions based on a minimum overlap percentage."""
+                )
+                min_overlap_percentage = st.slider(
+                    "Minimum Overlap Percentage",
+                    min_value=0.0,
+                    max_value=100.0,
+                    value=50.0,
+                    step=1.0,
+                    key="merge_overlap_percentage"
+                )
+                recalculate_convex_hull = st.checkbox(
+                    "Recalculate convex hull from textlines",
+                    key="merge_recalculate_hull"
+                )
+                dry_run = st.checkbox("Dry run", key="merge_overlap_dry_run")
+                if st.button("Merge Overlapping TextRegions"):
+                    params = {
+                        "min_overlap_percentage": min_overlap_percentage,
+                        "recalculate_convex_hull": recalculate_convex_hull,
+                        "dry_run": dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("merge_overlapping_textregions", **params)
+                    with st.spinner("Merging overlapping regions...", show_time=True):
+                        result = bridge.merge_overlapping_textregions(
+                            files=selected_files, **params)
                     if result["success"]:
                         st.success(result["output"])
                     else:

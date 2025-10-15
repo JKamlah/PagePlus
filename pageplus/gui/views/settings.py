@@ -216,48 +216,47 @@ def show_settings(cli_bridge):
                 if status["tesseract_installed"]:
                     models = tesseract_bridge.get_available_models(model_path)
                     if models:
-                        st.markdown("#### Available Language Models")
+                        with st.expander("Available Language Models", expanded=False):
+                            # Create a dataframe with model information
+                            import pandas as pd
 
-                        # Create a dataframe with model information
-                        import pandas as pd
+                            # Process models to extract clean names and full paths
+                            model_data = []
+                            for model in models:
+                                clean_name = model.replace('.traineddata', '')
+                                model_data.append({
+                                    "Language Code": clean_name,
+                                    "Full Path": model,
+                                    "Status": "Available"
+                                })
 
-                        # Process models to extract clean names and full paths
-                        model_data = []
-                        for model in models:
-                            clean_name = model.replace('.traineddata', '')
-                            model_data.append({
-                                "Language Code": clean_name,
-                                "Full Path": model,
-                                "Status": "Available"
-                            })
+                            # Sort by language code
+                            model_data.sort(key=lambda x: x["Language Code"])
 
-                        # Sort by language code
-                        model_data.sort(key=lambda x: x["Language Code"])
+                            # Create dataframe
+                            df = pd.DataFrame(model_data)
 
-                        # Create dataframe
-                        df = pd.DataFrame(model_data)
+                            # Display the dataframe
+                            st.dataframe(
+                                df,
+                                hide_index=True,
+                                column_config={
+                                    "Language Code": st.column_config.TextColumn(
+                                        "Language Code",
+                                        help="Language code used in Tesseract commands"
+                                    ),
+                                    "Full Path": st.column_config.TextColumn(
+                                        "Full Path",
+                                        help="Complete path to the model file"
+                                    ),
+                                    "Status": st.column_config.TextColumn(
+                                        "Status",
+                                        help="Model availability status"
+                                    )
+                                }
+                            )
 
-                        # Display the dataframe
-                        st.dataframe(
-                            df,
-                            hide_index=True,
-                            column_config={
-                                "Language Code": st.column_config.TextColumn(
-                                    "Language Code",
-                                    help="Language code used in Tesseract commands"
-                                ),
-                                "Full Path": st.column_config.TextColumn(
-                                    "Full Path",
-                                    help="Complete path to the model file"
-                                ),
-                                "Status": st.column_config.TextColumn(
-                                    "Status",
-                                    help="Model availability status"
-                                )
-                            }
-                        )
-
-                        st.info(f"Total models available: {len(models)}")
+                            st.info(f"Total models available: {len(models)}")
 
                 if status["status"] == "ready":
                     st.success("✅ Tesseract OCR is ready to use")

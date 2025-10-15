@@ -5,10 +5,12 @@ from pageplus.cli.modification import (delete_text, delete_textlines,
                                        extend_lines, fit_into_parent,
                                        match_textlines_to_region,
                                        merge_columnaligned_regions,
+                                       merge_overlapping_textregions,
                                        pseudolinepolygon, reassign_ids,
+                                       recalculate_textregion_polygon,
                                        rectangularize, remove_empty,
                                        remove_tag, repair, repair_dummy_region,
-                                       replace_tag, set_page_version,
+                                       replace_tag, reduce_polygon_points, simplify_polygon, set_page_version,
                                        sort, sort_and_merge,
                                        sort_regions, top_tier_textregion,
                                        translate_lines)
@@ -616,6 +618,58 @@ class ModificationBridge(CLIBridge):
         except Exception as e:
             return {"success": False, "output": str(e)}
 
+    def reduce_polygon_points(
+        self,
+        files: List[str],
+        level: List[str] = ["TextRegion", "Textline"],
+        tolerance: int = 2,
+        outputdir: Optional[str] = None,
+        dry_run: bool = False
+    ) -> Dict[str, Any]:
+        """Reduces the number of points in the polygon by a specified tolerance."""
+        try:
+            if not dry_run:
+                UndoManager.add_undo_state("Reduce Polygon Points")
+            reduce_polygon_points(
+                inputs=files,
+                level=level,
+                tolerance=tolerance,
+                outputdir=outputdir,
+                dry_run=dry_run
+            )
+            return {
+                "success": True,
+                "output": "Polygon points reduced successfully"
+            }
+        except Exception as e:
+            return {"success": False, "output": str(e)}
+
+    def simplify_polygon(
+        self,
+        files: List[str],
+        level: List[str] = ["TextRegion", "Textline"],
+        tolerance: int = 2,
+        outputdir: Optional[str] = None,
+        dry_run: bool = False
+    ) -> Dict[str, Any]:
+        """Simplifies the polygon by a specified tolerance."""
+        try:
+            if not dry_run:
+                UndoManager.add_undo_state("Simplify Polygon")
+            simplify_polygon(
+                inputs=files,
+                level=level,
+                tolerance=tolerance,
+                outputdir=outputdir,
+                dry_run=dry_run
+            )
+            return {
+                "success": True,
+                "output": "Polygon simplified successfully"
+            }
+        except Exception as e:
+            return {"success": False, "output": str(e)}
+
     def match_textlines_to_region(
         self,
         files: List[str],
@@ -631,6 +685,58 @@ class ModificationBridge(CLIBridge):
             return {
                 "success": True,
                 "output": "Textlines matched to regions successfully"
+            }
+        except Exception as e:
+            return {"success": False, "output": str(e)}
+
+    def recalculate_textregion_polygon(
+        self,
+        files: List[str],
+        rectangular: bool = False,
+        min_textlines: int = 1,
+        outputdir: Optional[str] = None,
+        dry_run: bool = False
+    ) -> Dict[str, Any]:
+        """Recalculate TextRegion polygon from textlines."""
+        try:
+            if not dry_run:
+                UndoManager.add_undo_state("Recalculate TextRegion Polygon")
+            recalculate_textregion_polygon(
+                inputs=files,
+                rectangle=rectangular,
+                min_textlines=min_textlines,
+                outputdir=outputdir,
+                dry_run=dry_run
+            )
+            return {
+                "success": True,
+                "output": "TextRegion polygon recalculated successfully"
+            }
+        except Exception as e:
+            return {"success": False, "output": str(e)}
+
+    def merge_overlapping_textregions(
+        self,
+        files: List[str],
+        min_overlap_percentage: float = 50.0,
+        recalculate_convex_hull: bool = False,
+        outputdir: Optional[str] = None,
+        dry_run: bool = False
+    ) -> Dict[str, Any]:
+        """Merge overlapping text regions."""
+        try:
+            if not dry_run:
+                UndoManager.add_undo_state("Merge Overlapping TextRegions")
+            merge_overlapping_textregions(
+                inputs=files,
+                min_overlap_percentage=min_overlap_percentage,
+                recalculate_convex_hull=recalculate_convex_hull,
+                outputdir=outputdir,
+                dry_run=dry_run
+            )
+            return {
+                "success": True,
+                "output": "Overlapping text regions merged successfully"
             }
         except Exception as e:
             return {"success": False, "output": str(e)}

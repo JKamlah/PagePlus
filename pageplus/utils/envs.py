@@ -62,7 +62,9 @@ def str_to_env(string: str, substring=True) -> str:
 
     # Ensure the string does not start with a digit (handled above) and is not
     # empty
-    if not string or string[0].isdigit():
+    if string and string[0].isdigit():
+        string = "WS_" + string
+    if not string:
         raise ValueError(
             "The resulting environment variable name is invalid or empty.")
 

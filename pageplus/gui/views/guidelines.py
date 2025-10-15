@@ -237,12 +237,16 @@ def show_guidelines():
 
     with tab1:
         st.header("Evaluate Text")
+        use_all_files = st.checkbox("Use all files", value=True, key="eval_use_all_files")
         with st.form("evaluate_form"):
-            files_to_process = st.multiselect(
-                "Select files to evaluate",
-                options=[f.name for f in loaded_files],
-                default=[f.name for f in loaded_files]
-            )
+            files_to_process = []
+            if not use_all_files:
+                files_to_process = st.multiselect(
+                    "Select files to evaluate",
+                    options=[f.name for f in loaded_files],
+                    default=[]
+                )
+
             guideline_profiles = bridge.get_guideline_profiles()
             selected_guideline = st.selectbox(
                 "Select guideline profile",
@@ -263,8 +267,16 @@ def show_guidelines():
 
             submitted = st.form_submit_button("Run Evaluation")
 
-            if submitted and files_to_process:
-                selected_files = [f for f in loaded_files if f.name in files_to_process]
+            if submitted:
+                if use_all_files:
+                    selected_files = loaded_files
+                else:
+                    selected_files = [f for f in loaded_files if f.name in files_to_process]
+
+                if not selected_files:
+                    st.warning("No files selected for evaluation.")
+                    return
+
                 with st.spinner("Running evaluation..."):
                     result = bridge.run_evaluate(
                         inputs=selected_files,
@@ -277,12 +289,16 @@ def show_guidelines():
 
     with tab2:
         st.header("Text Mapping")
+        use_all_files_mapping = st.checkbox("Use all files", value=True, key="map_use_all_files")
         with st.form("mapping_form"):
-            files_to_normalize = st.multiselect(
-                "Select files to map",
-                options=[f.name for f in loaded_files],
-                default=[f.name for f in loaded_files]
-            )
+            files_to_normalize = []
+            if not use_all_files_mapping:
+                files_to_normalize = st.multiselect(
+                    "Select files to map",
+                    options=[f.name for f in loaded_files],
+                    default=[]
+                )
+
             # TODO: Add a way to dynamically get mapping profiles
             normalization_profiles = bridge.get_mapping_profiles()
             selected_normalization_guideline = st.selectbox(
@@ -300,8 +316,16 @@ def show_guidelines():
 
             mapping_submitted = st.form_submit_button("Run Mapping")
 
-            if mapping_submitted and files_to_normalize:
-                selected_files_mapping = [f for f in loaded_files if f.name in files_to_normalize]
+            if mapping_submitted:
+                if use_all_files_mapping:
+                    selected_files_mapping = loaded_files
+                else:
+                    selected_files_mapping = [f for f in loaded_files if f.name in files_to_normalize]
+
+                if not selected_files_mapping:
+                    st.warning("No files selected for mapping.")
+                    return
+
                 with st.spinner("Running mapping..."):
                     result = bridge.run_mapping_text(
                         inputs=selected_files_mapping,

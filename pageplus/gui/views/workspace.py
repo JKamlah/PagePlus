@@ -1,9 +1,11 @@
 import logging
+from pathlib import Path
 
 import streamlit as st
 
 from pageplus.gui.utils.picker import pick_directory
 from pageplus.utils.constants import Environments
+from pageplus.utils.envs import str_to_env
 from pageplus.utils.workspace import Workspace
 
 # Silence watchdog debug messages
@@ -124,11 +126,15 @@ def show_workspace(cli_bridge):
         if st.button("Select Directory"):
             selected_paths = pick_directory()
             if selected_paths:
-                from pathlib import Path
                 st.session_state.workspace_dir = selected_paths
                 # Suggest the last folder name as workspace name
-                folder_name = Path(selected_paths).name
+                path = Path(selected_paths)
+                folder_name = path.name
+                if folder_name == 'page':
+                    folder_name = path.parent.name
+                folder_name = str_to_env(folder_name)
                 st.session_state.workspace_name_suggestion = folder_name
+                st.session_state.workspace_name_input = folder_name
                 st.rerun()
             elif selected_paths is not None:
                 st.info("Directory selection cancelled.")
@@ -154,6 +160,7 @@ def show_workspace(cli_bridge):
         if st.button("Add Workspace"):
             if workspace_name and 'workspace_dir' in st.session_state:
                 try:
+                    workspace_name = str_to_env(workspace_name)
                     cli_bridge.load_local_document(
                         st.session_state.workspace_dir, workspace_name, False)
                     st.success(f"Workspace '{workspace_name}' added successfully!")
@@ -175,11 +182,15 @@ def show_workspace(cli_bridge):
         if st.button("Select Destination Directory", key="copy_select_dir"):
             selected_paths = pick_directory()
             if selected_paths:
-                from pathlib import Path
                 st.session_state.copy_destination_dir = selected_paths
                 # Suggest the last folder name as new workspace name
-                folder_name = Path(selected_paths).name
+                path = Path(selected_paths)
+                folder_name = path.name
+                if folder_name == 'page':
+                    folder_name = path.parent.name
+                folder_name = str_to_env(folder_name)
                 st.session_state.copy_workspace_name_suggestion = folder_name
+                st.session_state.copy_workspace_name_input = folder_name
                 st.rerun()
             elif selected_paths is not None:
                 st.info("Directory selection cancelled.")
@@ -214,6 +225,7 @@ def show_workspace(cli_bridge):
                         st.error("Please select a destination directory first")
                     else:
                         try:
+                            new_workspace = str_to_env(new_workspace)
                             cli_bridge.copy_workspace(
                                 destination_path,
                                 selected_workspace,
@@ -271,45 +283,82 @@ def show_workspace(cli_bridge):
     # --- TAB 5: Backup and Restore ---
     with tabs[4]:
         st.subheader("Backup and Restore")
-        backup_folder = st.text_input(
-            "Backup Folder",
-            value="Backup",
-            label_visibility="visible"
-        )
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            if st.button("Backup XML Files"):
-                try:
-                    cli_bridge.backup_xmlfiles(backup_folder)
-                    st.success("XML files backed up successfully!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error backing up XML files: {str(e)}")
 
-        with col2:
-            if st.button("Backup XML Files as Zip"):
-                try:
-                    cli_bridge.backup_xmlfiles(backup_folder, as_zip=True)
-                    st.success("XML files backed up successfully!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error backing up XML files: {str(e)}")
-        with col3:
-            if st.button("Restore XML Files"):
-                try:
-                    cli_bridge.restore_xmlfiles(backup_folder)
-                    st.success("XML files restored successfully!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error restoring XML files: {str(e)}")
-        with col4:
-            if st.button("Restore XML Files from Zip"):
-                try:
-                    cli_bridge.restore_xmlfiles(backup_folder, from_zip=True)
-                    st.success("XML files restored successfully!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error restoring XML files: {str(e)}")
+        if not loaded_workspace:
+            st.warning("Please load a workspace first to see backup and restore options.")
+        else:
+            ws = Workspace(Environments.PAGEPLUS)
+            workspace_path = Path(ws.path(loaded_workspace))
+
+            # --- Backup Section ---
+            st.markdown("#### Backup")
+            backup_folder_name = st.text_input(
+                "Backup Folder Name",
+                value="Backup",
+                help="Provide a name for the backup folder or the base name for the zip file."
+            )
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Backup XML Files to Folder"):
+                    if backup_folder_name:
+                        try:
+                            cli_bridge.backup_xmlfiles(backup_folder_name, as_zip=False)
+                            st.success(f"XML files backed up successfully to '{backup_folder_name}'!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error backing up XML files: {str(e)}")
+                    else:
+                        st.error("Backup folder name cannot be empty.")
+
+            with col2:
+                if st.button("Backup XML Files as Zip"):
+                    if backup_folder_name:
+                        try:
+                            cli_bridge.backup_xmlfiles(backup_folder_name, as_zip=True)
+                            st.success(f"XML files backed up successfully to '{backup_folder_name}.zip'!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error backing up XML files as zip: {str(e)}")
+                    else:
+                        st.error("Backup file name cannot be empty.")
+
+            st.divider()
+
+            # --- Restore Section ---
+            st.markdown("#### Restore")
+
+            # Restore from Zip
+            zip_files = sorted([f.name for f in workspace_path.glob('*.zip')], reverse=True)
+            if zip_files:
+                selected_zip = st.selectbox("Select a zip file to restore from", zip_files)
+                if st.button("Restore from selected Zip"):
+                    try:
+                        # We pass the filename without the .zip extension to the bridge
+                        cli_bridge.restore_xmlfiles(Path(selected_zip).stem, from_zip=True)
+                        st.success(f"XML files from '{selected_zip}' restored successfully!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error restoring from zip: {str(e)}")
+            else:
+                st.info("No zip backups found in the current workspace directory.")
+
+            # Restore from Folder
+            # Exclude common non-backup folders and files that look like zips
+            subfolders = sorted(
+                [f.name for f in workspace_path.iterdir() if f.is_dir() and not f.name.startswith('.') and f.name != "__pycache__"],
+                reverse=True
+            )
+            if subfolders:
+                selected_folder = st.selectbox("Select a folder to restore from", subfolders)
+                if st.button("Restore from selected Folder"):
+                    try:
+                        cli_bridge.restore_xmlfiles(selected_folder, from_zip=False)
+                        st.success(f"XML files from '{selected_folder}' restored successfully!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error restoring from folder: {str(e)}")
+            else:
+                st.info("No backup subfolders found in the current workspace directory.")
 
     # Show success message from session state if it exists
     if 'workspace_success' in st.session_state:
