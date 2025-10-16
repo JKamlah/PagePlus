@@ -224,7 +224,12 @@ class CoordElement:
             return
         coordstr = " ".join(self._remove_adjacent_duplicates(coordstr.split(' ')))
         coords = self.xml_element.find(f'{{{self.ns}}}Coords')
-        coords.set('points', coordstr)
+        if coords is not None:
+            coords.set('points', coordstr)
+        else:
+            ET.SubElement(
+                self.xml_element, f'{{{self.ns}}}Coords', {
+                    'points': coordstr})
 
         # Conversion methods
 

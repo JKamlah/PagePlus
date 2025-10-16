@@ -127,8 +127,8 @@ else:
             try:
                 # Create output path for generated PAGE XML
                 output_base = image_path.with_suffix('')
-                generated_xml_path = output_base.with_suffix('.xml')
-                
+                # generated_xml_path = output_base.with_suffix('.xml')
+
                 # Run tesseract command
                 cmd = [
                     'tesseract',
@@ -182,7 +182,7 @@ else:
                     'text_dict': {'page': {'full_text': ''}},
                     'page_diff': page_diff,
                     'page_metrics': page_metrics
-                }    
+                }
             except subprocess.TimeoutExpired as e:
                 print(f"Tesseract timeout for {xml_file.name}: {e}")
                 return {
@@ -234,7 +234,7 @@ else:
                     tr_id = textregion.get_id()
                     if region_tagfilter is not None and region_tagfilter != textregion.get_tag():
                         continue
-                    
+
                     # Get region coordinates and crop image
                     region_coords = textregion.get_coordinates(returntype='mrr')
                     region_snippet, crop_bbox = crop_image_by_polygon(
@@ -246,7 +246,7 @@ else:
                         snippet_dir=imageDir.joinpath(
                             image_filename.rsplit('.', 1)[0]),
                         snippet_name='region_' + tr_id)
-                    
+
                     # Process region with OCR
                     if region_snippet.mode == "RGBA":
                         rgb_snippet = Image.new("RGB", region_snippet.size, (255, 255, 255))
@@ -256,7 +256,7 @@ else:
                         api.SetImage(region_snippet)
                     api.Recognize()
                     ri = api.GetIterator()
-                    
+
                     # Clear existing TextLines from the region
                     if textregion.textlines:
                         # Delete all existing textlines
@@ -269,41 +269,40 @@ else:
                         bbox = r.BoundingBox(RIL.TEXTLINE)
                         bbox = [bbox[0]+xmin_crop, bbox[1]+ymin_crop, bbox[2]+xmin_crop, bbox[3]+ymin_crop]
                         line_id = f"{tr_id}_l{idx+1}"
-                        
+
                         # Convert bbox to coordinates string
                         line_coords = f"{bbox[0]},{bbox[1]} {bbox[2]},{bbox[1]} {bbox[2]},{bbox[3]} {bbox[0]},{bbox[3]}"
-                        
+
                         # Create baseline coordinates (simplified - using bbox bottom as baseline)
                         baseline_coords = f"{bbox[0]},{bbox[3]} {bbox[2]},{bbox[3]}"
-                        
+
                         # Escape the text content
                         line_text = escape(ocr_text.strip())
-                        
+
                         # Create new TextLine XML element
                         import lxml.etree as ET
                         textline_elem = ET.SubElement(textregion.xml_element, f"{{{textregion.ns}}}TextLine")
                         textline_elem.set("id", line_id)
-                        
+
                         # Add Coords element
                         coords_elem = ET.SubElement(textline_elem, f"{{{textregion.ns}}}Coords")
                         coords_elem.set("points", line_coords)
-                        
+
                         # Add Baseline element
                         baseline_elem = ET.SubElement(textline_elem, f"{{{textregion.ns}}}Baseline")
                         baseline_elem.set("points", baseline_coords)
-                        
+
                         # Add TextEquiv element
                         text_equiv_elem = ET.SubElement(textline_elem, f"{{{textregion.ns}}}TextEquiv")
                         unicode_elem = ET.SubElement(text_equiv_elem, f"{{{textregion.ns}}}Unicode")
                         unicode_elem.text = line_text
-                        
+
                         print(f'{line_id} -> [green]{line_text}[/green]')
-                    
+
                     # Refresh the textlines list after adding new elements
                     from pageplus.models.text_elements import Textline
                     textregion.textlines = [Textline(e, textregion.ns, parent=textregion)
                                             for e in textregion.xml_element.iter(f"{{{textregion.ns}}}TextLine")]
-
 
             else:  # Textline level (default)
                 # Textline-level processing - process each textline individually
@@ -454,10 +453,10 @@ else:
             image_path, image_filename = find_matching_image(
                 xml_file, image_files, image_folder, same_names, image_extensions
             )
-            
+
             process_args.append((
                 xml_file, image_path, image_filename, model_name, save_snippets,
-                text_filter, region_tagfilter, textline_tagfilter, profilelevel, 
+                text_filter, region_tagfilter, textline_tagfilter, profilelevel,
                 outputdir, dry_run, None, None  # model_path will be added later
             ))
 
@@ -570,7 +569,7 @@ else:
                     if result is not None:
                         successful_results.append(result)
                     results.append(result)
-                    
+
                     # Update progress
                     total_files = len(process_args)
                     progress_info = {
@@ -579,7 +578,7 @@ else:
                         "successful": len(successful_results),
                         "percentage": (i / total_files) * 100 if total_files > 0 else 0
                     }
-                    
+
                     if progress_callback:
                         progress_callback(progress_info)
                     else:
@@ -591,7 +590,7 @@ else:
                 pool.terminate()
                 pool.join()
                 raise
-        
+
         return {
             "success": True,
             "processed_files": len(successful_results),
@@ -606,7 +605,6 @@ else:
             return languages if languages else ["eng"]  # Fallback if no models found
         except Exception:
             return ["eng"]  # Default fallback
-
 
     def get_default_datapath() -> str:
         """Get the default Tesseract data path."""
@@ -626,7 +624,6 @@ else:
                     return tessdata_path
 
             # If TESSDATA_PREFIX is set, use it
-            import os
             if 'TESSDATA_PREFIX' in os.environ:
                 return os.environ['TESSDATA_PREFIX']
 
@@ -638,7 +635,7 @@ else:
         import os
         common_paths = [
             "/usr/share/tesseract-ocr/4.00/tessdata",
-            "/usr/share/tesseract-ocr/5/tessdata", 
+            "/usr/share/tesseract-ocr/5/tessdata",
             "/usr/share/tesseract-ocr/tessdata",
             "/usr/local/share/tesseract-ocr/tessdata",
             "/opt/homebrew/share/tesseract-ocr/tessdata"
@@ -649,7 +646,6 @@ else:
                 return path
 
         return "/usr/share/tesseract-ocr/tessdata"  # Default fallback
-
 
     def check_tesseract_installation() -> Dict[str, Any]:
         """Check if Tesseract is properly installed."""

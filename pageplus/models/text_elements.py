@@ -44,6 +44,29 @@ class TextRegion(Region):
 
         return 0
 
+    def add_textline(self, line_id: str, coords: list, baseline: list, text: str = "") -> Textline:
+        """
+        Adds a new textline to the region.
+        """
+        # Create new TextLine element
+        new_line_element = ET.SubElement(
+            self.xml_element, f"{{{self.ns}}}TextLine", {"id": line_id}
+        )
+
+        # Create Textline object
+        new_textline = Textline(new_line_element, self.ns, parent=self)
+
+        # Set coordinates, baseline, and text
+        new_textline.update_coordinates(coords, inputtype="tuple")
+        if baseline:
+            new_textline.update_baseline_coordinates(baseline)
+        if text:
+            new_textline.update_text(text)
+
+        # Add to the list of textlines
+        self.textlines.append(new_textline)
+        return new_textline
+
     def delete_textlines(self, idx_list: list):
         """
         Deletes textlines from the region based on a list of indices.
@@ -427,7 +450,7 @@ class Textline(CoordElement):
             baseline.set('points', coords_string)
         else:
             ET.SubElement(
-                self.xml_element, 'Baseline', {
+                self.xml_element, f'{{{self.ns}}}Baseline', {
                     'points': coords_string})
 
     # Text methods

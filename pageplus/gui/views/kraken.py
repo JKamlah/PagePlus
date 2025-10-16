@@ -273,15 +273,34 @@ def _show_pageplus_mode(cli_bridge, selected_files):
     st.markdown("""
     **PagePlus Advanced Functions**
 
-    Advanced OCR mode with fine-grained control over processing.
+    Advanced OCR and segmentation modes with fine-grained control over processing.
     Includes text filters, region filters, and other PagePlus-specific features.
     """)
 
     st.info("📝 **Note:** This mode requires existing PAGE-XML files with layout information.")
 
+    # Processing level selection
+    st.subheader("🎯 Processing Level")
+    processing_level = st.selectbox(
+        "Process on level:",
+        ["Textline", "TextRegion"],
+        index=0,  # Default to Textline
+        help="Select the level at which to apply processing. TextRegion creates new lines in the regions. Textline only updates the text of existing lines."
+    )
+
+    if processing_level == "Textline":
+        _show_pageplus_ocr_tab(cli_bridge, selected_files)
+    elif processing_level == "TextRegion":
+        _show_pageplus_segment_tab(cli_bridge, selected_files)
+
+
+def _show_pageplus_ocr_tab(cli_bridge, selected_files):
+    """Show the PagePlus OCR tab."""
+    st.markdown("Run OCR on existing text lines within filtered regions.")
+
     # Configuration section
     _, rec_model_name, model_dir, _, _ = _show_model_configuration(
-        cli_bridge, "Advanced", key_prefix="pageplus"
+        cli_bridge, "Advanced", key_prefix="pageplus_ocr"
     )
 
     # Filtering options
@@ -294,7 +313,7 @@ def _show_pageplus_mode(cli_bridge, selected_files):
             "Text Filter (Regex)",
             value="",
             help="Regular expression to filter specific textlines",
-            key="pageplus_text_filter"
+            key="pageplus_ocr_text_filter"
         )
 
     with col2:
@@ -302,7 +321,7 @@ def _show_pageplus_mode(cli_bridge, selected_files):
             "Region Tag Filter",
             value="",
             help="Filter specific region tags",
-            key="pageplus_region_filter"
+            key="pageplus_ocr_region_filter"
         )
 
     with col3:
@@ -310,7 +329,7 @@ def _show_pageplus_mode(cli_bridge, selected_files):
             "Textline Tag Filter",
             value="",
             help="Filter specific textline tags",
-            key="pageplus_textline_filter"
+            key="pageplus_ocr_textline_filter"
         )
 
     # Additional options
@@ -323,7 +342,7 @@ def _show_pageplus_mode(cli_bridge, selected_files):
             "Save Snippets",
             value=False,
             help="Save image snippets for debugging",
-            key="pageplus_save_snippets"
+            key="pageplus_ocr_save_snippets"
         )
 
     with col2:
@@ -331,13 +350,13 @@ def _show_pageplus_mode(cli_bridge, selected_files):
             "Dry Run",
             value=False,
             help="Process without saving changes",
-            key="pageplus_dry_run"
+            key="pageplus_ocr_dry_run"
         )
 
     # Processing section
     st.subheader("⚡ Processing")
 
-    if st.button("🚀 Start Advanced OCR", type="primary", key="pageplus_process_btn"):
+    if st.button("🚀 Start Advanced OCR", type="primary", key="pageplus_ocr_process_btn"):
         if not rec_model_name or not model_dir:
             st.error("Please select a recognition model first!")
             return
@@ -358,12 +377,108 @@ def _show_pageplus_mode(cli_bridge, selected_files):
             return
 
         # Run advanced OCR
-        _run_pageplus_processing(
-            cli_bridge, selected_files, xml_files,
-            rec_model_name, model_dir,
-            text_filter, region_tagfilter, textline_tagfilter,
-            save_snippets, dry_run
-        )
+        with st.spinner("Kraken is working its magic... 🐙", show_time=True):
+            _run_pageplus_processing(
+                cli_bridge, selected_files, xml_files,
+                rec_model_name, model_dir,
+                text_filter, region_tagfilter, textline_tagfilter,
+                save_snippets, dry_run
+            )
+
+
+def _show_pageplus_segment_tab(cli_bridge, selected_files):
+    """Show the PagePlus Region Segmentation tab."""
+    st.markdown("Run segmentation on text regions to find new text lines. This will **delete** existing lines in the selected regions.")
+
+    # Model Configuration
+    seg_model_name, rec_model_name, model_dir, seg_text_direction, _ = _show_model_configuration(
+        cli_bridge, "Segmentation + Recognition", key_prefix="pageplus_seg"
+    )
+    st.caption("Recognition model is optional. If provided, OCR will be run on the newly found lines.")
+
+    # Filtering options
+    st.subheader("🎯 Filtering Options")
+    region_tagfilter = st.text_input(
+        "Region Tag Filter (Regex)",
+        value="",
+        help="Regular expression to filter specific text regions for segmentation. Leave empty to process all regions.",
+        key="pageplus_seg_region_filter"
+    )
+
+    # Additional options
+    st.subheader("🔧 Additional Options")
+    dry_run = st.checkbox(
+        "Dry Run",
+        value=False,
+        help="Process without saving changes",
+        key="pageplus_seg_dry_run"
+    )
+
+    # Processing section
+    st.subheader("⚡ Processing")
+
+    if st.button("🚀 Start Region Segmentation", type="primary", key="pageplus_seg_process_btn"):
+        if not seg_model_name or not model_dir:
+            st.error("Please select a segmentation model first!")
+            return
+
+        # Find corresponding XML files
+        xml_files = [str(Path(f).with_suffix('.xml')) for f in selected_files if Path(f).with_suffix('.xml').exists()]
+
+        if not xml_files:
+            st.error("No corresponding XML files found for the selected images!")
+            st.info("This mode requires existing PAGE-XML files.")
+            return
+
+        # Run region segmentation
+        with st.spinner("Segmenting regions... 🐙", show_time=True):
+            try:
+                total_files = len(xml_files)
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                status_text.text(f"Starting region segmentation for {total_files} files...")
+
+                seg_model_path = model_dir / seg_model_name
+                rec_model_path = model_dir / rec_model_name if rec_model_name else None
+
+                # This is a bit of a workaround as the CLI function is not designed to give fine-grained progress.
+                # We'll just show a generic spinner from the bridge call and then update.
+                result = cli_bridge.run_segmentation_on_regions(
+                    xml_files=xml_files,
+                    image_folder=".",
+                    outputdir=st.session_state.get('kraken_output_dir', None),
+                    seg_model_path=seg_model_path,
+                    rec_model_path=rec_model_path,
+                    device=st.session_state.get("pageplus_seg_device", "cpu"),
+                    text_direction=seg_text_direction,
+                    same_names=True,
+                    image_extensions=[Path(f).suffix for f in selected_files],
+                    region_tagfilter=region_tagfilter if region_tagfilter else None,
+                    dry_run=dry_run
+                )
+
+                progress_bar.progress(1.0)
+                status_text.text("✅ Segmentation complete!")
+
+                if result.get("success"):
+                    st.success("✅ Region segmentation completed successfully!")
+
+                    # Show statistics
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Files Processed", result.get("processed_files", 0))
+                    with col2:
+                        st.metric("Total Files", result.get("total_files", 0))
+                    with col3:
+                        st.metric("Processing Time", f"{result.get('processing_time', 0):.2f}s")
+
+                    if result.get("message"):
+                        st.info(result["message"])
+                else:
+                    st.error(f"❌ Processing failed: {result.get('error', 'Unknown error')}")
+
+            except Exception as e:
+                st.error(f"❌ An unexpected error occurred: {e}")
 
 
 def _show_model_configuration(cli_bridge, processing_mode, key_prefix=""):
@@ -468,8 +583,8 @@ def _show_model_configuration(cli_bridge, processing_mode, key_prefix=""):
                     with col1:
                         rec_model_name = st.selectbox(
                             "Recognition Model",
-                            options=rec_models if rec_models else all_models,
-                            help="Select a recognition/OCR model",
+                            options=[None] + (rec_models if rec_models else all_models),
+                            help="Select a recognition model",
                             key=f"{key_prefix}_rec_model"
                         )
                     with col2:
@@ -480,7 +595,9 @@ def _show_model_configuration(cli_bridge, processing_mode, key_prefix=""):
                             help="Sets principal text direction in serialization output",
                             key=f"{key_prefix}_rec_text_direction"
                         )
-                    st.caption(f"📁 Model path: `{model_dir / rec_model_name}`")
+
+                    rec_path_str = f"`{model_dir / rec_model_name}`" if rec_model_name else "Not selected"
+                    st.caption(f"📁 Model path: {rec_path_str}")
 
                     # Show model info
                     if filter_models and models_by_type['recognition']:
@@ -518,7 +635,7 @@ def _show_model_configuration(cli_bridge, processing_mode, key_prefix=""):
                     with col1:
                         rec_model_name = st.selectbox(
                             "Recognition Model",
-                            options=rec_models if rec_models else all_models,
+                            options=[None] + (rec_models if rec_models else all_models),
                             help="Select a recognition model",
                             key=f"{key_prefix}_rec_model_combined"
                         )
@@ -530,7 +647,9 @@ def _show_model_configuration(cli_bridge, processing_mode, key_prefix=""):
                             help="Sets principal text direction in serialization output",
                             key=f"{key_prefix}_rec_text_direction_combined"
                         )
-                    st.caption(f"📁 Seg: `{model_dir / seg_model_name}` | Rec: `{model_dir / rec_model_name}`")
+
+                    rec_path_str = f"`{model_dir / rec_model_name}`" if rec_model_name else "Not selected"
+                    st.caption(f"📁 Model path: {rec_path_str}")
 
                     # Show model counts
                     if filter_models and (models_by_type['segmentation'] or models_by_type['recognition']):
@@ -617,14 +736,14 @@ def _show_performance_options(key_prefix="", mode=None):
 def _run_cli_processing(cli_bridge, processing_mode, selected_files,
                         seg_model_name, rec_model_name, model_dir, device, seg_text_direction, rec_text_direction, jobs, template, threads):
     """Run CLI mode processing."""
-    
+
     # --- Model Validation ---
     if processing_mode == "Segmentation Only":
         model_type = cli_bridge.get_model_type(model_dir / seg_model_name)
         if model_type != 'segmentation':
             st.error(f"'{seg_model_name}' is not a valid segmentation model. Please select a different model.")
             return
-            
+
     elif processing_mode == "Recognition Only (requires XML)":
         model_type = cli_bridge.get_model_type(model_dir / rec_model_name)
         if model_type != 'recognition':
@@ -636,7 +755,7 @@ def _run_cli_processing(cli_bridge, processing_mode, selected_files,
         if seg_model_type != 'segmentation':
             st.error(f"'{seg_model_name}' is not a valid segmentation model. Please select a different model for segmentation.")
             return
-        
+
         rec_model_type = cli_bridge.get_model_type(model_dir / rec_model_name)
         if rec_model_type != 'recognition':
             st.error(f"'{rec_model_name}' is not a valid recognition model. Please select a different model for recognition.")
@@ -769,6 +888,7 @@ def _run_pageplus_processing(cli_bridge, selected_files, xml_files,
         if result.get("success", False):
             st.success("✅ Advanced OCR completed successfully!")
 
+            # Show statistics
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("Files Processed", result.get("processed_files", 0))

@@ -6,6 +6,7 @@ import asyncio
 from pageplus.gui.cli_bridges.base import CLIBridge
 from pageplus.utils.envs import get_env_path
 from dotenv import set_key
+from pageplus.utils.constants import ImageExtension
 
 # Import Kraken functions
 from pageplus.cli.ocr_kraken import (
@@ -14,7 +15,8 @@ from pageplus.cli.ocr_kraken import (
     verify_kraken_installation,
     kraken_segment_cli,
     kraken_recognize_cli,
-    kraken_segment_and_recognize_cli
+    kraken_segment_and_recognize_cli,
+    run_kraken_segment_batch_external_async
 )
 
 
@@ -541,6 +543,64 @@ class KrakenBridge(CLIBridge):
                 "success": False,
                 "error": str(e)
             }
+
+    def run_segmentation_on_regions(self,
+                                      xml_files: List[str],
+                                      image_folder: str,
+                                      outputdir: Optional[str],
+                                      seg_model_path: Path,
+                                      rec_model_path: Optional[Path],
+                                      device: str,
+                                      text_direction: str,
+                                      same_names: bool,
+                                      image_extensions: List[str],
+                                      region_tagfilter: Optional[str],
+                                      dry_run: bool,
+                                      progress_callback=None) -> Dict[str, Any]:
+        """
+        Run segmentation on text regions from PAGE-XML files.
+        """
+        if not self.is_configured():
+            return {"success": False, "error": "Kraken Python environment is not configured."}
+
+        try:
+            from pageplus.cli.ocr_kraken import segment as cli_segment
+            import time
+            start_time = time.time()
+
+            # The CLI command will handle the async logic
+            cli_segment(
+                inputs=xml_files,
+                image_folder=image_folder,
+                outputdir=outputdir,
+                seg_model_name=seg_model_path.name,
+                model_dir=seg_model_path.parent,
+                rec_model_name=rec_model_path.name if rec_model_path else None,
+                jobs=1,  # Let the CLI handle internal async management
+                device=device,
+                text_direction=text_direction,
+                same_names=same_names,
+                image_extensions=[ImageExtension(ext) for ext in image_extensions],
+                region_tagfilter=region_tagfilter,
+                dry_run=dry_run
+            )
+
+            end_time = time.time()
+
+            # Since the CLI function is running in the same process, we can't easily get a detailed result back
+            # without more significant refactoring of the CLI command.
+            # For now, we assume success if no exception is thrown.
+            # The progress and logs will be visible in the console where Streamlit is running.
+            return {
+                "success": True,
+                "processing_time": end_time - start_time,
+                "processed_files": len(xml_files),
+                "total_files": len(xml_files),
+                "message": "Region segmentation process completed. Check console for details."
+            }
+        except Exception as e:
+            self.logger.error(f"Error during region segmentation: {e}")
+            return {"success": False, "error": str(e)}
 
     def get_installation_instructions(self) -> str:
         """Get instructions for installing Kraken in a separate environment."""

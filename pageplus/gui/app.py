@@ -10,6 +10,7 @@ import time
 import sys
 # Disable Streamlit browser usage stats
 os.environ["STREAMLIT_BROWSER_GATHERUSAGESTATS"] = "false"
+os.environ["STREAMLIT_EMAIL"] = ""
 
 import streamlit as st
 from pathlib import Path
@@ -430,9 +431,10 @@ def show_home():
     ✅ Validation: Validate PAGE-XML files  
     📊 Evaluation: Evaluate PAGE-XML files  
     🛠️ Modification: Modify processed documents  
-    🔤 Tesseract OCR: Do OCR on PAGE-XML files with Tesseract (if activated)  
     🤖 LLM: Perform different tasks on PAGE-XML files with LLMs  
-    🌟 Gemini: Use Gemini to process images and validate PAGE-XML output  
+    🌟 Gemini: Use Gemini to process images and validate PAGE-XML output
+    🔤 Tesseract OCR: Do OCR on PAGE-XML files with Tesseract (if activated)  
+    🐙 Kraken OCR: Do OCR on PAGE-XML files with Kraken (if activated)  
     📤 Export: Export PAGE-XML files to different formats (ALTO, PDF, Text)  
     🗂️ Workspace: Manage workspaces  
     ⚙️ Settings: Configure application settings

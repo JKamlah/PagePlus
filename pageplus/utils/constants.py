@@ -3,6 +3,8 @@ from __future__ import annotations
 from enum import Enum
 from pathlib import Path
 
+from pageplus.utils.appdirs import user_data_dir
+
 # --- App Information ---
 APP_NAME = "PagePlus"
 APP_AUTHOR = "PagePlus"
@@ -301,7 +303,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 
 # --- User-Specific Directories (in user's home folder) ---
-from pageplus.utils.appdirs import user_data_dir
 USER_DATA_DIR = Path(user_data_dir(APP_NAME, APP_AUTHOR))
 USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
 

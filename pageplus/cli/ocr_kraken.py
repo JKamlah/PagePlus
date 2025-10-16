@@ -5,6 +5,8 @@ import tempfile
 from collections import Counter
 from pathlib import Path
 from typing import List, Annotated, Optional
+import pickle
+import base64
 
 import typer
 from rich import print
@@ -51,6 +53,240 @@ async def run_async_subprocess(cmd: List[str], timeout: int) -> tuple[int, str, 
         return -1, "", f"Process timed out after {timeout} seconds."
 
 
+async def run_kraken_segment_batch_external_async(
+    python_path: Path,
+    regions_data: dict,
+    seg_model_path: Path,
+    rec_model_path: Optional[Path] = None,
+    device: str = 'cpu',
+    text_direction: str = 'horizontal-lr',
+) -> dict:
+    """
+    Run Kraken segmentation on a batch of regions using an external Python environment.
+    Optionally, run recognition on the found lines.
+
+    Args:
+        python_path (Path): Path to the Python executable in the Kraken environment.
+        regions_data (dict): Dictionary with region IDs as keys and image paths as values.
+        seg_model_path (Path): Path to the segmentation model.
+        rec_model_path (Optional[Path], optional): Path to the recognition model. Defaults to None.
+        device (str, optional): Device to run on. Defaults to 'cpu'.
+        text_direction (str, optional): Text direction. Defaults to 'horizontal-lr'.
+
+    Returns:
+        dict: A dictionary containing the segmentation and OCR results for each region.
+    """
+    script_content = '''
+import sys
+import json
+import pickle
+import base64
+from pathlib import Path
+from PIL import Image
+from kraken.lib import models
+from kraken import blla, rpred
+from kraken.containers import BaselineLine, Segmentation
+
+results = {}
+try:
+    # Load data from stdin
+    input_data = pickle.loads(base64.b64decode(sys.stdin.read()))
+    regions_data = input_data['regions_data']
+    seg_model_path = Path(input_data['seg_model_path'])
+    rec_model_path = Path(input_data['rec_model_path']) if input_data['rec_model_path'] else None
+    device = input_data['device']
+    text_direction = input_data['text_direction']
+
+    # Load models once
+    from kraken.lib.vgsl import TorchVGSLModel
+    seg_model = TorchVGSLModel.load_model(seg_model_path)
+    rec_model = None
+    if rec_model_path and rec_model_path.exists():
+        rec_model = models.load_any(rec_model_path, device=device)
+
+    for region_id, region_info in regions_data.items():
+        image_path = Path(region_info['image_path'])
+        image = Image.open(image_path)
+
+        # Segmentation
+        segmentation_container = blla.segment(image, model=seg_model, text_direction=text_direction, device=device)
+
+        region_results = {'lines': []}
+
+        if rec_model:
+            # Recognition
+            it = rpred.rpred(rec_model, image, segmentation_container, device=device)
+            for pred in it:
+                region_results['lines'].append({
+                    'boundary': pred.boundary,
+                    'baseline': pred.baseline,
+                    'text': pred.prediction
+                })
+        else:
+            # Just segmentation
+            for line in segmentation_container.lines:
+                region_results['lines'].append({
+                    'boundary': line.boundary,
+                    'baseline': line.baseline,
+                    'text': ''
+                })
+
+        results[region_id] = region_results
+except Exception as e:
+    print(f"Error in Kraken script: {e}", file=sys.stderr)
+    sys.exit(1)
+
+print(json.dumps(results))
+'''
+    input_data = {
+        'regions_data': {k: {'image_path': str(v['image_path'])} for k, v in regions_data.items()},
+        'seg_model_path': str(seg_model_path),
+        'rec_model_path': str(rec_model_path) if rec_model_path else None,
+        'device': device,
+        'text_direction': text_direction,
+    }
+    encoded_data = base64.b64encode(pickle.dumps(input_data))
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            str(python_path), "-c", script_content,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(input=encoded_data), timeout=600)
+
+        if proc.returncode == 0 and stdout:
+            return json.loads(stdout.decode('utf-8'))
+        else:
+            error_msg = stderr.decode('utf-8')
+            logging.error(f"Kraken segment batch failed with return code {proc.returncode}: {error_msg}")
+            raise Exception(f"Kraken script failed: {error_msg}")
+    except asyncio.TimeoutError:
+        logging.error("Kraken segment batch process timed out.")
+        raise
+    except Exception as e:
+        logging.error(f"Error running Kraken segment batch: {e}")
+        raise
+
+
+async def run_kraken_ocr_batch_external_async(
+    python_path: Path,
+    lines_data: dict,
+    model_path: Path,
+    pad: int = 16
+) -> dict:
+    """
+    Run Kraken OCR on a batch of lines using an external Python environment asynchronously.
+    The model is loaded only once.
+
+    Args:
+        python_path (Path): Path to the Python executable in the Kraken environment.
+        lines_data (dict): A dictionary containing information about the lines to be processed.
+                           Example: {line_id: {'image_path': Path, 'baseline_coords': list, 'textline_coords': list}}
+        model_path (Path): Path to the Kraken model file.
+        pad (int, optional): Padding for OCR. Defaults to 16.
+
+    Returns:
+        dict: A dictionary containing the OCR results.
+              Example: {line_id: {'text': str, 'confidences': list}}
+    """
+    script_content = '''
+import sys
+import json
+import pickle
+import base64
+from pathlib import Path
+from PIL import Image
+from kraken.lib import models
+from kraken import rpred
+from kraken.containers import BaselineLine, Segmentation
+
+try:
+    # Read parameters from stdin
+    input_data = pickle.loads(base64.b64decode(sys.stdin.read()))
+
+    lines_data = input_data['lines_data']
+    model_path = Path(input_data['model_path'])
+    pad = input_data['pad']
+
+    # Load model once
+    model = models.load_any(model_path)
+
+    results = {}
+
+    for line_id, line_info in lines_data.items():
+        image_path = Path(line_info['image_path'])
+        baseline_coords = line_info['baseline_coords']
+        textline_coords = line_info['textline_coords']
+
+        image = Image.open(image_path)
+
+        bll = BaselineLine(
+            id=line_id,
+            baseline=baseline_coords,
+            boundary=textline_coords
+        )
+        seg = Segmentation(
+            type='baselines',
+            imagename=str(image_path),
+            text_direction='horizontal-lr',
+            script_detection=False,
+            lines=[bll]
+        )
+
+        it = rpred.rpred(
+            model,
+            image,
+            bounds=seg,
+            pad=pad,
+            bidi_reordering=True,
+        )
+
+        for pred in it:
+            result = {
+                'text': pred.prediction,
+                'confidences': [float(c) for c in pred.confidences] if hasattr(pred, 'confidences') else []
+            }
+            results[line_id] = result
+            break
+
+    print(json.dumps(results))
+except Exception as e:
+    # Log exceptions to stderr for debugging
+    print(f"Error in Kraken script: {e}", file=sys.stderr)
+    sys.exit(1)
+'''
+    input_data_serializable = {
+        'lines_data': {k: {**v, 'image_path': str(v['image_path'])} for k, v in lines_data.items()},
+        'model_path': str(model_path),
+        'pad': pad
+    }
+
+    encoded_data = base64.b64encode(pickle.dumps(input_data_serializable))
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            str(python_path), "-c", script_content,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(input=encoded_data), timeout=300)
+
+        if proc.returncode == 0 and stdout:
+            return json.loads(stdout.decode('utf-8'))
+        else:
+            logging.error(f"Kraken OCR batch failed with return code {proc.returncode}: {stderr.decode('utf-8')}")
+            return {}
+    except asyncio.TimeoutError:
+        logging.error("Kraken OCR batch process timed out.")
+        return {}
+    except Exception as e:
+        logging.error(f"Error running Kraken OCR batch: {e}")
+        return {}
+
+
 def get_kraken_python_path() -> Optional[Path]:
     """
     Get the configured Kraken Python environment path from .env file.
@@ -94,109 +330,6 @@ def verify_kraken_installation(python_path: Path) -> bool:
     except Exception as e:
         print(f"[red]Error verifying Kraken installation: {e}[/red]")
         return False
-
-
-async def run_kraken_ocr_external_async(
-    python_path: Path,
-    image_snippet_path: Path,
-    model_path: Path,
-    baseline_coords: list,
-    textline_coords: list,
-    pad: int = 16
-) -> str:
-    """
-    Run Kraken OCR using an external Python environment asynchronously.
-
-    Args:
-        python_path: Path to Python executable in Kraken environment
-        image_snippet_path: Path to image snippet to OCR
-        model_path: Path to Kraken model file
-        baseline_coords: Baseline coordinates
-        textline_coords: Textline boundary coordinates
-        pad: Padding for OCR
-
-    Returns:
-        str: OCR text result
-    """
-    # Create a temporary Python script to run Kraken
-    script_content = '''
-import sys
-import json
-from pathlib import Path
-from PIL import Image
-from kraken.lib import models
-from kraken import rpred
-from kraken.containers import BaselineLine, Segmentation
-
-# Read parameters
-params = json.loads(sys.argv[1])
-image_path = Path(params['image_path'])
-model_path = Path(params['model_path'])
-baseline_coords = params['baseline_coords']
-textline_coords = params['textline_coords']
-pad = params['pad']
-
-# Load image and model
-image = Image.open(image_path)
-model = models.load_any(model_path)
-
-# Create Kraken containers
-bll = BaselineLine(
-    id='ocr_line',
-    baseline=baseline_coords,
-    boundary=textline_coords
-)
-seg = Segmentation(
-    type='baselines',
-    imagename=str(image_path),
-    text_direction='horizontal-lr',
-    script_detection=False,
-    lines=[bll]
-)
-
-# Run OCR
-it = rpred.rpred(
-    model,
-    image,
-    bounds=seg,
-    pad=pad,
-    bidi_reordering=True,
-)
-
-# Get result
-for pred in it:
-    result = {
-        'text': pred.prediction,
-        'confidences': [float(c) for c in pred.confidences] if hasattr(pred, 'confidences') else []
-    }
-    print(json.dumps(result))
-    break
-'''
-
-    # Prepare parameters
-    params = {
-        'image_path': str(image_snippet_path),
-        'model_path': str(model_path),
-        'baseline_coords': baseline_coords,
-        'textline_coords': textline_coords,
-        'pad': pad
-    }
-
-    try:
-        # Run the script in the external Python environment
-        cmd = [str(python_path), "-c", script_content, json.dumps(params)]
-        returncode, stdout, stderr = await run_async_subprocess(cmd, timeout=30)
-
-        if returncode == 0 and stdout:
-            # Parse JSON result
-            ocr_result = json.loads(stdout.strip())
-            return ocr_result['text']
-        else:
-            logging.error(f"Kraken OCR failed: {stderr}")
-            return ""
-    except Exception as e:
-        logging.error(f"Error running Kraken OCR: {e}")
-        return ""
 
 
 def get_kraken_executable() -> Optional[Path]:
@@ -631,6 +764,146 @@ kraken_python_path = get_kraken_python_path()
 
 if kraken_python_path:
     @app.command()
+    @profile('kraken-segment')
+    def segment(inputs: Annotated[List[str], typer.Argument(exists=True,
+                help="Paths to the XML files to be processed.", callback=transform_inputs)] = None,
+                image_folder: Annotated[str, typer.Option(exists=True, help="Folder to the images relative to page-xml (default same as input)")] = '.',
+                outputdir: Annotated[Optional[str], typer.Option(
+                          help="Filename of the output directory. If not specified, input files will be overwritten.",
+                          callback=transform_output)] = None,
+                seg_model_name: Annotated[str, typer.Option(help="Name of the segmentation model (should exist in Model-Directory)")] = None,
+                model_dir: Annotated[Path,
+                                     typer.Option(help="Directory of the models")] = None,
+                rec_model_name: Annotated[Optional[str], typer.Option(help="Name of the recognition model (optional)")] = None,
+                jobs: Annotated[int,
+                                typer.Option(help="Number of parallel jobs for processing pages.")] = 1,
+                device: Annotated[str, typer.Option(help="Device to run inference on, e.g., 'cpu' or 'cuda:0'")] = 'cpu',
+                text_direction: Annotated[str,
+                                          typer.Option(help="Text direction for segmentation")] = 'horizontal-lr',
+                same_names: Annotated[bool,
+                                      typer.Option(help="Use the page-xml filename to search for the image")] = False,
+                image_extensions: Annotated[List[ImageExtension],
+                                            typer.Option(help="Image file extensions to try (only with 'same_names')")] = ['.png', '.jpg', '.jpeg', '.tif', '.tiff'],
+                region_tagfilter: Annotated[str,
+                                            typer.Option(help="Regular expression to filter text regions by tag")] = None,
+                dry_run: Annotated[bool,
+                                   typer.Option(help="If True, the function will not write any files.")] = False):
+        """
+        Segment text regions into lines and optionally OCR them.
+        This will DELETE all existing text lines within the targeted regions.
+        """
+        python_path = get_kraken_python_path()
+        if not python_path:
+            print("[red]Error: Kraken Python environment not configured.[/red]")
+            raise typer.Exit(1)
+
+        seg_model_path = model_dir.joinpath(seg_model_name if seg_model_name.endswith(('.mlmodel', '.pt')) else seg_model_name + '.mlmodel')
+        if not seg_model_path.exists():
+            print(f"[red]Error: Segmentation model not found at {seg_model_path}[/red]")
+            raise typer.Exit(1)
+
+        rec_model_path = None
+        if rec_model_name:
+            rec_model_path = model_dir.joinpath(rec_model_name if rec_model_name.endswith(('.mlmodel', '.pt')) else rec_model_name + '.mlmodel')
+            if not rec_model_path.exists():
+                print(f"[red]Warning: Recognition model not found at {rec_model_path}. Only segmentation will be performed.[/red]")
+                rec_model_path = None
+
+        xml_files = collect_xml_files(map(Path, inputs))
+        if not xml_files:
+            raise FileNotFoundError('No xml files found in input directory')
+
+        temp_dir = tempfile.mkdtemp(prefix='pageplus_kraken_seg_')
+
+        async def main():
+            semaphore = asyncio.Semaphore(jobs)
+
+            async def process_page(xml_file):
+                async with semaphore:
+                    print(f"Processing {xml_file.name}...")
+                    page = Page(xml_file)
+
+                    if not same_names:
+                        image_filename = page.imageFilename()
+                        image_path = find_image(image_filename, xml_file.parent / image_folder)
+                    else:
+                        image_path = next((p for ext in image_extensions if (p := find_image(xml_file.with_suffix(ext.value).name, xml_file.parent / image_folder))), None)
+                        image_filename = image_path.name if image_path else xml_file.with_suffix(image_extensions[0].value).name
+
+                    if not image_path:
+                        print(f"Warning: Image for {xml_file.name} not found, skipping.")
+                        return
+
+                    image, _ = get_image(image_path)
+                    regions_to_process = {}
+
+                    for textregion in page.regions.textregions:
+                        if region_tagfilter and not re.search(region_tagfilter, textregion.get_tag()):
+                            continue
+
+                        region_id = textregion.get_id()
+                        region_snippet, bbox = crop_image_by_polygon(image, textregion.get_coordinates(returntype='mrr'))
+                        if region_snippet is None:
+                            continue
+
+                        snippet_path = Path(temp_dir) / f"region_{region_id}.png"
+                        region_snippet.save(snippet_path)
+
+                        regions_to_process[region_id] = {
+                            'image_path': snippet_path,
+                            'region_object': textregion,
+                            'bbox': bbox
+                        }
+
+                    if not regions_to_process:
+                        print(f"No matching regions found in {xml_file.name}, skipping.")
+                        return
+
+                    try:
+                        batch_data = {rid: {'image_path': rinfo['image_path']} for rid, rinfo in regions_to_process.items()}
+                        segmentation_results = await run_kraken_segment_batch_external_async(
+                            python_path, batch_data, seg_model_path, rec_model_path, device, text_direction
+                        )
+                        print(segmentation_results)
+
+                        for region_id, region_result in segmentation_results.items():
+                            region_info = regions_to_process[region_id]
+                            region_obj = region_info['region_object']
+                            min_x, min_y, _, _ = region_info['bbox']
+
+                            # Delete old lines
+                            region_obj.delete_textlines(list(range(len(region_obj.textlines))))
+
+                            for i, line_data in enumerate(region_result.get('lines', [])):
+                                new_line_id = f"{region_id}_l{i+1}"
+
+                                abs_boundary = [(int(x + min_x), int(y + min_y)) for x, y in line_data['boundary']]
+                                abs_baseline = [(int(x + min_x), int(y + min_y)) for x, y in line_data['baseline']]
+
+                                region_obj.add_textline(
+                                    new_line_id, abs_boundary, abs_baseline, line_data.get('text', '')
+                                )
+                                print(f"  Added line {new_line_id} to region {region_id}")
+
+                        if not dry_run:
+                            fout = xml_file if outputdir is None else Path(outputdir) / xml_file.name
+                            fout.parent.mkdir(parents=True, exist_ok=True)
+                            page.save_xml(fout)
+                            logging.info(f"Saved updated file to {fout}")
+
+                    except Exception as e:
+                        print(f"[red]Error processing page {xml_file.name}: {e}[/red]")
+
+            tasks = [process_page(xml_file) for xml_file in xml_files]
+            await asyncio.gather(*tasks)
+
+        try:
+            asyncio.run(main())
+        finally:
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+    @app.command()
     @profile('kraken-ocr')
     def ocr(inputs: Annotated[List[str],
                               typer.Argument(exists=True,
@@ -733,114 +1006,131 @@ if kraken_python_path:
         async def main():
             nonlocal all_metrics, all_diff
             semaphore = asyncio.Semaphore(jobs)
+            lock = asyncio.Lock()
 
-            async def process_line(line, textregion, image, imageDir, imageFilename):
+            async def process_page(xml_file):
                 async with semaphore:
-                    if textline_tagfilter is not None and textline_tagfilter != line.get_tag():
-                        return None, None
-                    text = line.get_text()
-                    if text_filter is not None and not re.search(reg_filter, text):
-                        return None, None
+                    print(xml_file)
+                    page = Page(xml_file)
+                    page.delete_textlevel('region')
 
-                    line_id = line.get_id()
-                    tr_id = textregion.get_id()
-                    line_result = {'original': text or ''}
-
-                    # Cut image
-                    pad = 16
-                    image_snippet, bbox = crop_image_by_polygon(image,
-                                                                line.get_coordinates(returntype='mrr'),
-                                                                patch_size=2,
-                                                                buffer=pad,
-                                                                save_snippet=save_snippets,
-                                                                transparent_background=False,
-                                                                square_canvas=False,
-                                                                snippet_dir=imageDir.joinpath(
-                                                                    imageFilename.rsplit('.', 1)[0]) if save_snippets else None,
-                                                                snippet_name='snippet_' + line_id)
-                    # Save snippet temporarily for external processing
-                    snippet_path = Path(temp_dir) / f"{line_id}.png"
-                    image_snippet.save(snippet_path)
-
-                    textline_coords = [(x - bbox[0], y - bbox[1]) for x, y in line.get_coordinates(returntype='tuple')]
-                    baseline_coords = [(x - bbox[0], y - bbox[1]) for x, y in line.get_baseline_coordinates(returntype='tuple')]
-
-                    # Run OCR
-                    ocr_text = await run_kraken_ocr_external_async(
-                        python_path, snippet_path, model_path, baseline_coords, textline_coords, pad=pad
-                    )
-
-                    print(f'{line_id} -> [green]{ocr_text}[/green]')
-                    line.update_text(ocr_text)
-                    line_result['ocr'] = ocr_text
-
-                    if 'analytics' in profilelevel:
-                        metrics = get_metrics(text, ocr_text)
+                    # Find image
+                    if not same_names:
+                        imageFilename = page.imageFilename()
+                        imagePath = find_image(imageFilename, xml_file.parent / image_folder)
                     else:
-                        metrics = None
+                        imagePath = next((p for ext in image_extensions if (p := find_image(xml_file.with_suffix(ext.value).name, xml_file.parent / image_folder))), None)
+                        imageFilename = imagePath.name if imagePath else xml_file.with_suffix(image_extensions[0].value).name
 
-                    # Clean up temporary snippet
-                    if not save_snippets:
-                        snippet_path.unlink(missing_ok=True)
+                    if not imagePath:
+                        print(f"Warning: Image {imageFilename} not found in {image_folder}")
+                        return
 
-                    return (tr_id, line_id, line_result), metrics
+                    imageDir = Path(xml_file).parent
+                    image, _ = get_image(imagePath)
+                    text_dict = {}
+                    page_metrics = []
 
-            for xml_file in xml_files:
-                print(xml_file)
-                page = Page(xml_file)
-                page.delete_textlevel('region')
+                    # Collect all lines to be processed for the current page
+                    lines_to_process = {}
+                    pad = 16
 
-                # Find image
-                if not same_names:
-                    imageFilename = page.imageFilename()
-                    imagePath = find_image(imageFilename, xml_file.parent / image_folder)
-                else:
-                    imagePath = next((p for ext in image_extensions if (p := find_image(xml_file.with_suffix(ext.value).name, xml_file.parent / image_folder))), None)
-                    imageFilename = imagePath.name if imagePath else xml_file.with_suffix(image_extensions[0].value).name
+                    for textregion in page.regions.textregions:
+                        if region_tagfilter is not None and region_tagfilter != textregion.get_tag():
+                            continue
 
-                if not imagePath:
-                    print(f"Warning: Image {imageFilename} not found in {image_folder}")
-                    continue
+                        for line in textregion.textlines:
+                            if textline_tagfilter is not None and textline_tagfilter != line.get_tag():
+                                continue
+                            text = line.get_text()
+                            if text_filter is not None and not re.search(reg_filter, text):
+                                continue
 
-                imageDir = Path(xml_file).parent
-                image, _ = get_image(imagePath)
-                text_dict = {}
-                page_metrics = []
+                            line_id = line.get_id()
+                            image_snippet, bbox = crop_image_by_polygon(image,
+                                                                        line.get_coordinates(returntype='mrr'),
+                                                                        patch_size=2,
+                                                                        buffer=pad,
+                                                                        save_snippet=save_snippets,
+                                                                        transparent_background=False,
+                                                                        square_canvas=False,
+                                                                        snippet_dir=imageDir.joinpath(
+                                                                            imageFilename.rsplit('.', 1)[0]) if save_snippets else None,
+                                                                        snippet_name='snippet_' + line_id)
 
-                # Collect all lines to be processed
-                tasks = []
-                for textregion in page.regions.textregions:
-                    if region_tagfilter is not None and region_tagfilter != textregion.get_tag():
-                        continue
-                    text_dict[textregion.get_id()] = {}
-                    for line in textregion.textlines:
-                        tasks.append(process_line(line, textregion, image, imageDir, imageFilename))
+                            snippet_path = Path(temp_dir) / f"{line_id}.png"
+                            image_snippet.save(snippet_path)
 
-                # Run OCR tasks concurrently
-                results = await asyncio.gather(*tasks)
+                            textline_coords = [(x - bbox[0], y - bbox[1]) for x, y in line.get_coordinates(returntype='tuple')]
+                            baseline_coords = [(x - bbox[0], y - bbox[1]) for x, y in line.get_baseline_coordinates(returntype='tuple')]
 
-                for result, metrics in results:
-                    if result:
-                        tr_id, line_id, line_result = result
-                        text_dict[tr_id][line_id] = line_result
-                        if metrics:
-                            page_metrics.append(metrics)
+                            lines_to_process[line_id] = {
+                                'image_path': snippet_path,
+                                'baseline_coords': baseline_coords,
+                                'textline_coords': textline_coords,
+                                'line_object': line,
+                                'tr_id': textregion.get_id(),
+                                'original_text': text or ''
+                            }
 
-                if 'results' in profilelevel:
-                    ocr.profile.results.append({xml_file.name: text_dict})
-                ocr.profile.stats['pages'] += any(text_dict.values())
-                ocr.profile.stats['lines'] += sum(len(region) for region in text_dict.values())
+                    if not lines_to_process:
+                        return
 
-                if 'analytics' in profilelevel and page_metrics:
-                    metrics_summary = summarize_metrics(page_metrics)
-                    all_metrics.extend(page_metrics)
-                    ocr.profile.analytics.append({xml_file.name: metrics_summary})
+                    # Run OCR in a single batch for the page
+                    batch_data = {
+                        line_id: {k: v for k, v in line_info.items() if k not in ['line_object', 'tr_id', 'original_text']}
+                        for line_id, line_info in lines_to_process.items()
+                    }
+                    ocr_results = await run_kraken_ocr_batch_external_async(python_path, batch_data, model_path, pad=pad)
 
-                if not dry_run:
-                    fout = xml_file if outputdir is None else Path(outputdir) / xml_file.name
-                    fout.parent.mkdir(parents=True, exist_ok=True)
-                    logging.info(f'Wrote modified xml file to output directory: {fout}')
-                    page.save_xml(fout)
+                    # Update page object with results
+                    for line_id, result in ocr_results.items():
+                        if line_id in lines_to_process:
+                            line_info = lines_to_process[line_id]
+                            line_obj = line_info['line_object']
+                            ocr_text = result.get('text', '')
+
+                            print(f'{line_id} -> [green]{ocr_text}[/green]')
+                            line_obj.update_text(ocr_text)
+
+                            tr_id = line_info['tr_id']
+                            if tr_id not in text_dict:
+                                text_dict[tr_id] = {}
+
+                            text_dict[tr_id][line_id] = {
+                                'original': line_info['original_text'],
+                                'ocr': ocr_text
+                            }
+
+                            if 'analytics' in profilelevel:
+                                metrics = get_metrics(line_info['original_text'], ocr_text)
+                                if metrics:
+                                    page_metrics.append(metrics)
+
+                    # Cleanup snippets
+                    for line_data in lines_to_process.values():
+                        if not save_snippets:
+                            line_data['image_path'].unlink(missing_ok=True)
+
+                    async with lock:
+                        if 'results' in profilelevel:
+                            ocr.profile.results.append({xml_file.name: text_dict})
+                        ocr.profile.stats['pages'] += any(text_dict.values())
+                        ocr.profile.stats['lines'] += sum(len(region) for region in text_dict.values())
+
+                        if 'analytics' in profilelevel and page_metrics:
+                            metrics_summary = summarize_metrics(page_metrics)
+                            all_metrics.extend(page_metrics)
+                            ocr.profile.analytics.append({xml_file.name: metrics_summary})
+
+                    if not dry_run:
+                        fout = xml_file if outputdir is None else Path(outputdir) / xml_file.name
+                        fout.parent.mkdir(parents=True, exist_ok=True)
+                        logging.info(f'Wrote modified xml file to output directory: {fout}')
+                        page.save_xml(fout)
+
+            tasks = [process_page(xml_file) for xml_file in xml_files]
+            await asyncio.gather(*tasks)
 
         try:
             asyncio.run(main())
