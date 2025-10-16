@@ -96,7 +96,7 @@ from pageplus.gui.views import (
     kraken,
     kraken_new,
     mets,
-    settings,
+    settings as settings_view,
     iiif
 )
 from pageplus.gui.cli_bridges.gemini import GeminiBridge
@@ -352,7 +352,7 @@ def main():
     elif page == "🗂️ Workspace":
         workspace.show_workspace(st.session_state.bridges['workspace'])
     elif page == "⚙️ Settings":
-        settings.show_settings(st.session_state.bridges['settings'])
+        settings_view.show_settings(st.session_state.bridges['settings'])
 
     # Undo History
     undo_states = UndoManager.get_undo_states()
