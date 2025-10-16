@@ -1,0 +1,84 @@
+{% macro render_tags(tags) -%}
+{%- if tags %}
+ custom="{% set items = [] -%}
+ {%- for k, v in tags | dictsort -%}
+   {# Normalize v to a list, but avoid iterating over characters of a string #}
+   {%- set values = v if (v is iterable and not (v is string)) else [v] -%}
+   {%- for tag in values -%}
+     {% set tag_str = [k ~ ' {'] %}
+     {%- if tag is mapping -%}
+       {%- for tk, tv in tag.items() -%}
+         {% set _ = tag_str.append(tk ~ ':' ~ tv ~ ';') %}
+       {%- endfor -%}
+     {%- elif tag is string -%}
+       {# If a bare string tag is given, emit it under a generic key #}
+       {% set _ = tag_str.append('value:' ~ tag ~ ';') %}
+     {%- else -%}
+       {# Fallback: coerce to string #}
+       {% set _ = tag_str.append('value:' ~ (tag|string) ~ ';') %}
+     {%- endif -%}
+     {% set _ = tag_str.append('}') %}
+     {% set _ = items.append(tag_str|join()) %}
+   {%- endfor -%}
+ {%- endfor -%}
+ {{ items | join(' ') }}"
+{%- endif -%}
+{%- endmacro %}
+
+{%- macro reading_dir(dir) -%}
+{%- if dir in ['R','L'] -%}
+ readingDirection="{{ 'right-to-left' if dir == 'R' else 'left-to-right' }}"
+{%- endif -%}
+{%- endmacro %}
+
+{%- macro render_line(line) -%}
+            <TextLine id="{{ line.id }}"
+                      {{ render_tags(line.tags) }}
+                      {{ reading_dir(line.base_dir) }}>
+                {% if line.boundary %}
+                <Coords points="{% for point in line.boundary %}{{ point|join(',') }}{% if not loop.last %} {% endif %}{% endfor %}"/>
+                {% endif %}
+                {% if line.baseline %}
+                <Baseline points="{% for point in line.baseline %}{{ point|join(',') }}{% if not loop.last %} {% endif %}{% endfor %}"/>
+                {% endif %}
+                {% if line.text is string %}
+                    <TextEquiv><Unicode>{{ line.text|e }}</Unicode></TextEquiv>
+                {% else %}
+                {%+ if line.confidences|length %}<TextEquiv conf="{{ (line.confidences|sum / line.confidences|length)|round(4) }}"><Unicode>{% for segment in line.recognition %}{{ segment.text|e }}{% endfor %}</Unicode></TextEquiv>{% endif +%}
+                {% endif %}
+            </TextLine>
+{%- endmacro %}
+<?xml version="1.0" encoding="UTF-8"?>
+<PcGts xmlns="http://schema.primaresearch.org/PAGE/gts/pagecontent/2019-07-15" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://schema.primaresearch.org/PAGE/gts/pagecontent/2019-07-15 http://schema.primaresearch.org/PAGE/gts/pagecontent/2019-07-15/pagecontent.xsd">
+    <Metadata>
+        <Creator>kraken {{ metadata.version }}</Creator>
+        <Created>{{ page.date }}</Created>
+        <LastChange>{{ page.date }}</LastChange>
+    </Metadata>
+    <Page imageFilename="{{ page.name }}" imageWidth="{{ page.size[0] }}" imageHeight="{{ page.size[1] }}">
+    {% for entity in page.entities %}
+        {% if entity.type == "region" %}
+        {% if loop.previtem and loop.previtem.type == 'line' %}
+        </TextRegion>
+        {% endif %}
+        <TextRegion id="{{ entity.id }}"
+                    {{ render_tags(entity.tags) }}
+                    {{ reading_dir(entity.base_dir) }}>
+                {% if entity.boundary %}<Coords points="{% for point in entity.boundary %}{{ point|join(',') }}{% if not loop.last %} {% endif %}{% endfor %}"/>{% endif %}
+            {%- for line in entity.lines -%}
+            {{ render_line(line) }}
+            {%- endfor %}
+        </TextRegion>
+        {% else %}
+        {% if not loop.previtem or loop.previtem.type != 'line' %}
+        <TextRegion id="textblock_{{ loop.index }}">
+            <Coords points="0,0 0,{{ page.size[1] }} {{ page.size[0] }},{{ page.size[1] }} {{ page.size[0] }},0"/>
+        {% endif %}
+            {{ render_line(entity) }}
+        {% if loop.last %}
+        </TextRegion>
+        {% endif %}
+        {% endif %}
+    {% endfor %}
+    </Page>
+</PcGts>

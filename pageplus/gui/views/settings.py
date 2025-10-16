@@ -267,9 +267,194 @@ def show_settings(cli_bridge):
             except Exception as e:
                 st.error(f"Error checking Tesseract status: {e}")
 
-        # Other OCR engines can be added here in the future
-        st.markdown("### Other OCR Engines")
-        st.info("Additional OCR engines will be added in future updates.")
+        # Kraken OCR Settings
+        st.markdown("---")
+        st.markdown("### 🐙 Kraken OCR")
+
+        # Check if Kraken is configured
+        from pageplus.gui.cli_bridges.kraken import KrakenBridge
+        kraken_bridge = KrakenBridge()
+
+        st.markdown("#### Python Environment Configuration")
+        st.info("""
+        Kraken OCR runs in a separate Python environment to avoid dependency conflicts.
+        Please provide the path to the Python executable where Kraken is installed.
+        """)
+
+        # Show installation instructions
+        with st.expander("📖 Installation Instructions", expanded=False):
+            st.markdown(kraken_bridge.get_installation_instructions())
+
+        # Get current configuration
+        current_python_path = kraken_bridge.get_python_env_path()
+        current_path_str = str(current_python_path) if current_python_path else ""
+
+        col_path, col_pick = st.columns([3, 1])
+
+        with col_path:
+            python_path = st.text_input(
+                "Kraken Python Executable Path",
+                value=current_path_str,
+                placeholder="/path/to/kraken_env/bin/python",
+                help="Path to the Python executable in your Kraken environment",
+                key="kraken_python_path_input"
+            )
+
+        with col_pick:
+            if st.button("📁 Browse", help="Select Python executable", key="pick_kraken_python"):
+                st.session_state.show_kraken_python_picker = True
+
+        # File picker
+        if st.session_state.get("show_kraken_python_picker", False):
+            from pageplus.gui.utils.picker import pick_files
+            selected_files = pick_files(
+                initial_dir=str(Path.home()),
+                filetypes=[("Python Executable", "python*"), ("All files", "*")]
+            )
+            if selected_files:
+                st.session_state.kraken_new_python_path = selected_files[0]
+                st.session_state.show_kraken_python_picker = False
+                st.rerun()
+
+        # Update python_path if a new path was selected
+        if st.session_state.get("kraken_new_python_path"):
+            python_path = st.session_state.kraken_new_python_path
+
+        # Save and Clear buttons
+        col_save, col_clear, col_status = st.columns([1, 1, 2])
+
+        with col_save:
+            if st.button("💾 Save Path", help="Save the Kraken Python path", use_container_width=True, key="save_kraken_path"):
+                if python_path:
+                    result = kraken_bridge.set_python_env(Path(python_path))
+                    if result.get("success"):
+                        # Clear the temporary new path
+                        if "kraken_new_python_path" in st.session_state:
+                            del st.session_state.kraken_new_python_path
+                        st.success(result.get("message"))
+                        st.rerun()
+                    else:
+                        st.error(f"❌ {result.get('error')}")
+                        if result.get("hint"):
+                            st.info(result.get("hint"))
+                else:
+                    st.error("Please provide a Python executable path")
+
+        with col_clear:
+            if current_python_path:
+                if st.button("🗑️ Clear", help="Clear the Kraken configuration", use_container_width=True, key="clear_kraken_path"):
+                    result = kraken_bridge.clear_python_env()
+                    if result.get("success"):
+                        if "kraken_new_python_path" in st.session_state:
+                            del st.session_state.kraken_new_python_path
+                        st.success(result.get("message"))
+                        st.rerun()
+
+        with col_status:
+            if python_path != current_path_str:
+                st.warning("⚠️ Path has been modified. Click 'Save Path' to apply.")
+            elif current_python_path and current_python_path.exists():
+                st.success("✅ Path is valid and saved")
+
+        # Model Path Configuration
+        st.markdown("#### Model Path Configuration")
+        current_model_path = settings.get("KRAKEN_MODEL_PATH", "")
+
+        col_path, col_pick = st.columns([3, 1])
+
+        with col_path:
+            kraken_model_path = st.text_input(
+                "Kraken Model Directory",
+                value=current_model_path,
+                placeholder="/path/to/kraken/models",
+                help="Path to the directory containing Kraken model files (.mlmodel)",
+                key="kraken_model_path_input"
+            )
+
+        with col_pick:
+            if st.button("📁 Pick Directory", help="Select directory using file picker", key="pick_kraken_model_dir"):
+                st.session_state.show_kraken_model_dir_picker = True
+
+        # Directory picker
+        if st.session_state.get("show_kraken_model_dir_picker", False):
+            from pageplus.gui.utils.picker import pick_directory
+            selected_path = pick_directory(current_model_path if current_model_path else str(Path.home()))
+            if selected_path:
+                st.session_state.kraken_new_model_path = selected_path
+                st.session_state.show_kraken_model_dir_picker = False
+                st.rerun()
+
+        # Update model_path if a new path was selected
+        if st.session_state.get("kraken_new_model_path"):
+            kraken_model_path = st.session_state.kraken_new_model_path
+
+        # Save model path setting
+        col_save, col_status = st.columns([1, 3])
+        with col_save:
+            if st.button("💾 Save Model Path", help="Save the Kraken model path setting", use_container_width=True, key="save_kraken_model_path"):
+                try:
+                    settings.set("KRAKEN_MODEL_PATH", kraken_model_path)
+                    # Clear the temporary new path
+                    if "kraken_new_model_path" in st.session_state:
+                        del st.session_state.kraken_new_model_path
+                    st.success("Model path saved successfully!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error saving model path: {e}")
+
+        with col_status:
+            if kraken_model_path != current_model_path:
+                st.warning("⚠️ Path has been modified. Click 'Save Model Path' to apply changes.")
+            elif kraken_model_path and Path(kraken_model_path).exists():
+                # Show available models
+                available_models = kraken_bridge.get_available_models(Path(kraken_model_path))
+                if available_models:
+                    st.success(f"✅ Valid path with {len(available_models)} model(s)")
+                else:
+                    st.info("📁 Path is valid but no .mlmodel files found")
+            elif kraken_model_path:
+                st.warning("⚠️ Path does not exist")
+
+        # Show installation status if configured
+        if current_python_path:
+            st.markdown("#### Installation Status")
+            verification = kraken_bridge.verify_installation()
+
+            if verification.get("installed"):
+                kraken_exe = verification.get("kraken_executable")
+
+                if kraken_exe:
+                    st.success("✅ Kraken is properly installed and ready to use")
+                    st.code(f"Python path: {verification.get('python_path')}\nKraken CLI: {kraken_exe}", language="text")
+                else:
+                    st.warning("⚠️ Kraken module installed but CLI executable not found")
+                    st.code(f"Python path: {verification.get('python_path')}", language="text")
+                    st.info("The Kraken CLI executable should be in the same directory as the Python executable.")
+
+                # Show warning if any
+                if verification.get("warning"):
+                    st.warning(verification.get("warning"))
+
+                # Show model directory helper
+                with st.expander("📁 Model Directory", expanded=False):
+                    st.info("""
+                    Kraken models (.mlmodel files) should be stored in a directory.
+                    You'll need to specify this directory when using Kraken OCR.
+
+                    You can download Kraken models from:
+                    - https://zenodo.org/communities/ocr_models
+                    - https://github.com/mittagessen/kraken
+                    """)
+            else:
+                st.error(f"❌ {verification.get('error')}")
+                st.info("Please install Kraken in the specified environment:")
+                st.code(f"{current_python_path} -m pip install kraken", language="bash")
+
+        # Debug info
+        with st.expander("Debug Info"):
+            st.write(f"Configured Python path: {current_path_str or 'Not configured'}")
+            st.write(f"Path exists: {current_python_path.exists() if current_python_path else 'N/A'}")
+            st.write(f"Is configured: {kraken_bridge.is_configured()}")
 
     with tab_backup:
         st.subheader("Export Settings")

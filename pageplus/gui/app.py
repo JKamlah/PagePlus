@@ -15,6 +15,7 @@ import streamlit as st
 from pathlib import Path
 import threading
 from pageplus.utils.constants import GUI_STORAGE_DIR, ENV_FILE, LOGO_PATH, LOADING_PATH
+from pageplus.gui.utils.settings import Settings
 
 # Constants
 STORAGE_FILE = GUI_STORAGE_DIR / "loaded_files.json"
@@ -77,23 +78,26 @@ with loading.container():
     _, col, _ = st.columns([1, 1, 1])
     col.image(LOADING_PATH)
 
-from pageplus.gui.views.gemini import show_gemini
-from pageplus.gui.views.modification import show_modification
-from pageplus.gui.views.settings import show_settings
-from pageplus.gui.views.export import show_export
-from pageplus.gui.views.validation import show_validation
-from pageplus.gui.views.analysis import show_analysis
-from pageplus.gui.views.workspace import show_workspace
-from pageplus.gui.views.load_files import LoadFilesPage
-from pageplus.gui.views.escriptorium import show_escriptorium
-from pageplus.gui.views.transkribus import show_transkribus
-from pageplus.gui.views.mets import show_mets
-from pageplus.gui.views.evaluation import show_evaluation
-from pageplus.gui.views.viewer import show_viewer
-from pageplus.gui.views.iiif import show_iiif_downloader
-from pageplus.gui.views.guidelines import show_guidelines
-from pageplus.gui.views.tesseract import show_tesseract
-from pageplus.gui.utils.settings import Settings
+from pageplus.gui.views import (
+    workspace,
+    load_files,
+    viewer,
+    gemini,
+    guidelines,
+    modification,
+    validation,
+    escriptorium,
+    transkribus,
+    evaluation,
+    analysis,
+    export,
+    tesseract,
+    kraken,
+    kraken_new,
+    mets,
+    settings,
+    iiif
+)
 from pageplus.gui.cli_bridges.gemini import GeminiBridge
 from pageplus.gui.cli_bridges.escriptorium import EscriptoriumBridge
 from pageplus.gui.cli_bridges.transkribus import TranskribusBridge
@@ -101,6 +105,7 @@ from pageplus.gui.cli_bridges.mets import MetsBridge
 from pageplus.gui.cli_bridges.dinglehopper import DinglehopperBridge
 from pageplus.gui.cli_bridges.iiif import IIIFBridge
 from pageplus.gui.cli_bridges.tesseract import TesseractBridge
+from pageplus.gui.cli_bridges.kraken import KrakenBridge
 from pageplus.gui.cli_bridges import (
     CLIBridge,
     AnalysisBridge,
@@ -221,10 +226,12 @@ def main():
             'dinglehopper': DinglehopperBridge(),
             'iiif': IIIFBridge(),
             'tesseract': TesseractBridge(),
+            'kraken': KrakenBridge(),
+            'kraken_new': KrakenBridge, # Added Kraken OCR New
         }
 
     # Initialize pages
-    load_page = LoadFilesPage(st.session_state.bridges['workspace'])
+    load_page = load_files.LoadFilesPage(st.session_state.bridges['workspace'])
 
     # Sidebar navigation
     st.sidebar.markdown(
@@ -253,13 +260,20 @@ def main():
     settings = Settings()
     tesseract_activated = settings.get("PAGEPLUS_OCR_TESSERACT", "False") == "True"
 
+    # Check if Kraken OCR is configured
+    from pageplus.cli.ocr_kraken import get_kraken_python_path
+    kraken_configured = get_kraken_python_path() is not None
+
     main_pages = ["✨ Home", "🗂️ Workspace", "📂 Input", "🖼️ Viewer", "🔍 Analytics", "📝 Guidelines", "✅ Validation",
                   "📊 Evaluation", "🛠️ Modification", "🌟 Gemini", "📤 Export",
                   "⚙️ Settings"]
 
-    # Add Tesseract OCR page if activated
+    # Add OCR pages if configured/activated
+    ocr_insert_position = -2  # Position before Settings
     if tesseract_activated:
-        main_pages.insert(-4, "🔤 Tesseract OCR")  # Insert before Workspace
+        main_pages.insert(ocr_insert_position, "🔤 Tesseract OCR")
+    if kraken_configured:
+        main_pages.insert(ocr_insert_position, "🐙 Kraken OCR")
 
     st.sidebar.radio(
         "Select Page",
@@ -286,56 +300,58 @@ def main():
         st.session_state.loaded_files = load_page.get_loaded_files()
         save_loaded_files(st.session_state.loaded_files)
     elif page == "📜 eScriptorium":
-        show_escriptorium(st.session_state.bridges['escriptorium'])
+        escriptorium.show_escriptorium(st.session_state.bridges['escriptorium'])
     elif page == "🐇 Transkribus":
-        show_transkribus(st.session_state.bridges['transkribus'])
+        transkribus.show_transkribus(st.session_state.bridges['transkribus'])
     elif page == "🏛️ METS":
-        show_mets(st.session_state.bridges['mets'])
+        mets.show_mets(st.session_state.bridges['mets'])
     elif page == "📑 IIIF":
-        show_iiif_downloader(st.session_state.bridges['iiif'])
+        iiif.show_iiif_downloader(st.session_state.bridges['iiif'])
     elif page == "🖼️ Viewer":
         if not st.session_state.loaded_files:
             st.warning("Please load files first in the 'Input' page.")
         else:
-            show_viewer()
+            viewer.show_viewer()
     elif page == "🔍 Analytics":
         if not st.session_state.loaded_files:
             st.warning("Please load files first in the 'Input' page.")
         else:
-            show_analysis(st.session_state.bridges['analysis'])
+            analysis.show_analysis(st.session_state.bridges['analysis'])
     elif page == "📝 Guidelines":
         if not st.session_state.loaded_files:
             st.warning("Please load files first in the 'Input' page.")
         else:
-            show_guidelines()
+            guidelines.show_guidelines()
     elif page == "✅ Validation":
         if not st.session_state.loaded_files:
             st.warning("Please load files first in the 'Input' page.")
         else:
-            show_validation(st.session_state.bridges['validation'])
+            validation.show_validation(st.session_state.bridges['validation'])
     elif page == "📊 Evaluation":
-        show_evaluation()
+        evaluation.show_evaluation()
     elif page == "🛠️ Modification":
         if not st.session_state.loaded_files:
             st.warning("Please load files first in the 'Input' page.")
         else:
-            show_modification(st.session_state.bridges['modification'])
+            modification.show_modification(st.session_state.bridges['modification'])
     elif page == "🔤 Tesseract OCR":
-        show_tesseract(st.session_state.bridges['tesseract'])
+        tesseract.show_tesseract(st.session_state.bridges['tesseract'])
+    elif page == "🐙 Kraken OCR":
+        kraken.show_kraken(st.session_state.bridges['kraken'])
     elif page == "🌟 Gemini":
         if not st.session_state.loaded_files:
             st.warning("Please load files first in the 'Input' page.")
         else:
-            show_gemini(st.session_state.bridges['gemini'])
+            gemini.show_gemini(st.session_state.bridges['gemini'])
     elif page == "📤 Export":
         if not st.session_state.loaded_files:
             st.warning("Please load files first in the 'Input' page.")
         else:
-            show_export(st.session_state.bridges['export'])
+            export.show_export(st.session_state.bridges['export'])
     elif page == "🗂️ Workspace":
-        show_workspace(st.session_state.bridges['workspace'])
+        workspace.show_workspace(st.session_state.bridges['workspace'])
     elif page == "⚙️ Settings":
-        show_settings(st.session_state.bridges['settings'])
+        settings.show_settings(st.session_state.bridges['settings'])
 
     # Undo History
     undo_states = UndoManager.get_undo_states()
