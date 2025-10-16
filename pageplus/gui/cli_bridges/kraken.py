@@ -556,6 +556,7 @@ class KrakenBridge(CLIBridge):
                                       image_extensions: List[str],
                                       region_tagfilter: Optional[str],
                                       dry_run: bool,
+                                      jobs: int = 1,
                                       progress_callback=None) -> Dict[str, Any]:
         """
         Run segmentation on text regions from PAGE-XML files.
@@ -576,7 +577,7 @@ class KrakenBridge(CLIBridge):
                 seg_model_name=seg_model_path.name,
                 model_dir=seg_model_path.parent,
                 rec_model_name=rec_model_path.name if rec_model_path else None,
-                jobs=1,  # Let the CLI handle internal async management
+                jobs=jobs,
                 device=device,
                 text_direction=text_direction,
                 same_names=same_names,

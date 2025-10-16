@@ -279,22 +279,36 @@ def _show_pageplus_mode(cli_bridge, selected_files):
 
     st.info("📝 **Note:** This mode requires existing PAGE-XML files with layout information.")
 
+    # Performance Options
+    st.subheader("⚡ Performance Options")
+    col1, _, _ = st.columns(3)
+    with col1:
+        jobs = st.number_input(
+            "Parallel Jobs",
+            min_value=1,
+            max_value=16,
+            value=1,
+            help="Number of parallel page processing jobs.",
+            key="pageplus_jobs"
+        )
+
     # Processing level selection
     st.subheader("🎯 Processing Level")
-    processing_level = st.selectbox(
-        "Process on level:",
-        ["Textline", "TextRegion"],
-        index=0,  # Default to Textline
-        help="Select the level at which to apply processing. TextRegion creates new lines in the regions. Textline only updates the text of existing lines."
-    )
-
+    col1, _, _ = st.columns(3)
+    with col1:
+        processing_level = st.selectbox(
+            "Process on level:",
+            ["Textline", "TextRegion"],
+            index=0,  # Default to Textline
+            help="Select the level at which to apply processing. TextRegion creates new lines in the regions. Textline only updates the text of existing lines."
+        )
     if processing_level == "Textline":
-        _show_pageplus_ocr_tab(cli_bridge, selected_files)
+        _show_pageplus_ocr_tab(cli_bridge, selected_files, jobs)
     elif processing_level == "TextRegion":
-        _show_pageplus_segment_tab(cli_bridge, selected_files)
+        _show_pageplus_segment_tab(cli_bridge, selected_files, jobs)
 
 
-def _show_pageplus_ocr_tab(cli_bridge, selected_files):
+def _show_pageplus_ocr_tab(cli_bridge, selected_files, jobs: int):
     """Show the PagePlus OCR tab."""
     st.markdown("Run OCR on existing text lines within filtered regions.")
 
@@ -382,11 +396,11 @@ def _show_pageplus_ocr_tab(cli_bridge, selected_files):
                 cli_bridge, selected_files, xml_files,
                 rec_model_name, model_dir,
                 text_filter, region_tagfilter, textline_tagfilter,
-                save_snippets, dry_run
+                save_snippets, dry_run, jobs
             )
 
 
-def _show_pageplus_segment_tab(cli_bridge, selected_files):
+def _show_pageplus_segment_tab(cli_bridge, selected_files, jobs: int):
     """Show the PagePlus Region Segmentation tab."""
     st.markdown("Run segmentation on text regions to find new text lines. This will **delete** existing lines in the selected regions.")
 
@@ -454,7 +468,8 @@ def _show_pageplus_segment_tab(cli_bridge, selected_files):
                     same_names=True,
                     image_extensions=[Path(f).suffix for f in selected_files],
                     region_tagfilter=region_tagfilter if region_tagfilter else None,
-                    dry_run=dry_run
+                    dry_run=dry_run,
+                    jobs=jobs
                 )
 
                 progress_bar.progress(1.0)
@@ -855,7 +870,7 @@ def _run_cli_processing(cli_bridge, processing_mode, selected_files,
 def _run_pageplus_processing(cli_bridge, selected_files, xml_files,
                              rec_model_name, model_dir,
                              text_filter, region_tagfilter, textline_tagfilter,
-                             save_snippets, dry_run):
+                             save_snippets, dry_run, jobs: int):
     """Run PagePlus mode processing."""
     progress_container = st.container()
 
@@ -878,7 +893,8 @@ def _run_pageplus_processing(cli_bridge, selected_files, xml_files,
             text_filter=text_filter if text_filter else None,
             region_tagfilter=region_tagfilter if region_tagfilter else None,
             textline_tagfilter=textline_tagfilter if textline_tagfilter else None,
-            dry_run=dry_run
+            dry_run=dry_run,
+            jobs=jobs
         )
 
         with progress_container:
