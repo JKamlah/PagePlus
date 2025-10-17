@@ -16,49 +16,49 @@ import streamlit as st
 from pathlib import Path
 import threading
 from pageplus.utils.constants import GUI_STORAGE_DIR, ENV_FILE, LOGO_PATH, LOADING_PATH
+from pageplus.utils.filelock import AtomicFileLock
+from pageplus.utils.monitor import monitor_sessions
 from pageplus.gui.utils.settings import Settings
 
 # Constants
 STORAGE_FILE = GUI_STORAGE_DIR / "loaded_files.json"
 
-
-def monitor_sessions():
+def _is_monitor_running(lock_file: Path) -> bool:
     """
-    Monitors active Streamlit sessions and shuts down the server if no sessions
-    are active for a specified duration.
+    Check if the monitor is already running by examining the lock file.
 
-    NOTE: This uses an undocumented, internal Streamlit API, which may break
-    in future versions. This is not a recommended production practice.
+    Args:
+        lock_file: Path to the lock file
+
+    Returns:
+        bool: True if monitor is already running, False otherwise
     """
-    # Grace period to allow for initial connections
-    time.sleep(10)
+    if not lock_file.exists():
+        return False
 
-    inactivity_period = 30  # seconds
-    check_interval = 5      # seconds
-    max_inactive_checks = inactivity_period // check_interval
-    inactive_checks = 0
-    pid = os.getpid()
-    while True:
+    try:
+        # Read the PID from the lock file
+        with open(lock_file, 'r') as f:
+            pid_str = f.read().strip()
+
+        if not pid_str.isdigit():
+            return False
+
+        pid = int(pid_str)
+
+        # Check if the process is still running
         try:
-            # THIS IS AN UNDOCUMENTED, INTERNAL STREAMLIT API.
-            active_sessions = st.runtime.get_instance()._session_mgr.list_active_sessions()
+            os.kill(pid, 0)  # This will raise an exception if process doesn't exist
+            return True
+        except (OSError, ProcessLookupError):
+            # Process doesn't exist, clean up stale lock file
+            lock_file.unlink(missing_ok=True)
+            return False
 
-            if not active_sessions:
-                inactive_checks += 1
-            else:
-                inactive_checks = 0  # Reset on activity
-
-            if inactive_checks >= max_inactive_checks:
-                if pid == os.getpid():
-                    logger.info(f"No active sessions for {inactivity_period} seconds. Shutting down server.")
-                    os.kill(os.getpid(), signal.SIGTERM)
-                break
-
-        except Exception as e:
-            logger.error(f"Failed to check for active Streamlit sessions: {e}. Stopping monitor.")
-            break
-
-        time.sleep(check_interval)
+    except (OSError, IOError, ValueError):
+        # Error reading lock file, assume not running
+        lock_file.unlink(missing_ok=True)
+        return False
 
 
 # Place a container at the top
@@ -192,19 +192,15 @@ def main():
     """Run the PagePlus application."""
     # Start the session monitor thread only once per server instance
     lock_file = GUI_STORAGE_DIR / "session_monitor.lock"
-    if not lock_file.exists():
-        try:
-            # Create the lock file to prevent other processes from starting the monitor
-            lock_file.touch(exist_ok=False)
-            monitor_thread = threading.Thread(target=monitor_sessions, daemon=True)
-            monitor_thread.start()
 
-            # Cleanup the lock file on exit
-            import atexit
-            atexit.register(lambda: lock_file.unlink(missing_ok=True))
-        except FileExistsError:
-            # Another process created the lock file just now
-            pass
+    # Check if monitor is already running
+    if not _is_monitor_running(lock_file):
+        # Start monitor thread with lock file - it will handle the locking internally
+        monitor_thread = threading.Thread(target=monitor_sessions, args=(lock_file,), daemon=True)
+        monitor_thread.start()
+        logger.info("Session monitor thread started")
+    else:
+        logger.debug("Session monitor is already running, skipping thread creation")
 
     # Initialize session state
     if 'loaded_files' not in st.session_state:
@@ -353,7 +349,6 @@ def main():
         workspace.show_workspace(st.session_state.bridges['workspace'])
     elif page == "⚙️ Settings":
         settings_view.show_settings(st.session_state.bridges['settings'])
-
     # Undo History
     undo_states = UndoManager.get_undo_states()
     if undo_states:
