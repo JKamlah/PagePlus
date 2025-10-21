@@ -344,20 +344,26 @@ def show_tesseract(cli_bridge: TesseractBridge):
             if "PageXML" in output_formats:
                 create_polygon = st.checkbox(
                     "Create Polygon",
-                    value=True,
+                    value=False,
                     help="Create polygon coordinates for text regions in PageXML output"
+                )
+                remove_textregion_text = st.checkbox(
+                    "Remove TextRegion Text",
+                    value=True,
+                    help="After OCR, remove all text from TextRegion elements, keeping only the layout."
                 )
             else:
                 create_polygon = False
+                remove_textregion_text = False
 
             create_subfolder = st.checkbox(
                 "Create subfolders for output",
-                value=False,
+                value=True,
                 help="Create subfolders for each output format (e.g., 'page/', 'alto/')."
             )
             rename_page_xml = st.checkbox(
                 "Rename .page.xml to .xml",
-                value=False,
+                value=True,
                 help="Rename the final PageXML file from '.page.xml' to '.xml'."
             )
 
@@ -447,6 +453,7 @@ def show_tesseract(cli_bridge: TesseractBridge):
                 params["output_formats"] = output_formats
                 params["custom_params"] = st.session_state.get('tesseract_custom_params', [])
                 params["create_polygon"] = create_polygon
+                params["remove_textregion_text"] = remove_textregion_text
                 params["create_subfolder"] = create_subfolder
                 params["rename_page_xml"] = rename_page_xml
 

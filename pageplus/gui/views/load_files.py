@@ -67,6 +67,20 @@ class LoadFilesPage:
         """Display the Load Files page."""
         st.title("📂 Load Files")
 
+        # Show summary of loaded files
+        loaded_files = st.session_state.get("loaded_files", [])
+        num_files = len(loaded_files)
+
+        with st.container(border=True):
+            if num_files > 0:
+                parent_paths = sorted(list(set(f.parent for f in loaded_files)))
+                st.markdown(f"**✅ Currently loaded: {num_files} file{'s' if num_files > 1 else ''} from {len(parent_paths)} director{'ies' if len(parent_paths) > 1 else 'y'}.**")
+                with st.expander("View loaded directories"):
+                    for path in parent_paths:
+                        st.code(str(path), language="text")
+            else:
+                st.markdown("**ℹ️ 0 files are loaded.**")
+
         # Create tabs for better organization
         tab1, tab2 = st.tabs(["➕ Add Files", "📋 Manage Files"])
 
@@ -494,6 +508,7 @@ class LoadFilesPage:
                         f"Added {len(newly_added_files)} new files."
                     )
                     UndoManager.clear_stack()
+                    st.rerun()
 
         except Exception as e:
             logging.error(

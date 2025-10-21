@@ -23,6 +23,8 @@ from pageplus.utils.fs import transform_inputs, transform_output
 from pageplus.utils.image import get_image, crop_image_by_polygon
 from pageplus.utils.profile import profile, ProfileFnRet
 from pageplus.utils.envs import get_env_path
+from pageplus.cli.modification import delete_text
+from pageplus.utils.constants import TextLevel
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -113,7 +115,7 @@ else:
         (xml_file, image_path, image_filename, model_name, save_snippets,
          text_filter, region_tagfilter, textline_tagfilter, profilelevel,
          outputdir, dry_run, model_path, processing_level, output_formats, custom_params, create_polygon,
-         create_subfolder, rename_page_xml) = args
+         create_subfolder, rename_page_xml, remove_textregion_text) = args
 
         reg_filter = re.compile(rf"{text_filter}") if text_filter is not None else '.'
 
@@ -232,6 +234,14 @@ else:
                                 final_xml_path = page_xml_path.with_suffix('.xml')
                                 page_xml_path.rename(final_xml_path)
                                 output_files["PageXML"] = final_xml_path  # Update path after renaming
+
+                if remove_textregion_text and "PageXML" in output_formats:
+                    final_xml_path = output_files.get("PageXML")
+                    if final_xml_path and final_xml_path.exists():
+                        print(f"Removing TextRegion text from {final_xml_path.name}")
+                        delete_text(inputs=[str(final_xml_path)], levels=[TextLevel.TextRegion])
+
+
                 return {
                     'xml_file': xml_file,
                     'text_dict': {'page': {'full_text': ''}},
@@ -469,7 +479,9 @@ else:
             create_subfolder: Annotated[bool,
                                         typer.Option(help="Create subfolders for output formats.")] = False,
             rename_page_xml: Annotated[bool,
-                                       typer.Option(help="Rename PageXML from .page.xml to .xml.")] = False):
+                                       typer.Option(help="Rename PageXML from .page.xml to .xml.")] = False,
+            remove_textregion_text: Annotated[bool,
+                                              typer.Option(help="Remove text from TextRegion elements after OCR.")] = False):
         """
         EXPERIMENTAL: NOT SAFE TO USE!
         OCR with the existing layout information. Existing text will be overwritten.
@@ -516,7 +528,7 @@ else:
             process_args.append((
                 xml_file, image_path, image_filename, model_name, save_snippets,
                 text_filter, region_tagfilter, textline_tagfilter, profilelevel,
-                outputdir, dry_run, None, None, None, None, True, create_subfolder, rename_page_xml
+                outputdir, dry_run, None, None, None, None, True, create_subfolder, rename_page_xml, remove_textregion_text
             ))
 
         # Process files in parallel
@@ -575,7 +587,8 @@ else:
                 custom_params: List[Dict[str, str]] = None,
                 create_polygon: bool = True,
                 create_subfolder: bool = False,
-                rename_page_xml: bool = False) -> Dict[str, Any]:
+                rename_page_xml: bool = False,
+                remove_textregion_text: bool = False) -> Dict[str, Any]:
         """
         Run OCR processing on the given inputs.
         This function can be imported by the bridge.
@@ -602,7 +615,7 @@ else:
                     text_filter, region_tagfilter, textline_tagfilter, [],
                     outputdir, dry_run, model_path, processing_level,  # profilelevel is empty list
                     output_formats, custom_params, create_polygon,
-                    create_subfolder, rename_page_xml
+                    create_subfolder, rename_page_xml, remove_textregion_text
                 ))
         else:
             # For Page-level processing, we process image files directly
@@ -615,7 +628,7 @@ else:
                     text_filter, region_tagfilter, textline_tagfilter, [],
                     outputdir, dry_run, model_path, processing_level,  # profilelevel is empty list
                     output_formats, custom_params, create_polygon,
-                    create_subfolder, rename_page_xml
+                    create_subfolder, rename_page_xml, remove_textregion_text
                 ))
 
         # Process files in parallel with progress tracking
