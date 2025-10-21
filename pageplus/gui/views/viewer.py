@@ -48,8 +48,8 @@ def load_images(image_path: Path):
 def line_detail_dialog(all_lines: list, image: Image.Image, start_index: int, page: Page, xml_path: Path):
     """A dialog to show line details, allow editing and navigation."""
     center_dialog()
-    page = st.session_state.page if 'page' in st.session_state else page
-    if 'lines' not in st.session_state:
+    page = st.session_state.page if 'page' in st.session_state and st.session_state.page else page
+    if 'lines' not in st.session_state or st.session_state.lines is None:
         st.session_state.lines = all_lines
     all_lines = st.session_state.lines
 
@@ -133,7 +133,7 @@ def line_detail_dialog(all_lines: list, image: Image.Image, start_index: int, pa
     new_tag = st.text_input("Tag", line.get_tag(), key=f"tag_{line.get_id()}_{idx}")
 
     # Buttons
-    b_col1, b_col2, _, b_col4 = st.columns(4)
+    b_col1, b_col2, b_col3, b_col4 = st.columns(4)
 
     def auto_save():
         if line.get_text() != new_text:
@@ -153,10 +153,17 @@ def line_detail_dialog(all_lines: list, image: Image.Image, start_index: int, pa
         st.session_state.current_line_index += 1
         st.rerun()
 
+    if b_col3.button("Delete Line"):
+        page.delete_element(line.xml_element)
+        st.session_state.lines.pop(idx)
+        st.session_state.page = page
+        st.rerun()
+
     if b_col4.button("Save & Close"):
-        page.save_xml(xml_path)
-        st.session_state.page = None
+        auto_save()
+        st.session_state.page.save_xml(xml_path)
         st.session_state.lines = None
+        st.session_state.page = None
         st.session_state.line_editor['selection']['rows'] = []
         if 'current_line_index' in st.session_state:
             del st.session_state.current_line_index
@@ -446,7 +453,15 @@ def show_viewer():
                         show_lines = st.checkbox("Text Lines", value=True, key="show_lines")
                         show_baselines = st.checkbox("Baselines", key="show_baselines")
 
-                    show_fulltext = st.checkbox("📝 Show Fulltext Panel", value=True, key="show_fulltext")
+                    c1, c2 = st.columns([1, 4])
+                    with c1:
+                        if st.button("🔄 Reload View"):
+                            if 'overlay_cache' in st.session_state:
+                                del st.session_state.overlay_cache
+                            load_images.clear()
+                            st.rerun()
+                    with c2:
+                        show_fulltext = st.checkbox("📝 Show Fulltext Panel", value=True, key="show_fulltext")
 
                     # Step 2: Use dynamic session cache for drawn overlays
                     cache_key = (selected_xml_path, image_path, show_regions, show_lines, show_baselines)
@@ -490,7 +505,7 @@ def show_viewer():
                                 if "line_editor" in st.session_state and st.session_state.line_editor['selection']['rows']:
                                     selected_index = st.session_state.line_editor['selection']['rows'][0]
                                     line_detail_dialog(all_lines, image, selected_index, page, selected_xml_path)
-
+                                    page = Page(selected_xml_path)
                             else:
                                 st.info("No text content found.")
 
