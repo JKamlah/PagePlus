@@ -75,7 +75,9 @@ class TesseractBridge(CLIBridge):
                 progress_callback=None,
                 output_formats: List[str] = None,
                 custom_params: List[Dict[str, str]] = None,
-                create_polygon: bool = True) -> Dict[str, Any]:
+                create_polygon: bool = True,
+                create_subfolder: bool = False,
+                rename_page_xml: bool = False) -> Dict[str, Any]:
         """
         Run OCR processing on the given inputs.
 
@@ -96,6 +98,8 @@ class TesseractBridge(CLIBridge):
             output_formats: List of output formats for Page-level processing
             custom_params: List of custom parameters for Tesseract
             create_polygon: Whether to create polygon coordinates for PageXML output
+            create_subfolder: Create subfolders for output formats
+            rename_page_xml: Rename PageXML from .page.xml to .xml
 
         Returns:
             Dictionary with processing results
@@ -126,7 +130,9 @@ class TesseractBridge(CLIBridge):
                 progress_callback=progress_callback,
                 output_formats=output_formats,
                 custom_params=custom_params,
-                create_polygon=create_polygon
+                create_polygon=create_polygon,
+                create_subfolder=create_subfolder,
+                rename_page_xml=rename_page_xml
             )
             end_time = time.time()
             result["processing_time"] = end_time - start_time

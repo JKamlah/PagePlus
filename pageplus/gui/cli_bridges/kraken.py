@@ -285,7 +285,7 @@ class KrakenBridge(CLIBridge):
             }
 
     def run_recognition(self,
-                        image_files: List[str],
+                        xml_files: List[str],
                         model_path: Path,
                         outputdir: Optional[str] = None,
                         device: str = 'cpu',
@@ -298,7 +298,7 @@ class KrakenBridge(CLIBridge):
         Run Kraken OCR recognition on pre-segmented PAGE-XML files using direct CLI commands.
 
         Args:
-            image_files: List of image file paths (corresponding XML files must exist)
+            xml_files: List of xml file paths (corresponding image files must exist)
             model_path: Path to recognition model (.mlmodel)
             outputdir: Output directory for updated PAGE-XML files
             device: Device to use ('cpu' or 'cuda:0')
@@ -326,7 +326,7 @@ class KrakenBridge(CLIBridge):
 
             # Call the CLI function directly
             result = asyncio.run(kraken_recognize_cli(
-                image_files=image_files,
+                xml_files=xml_files,
                 model_path=model_path,
                 output_dir=output_path,
                 device=device,

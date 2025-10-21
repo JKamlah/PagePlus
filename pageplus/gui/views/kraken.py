@@ -757,24 +757,24 @@ def _run_cli_processing(cli_bridge, processing_mode, selected_files,
         model_type = cli_bridge.get_model_type(model_dir / seg_model_name)
         if model_type != 'segmentation':
             st.error(f"'{seg_model_name}' is not a valid segmentation model. Please select a different model.")
-            return
+            #return
 
     elif processing_mode == "Recognition Only (requires XML)":
         model_type = cli_bridge.get_model_type(model_dir / rec_model_name)
         if model_type != 'recognition':
             st.error(f"'{rec_model_name}' is not a valid recognition model. Please select a different model.")
-            return
+            #return
 
     elif processing_mode == "Segmentation + Recognition":
         seg_model_type = cli_bridge.get_model_type(model_dir / seg_model_name)
         if seg_model_type != 'segmentation':
             st.error(f"'{seg_model_name}' is not a valid segmentation model. Please select a different model for segmentation.")
-            return
+            #return
 
         rec_model_type = cli_bridge.get_model_type(model_dir / rec_model_name)
         if rec_model_type != 'recognition':
             st.error(f"'{rec_model_name}' is not a valid recognition model. Please select a different model for recognition.")
-            return
+            #return
     # --- End of Model Validation ---
 
     total_files = len(selected_files)
@@ -814,8 +814,21 @@ def _run_cli_processing(cli_bridge, processing_mode, selected_files,
                 )
 
             elif processing_mode == "Recognition Only (requires XML)":
+                xml_files = []
+                for image_file in selected_files:
+                    image_path = Path(image_file)
+                    xml_file = image_path.with_suffix('.xml')
+                    if xml_file.exists():
+                        xml_files.append(str(xml_file))
+                    else:
+                        st.warning(f"No corresponding XML file found for {image_path.name}")
+                if not xml_files:
+                    st.error("No corresponding XML files found for the selected images!")
+                    st.info("Recognition mode requires existing PAGE-XML files.")
+                    return
+
                 result = cli_bridge.run_recognition(
-                    image_files=selected_files,
+                    xml_files=xml_files,
                     model_path=model_dir / rec_model_name,
                     outputdir=st.session_state.get('kraken_output_dir', None),
                     device=device,

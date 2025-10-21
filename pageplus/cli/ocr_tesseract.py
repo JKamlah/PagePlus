@@ -112,7 +112,8 @@ else:
         """Process a single XML file with OCR."""
         (xml_file, image_path, image_filename, model_name, save_snippets,
          text_filter, region_tagfilter, textline_tagfilter, profilelevel,
-         outputdir, dry_run, model_path, processing_level, output_formats, custom_params, create_polygon) = args
+         outputdir, dry_run, model_path, processing_level, output_formats, custom_params, create_polygon,
+         create_subfolder, rename_page_xml) = args
 
         reg_filter = re.compile(rf"{text_filter}") if text_filter is not None else '.'
 
@@ -127,6 +128,10 @@ else:
             try:
                 # Create output path for generated PAGE XML
                 output_base = image_path.with_suffix('')
+                if outputdir:
+                    output_dir_path = Path(outputdir)
+                    output_dir_path.mkdir(parents=True, exist_ok=True)
+                    output_base = output_dir_path / output_base.name
                 # generated_xml_path = output_base.with_suffix('.xml')
 
                 # Run tesseract command
@@ -144,9 +149,9 @@ else:
                             cmd.extend(['-c', 'tessedit_create_page_xml=1'])
                             # Add polygon creation parameter if enabled
                             if create_polygon:
-                                cmd.extend(['-c', 'tessedit_create_polygon=1'])
+                                cmd.extend(['-c', 'page_xml_polygon=1'])
                             else:
-                                cmd.extend(['-c', 'tessedit_create_polygon=0'])
+                                cmd.extend(['-c', 'page_xml_polygon=0'])
                         elif format_type == "ALTO":
                             cmd.extend(['-c', 'tessedit_create_alto=1'])
                         elif format_type == "TEXT":
@@ -159,9 +164,9 @@ else:
                     # Default to PageXML if no formats specified
                     cmd.extend(['-c', 'tessedit_create_page_xml=1'])
                     if create_polygon:
-                        cmd.extend(['-c', 'tessedit_create_polygon=1'])
+                        cmd.extend(['-c', 'page_xml_polygon=1'])
                     else:
-                        cmd.extend(['-c', 'tessedit_create_polygon=0'])
+                        cmd.extend(['-c', 'page_xml_polygon=0'])
 
                 # Add custom parameters
                 if custom_params:
@@ -177,6 +182,56 @@ else:
                 print(f"Tesseract completed for {xml_file.name}, return code: {result.returncode}")
                 if result.stderr:
                     print(f"Tesseract stderr: {result.stderr}")
+                # Handle subfolders and renaming
+                if not dry_run and (create_subfolder or rename_page_xml):
+                    base_output_path = Path(outputdir) if outputdir else image_path.parent
+                    print(f"Created files: {create_subfolder} {rename_page_xml}")
+                    print(base_output_path)
+                    subfolder_map = {
+                        "PageXML": "page",
+                        "ALTO": "alto",
+                        "HOCR": "hocr",
+                        "TEXT": "FULLTEXT",
+                        "TSV": "tsv",
+                    }
+
+                    output_files = {}
+                    if "PageXML" in output_formats:
+                        output_files["PageXML"] = output_base.with_suffix('.page.xml')
+                    if "ALTO" in output_formats:
+                        output_files["ALTO"] = output_base.with_suffix('.xml')
+                    if "HOCR" in output_formats:
+                        output_files["HOCR"] = output_base.with_suffix('.hocr')
+                    if "TEXT" in output_formats:
+                        output_files["TEXT"] = output_base.with_suffix('.txt')
+                    if "TSV" in output_formats:
+                        output_files["TSV"] = output_base.with_suffix('.tsv')
+
+                    if create_subfolder:
+                        for format_type, file_path in output_files.items():
+                            if file_path.exists():
+                                subfolder_name = subfolder_map.get(format_type)
+                                if subfolder_name:
+                                    subfolder_path = base_output_path / subfolder_name
+                                    subfolder_path.mkdir(exist_ok=True)
+                                    if rename_page_xml:
+                                        dest_path = subfolder_path / file_path.with_suffix('').with_suffix('.xml').name
+                                    else:
+                                        dest_path = subfolder_path / file_path.name
+                                    file_path.rename(dest_path)
+                                    output_files[format_type] = dest_path  # Update path after moving
+
+                    elif rename_page_xml:
+                        if "PageXML" in output_formats:
+                            file_path = output_files["PageXML"]
+                            if file_path.exists():
+                                # Rename to .page.xml first, then to .xml if needed
+                                page_xml_path = file_path.with_name(f"{file_path.stem}.page.xml")
+                                file_path.rename(page_xml_path)
+
+                                final_xml_path = page_xml_path.with_suffix('.xml')
+                                page_xml_path.rename(final_xml_path)
+                                output_files["PageXML"] = final_xml_path  # Update path after renaming
                 return {
                     'xml_file': xml_file,
                     'text_dict': {'page': {'full_text': ''}},
@@ -410,7 +465,11 @@ else:
                           help="Filename of the output directory. If not specified, input files will be overwritten.",
                           callback=transform_output)] = None,
             dry_run: Annotated[bool,
-                               typer.Option(help="If True, the function will not write any files.")] = False):
+                               typer.Option(help="If True, the function will not write any files.")] = False,
+            create_subfolder: Annotated[bool,
+                                        typer.Option(help="Create subfolders for output formats.")] = False,
+            rename_page_xml: Annotated[bool,
+                                       typer.Option(help="Rename PageXML from .page.xml to .xml.")] = False):
         """
         EXPERIMENTAL: NOT SAFE TO USE!
         OCR with the existing layout information. Existing text will be overwritten.
@@ -457,7 +516,7 @@ else:
             process_args.append((
                 xml_file, image_path, image_filename, model_name, save_snippets,
                 text_filter, region_tagfilter, textline_tagfilter, profilelevel,
-                outputdir, dry_run, None, None  # model_path will be added later
+                outputdir, dry_run, None, None, None, None, True, create_subfolder, rename_page_xml
             ))
 
         # Process files in parallel
@@ -514,7 +573,9 @@ else:
                 progress_callback=None,
                 output_formats: List[str] = None,
                 custom_params: List[Dict[str, str]] = None,
-                create_polygon: bool = True) -> Dict[str, Any]:
+                create_polygon: bool = True,
+                create_subfolder: bool = False,
+                rename_page_xml: bool = False) -> Dict[str, Any]:
         """
         Run OCR processing on the given inputs.
         This function can be imported by the bridge.
@@ -540,7 +601,8 @@ else:
                     xml_file, image_path, image_filename, model_name, save_snippets,
                     text_filter, region_tagfilter, textline_tagfilter, [],
                     outputdir, dry_run, model_path, processing_level,  # profilelevel is empty list
-                    output_formats, custom_params, create_polygon
+                    output_formats, custom_params, create_polygon,
+                    create_subfolder, rename_page_xml
                 ))
         else:
             # For Page-level processing, we process image files directly
@@ -552,7 +614,8 @@ else:
                     image_file.with_suffix('.xml'), image_file, image_file.name, model_name, save_snippets,
                     text_filter, region_tagfilter, textline_tagfilter, [],
                     outputdir, dry_run, model_path, processing_level,  # profilelevel is empty list
-                    output_formats, custom_params, create_polygon
+                    output_formats, custom_params, create_polygon,
+                    create_subfolder, rename_page_xml
                 ))
 
         # Process files in parallel with progress tracking

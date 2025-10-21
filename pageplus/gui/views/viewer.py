@@ -48,9 +48,10 @@ def load_images(image_path: Path):
 def line_detail_dialog(all_lines: list, image: Image.Image, start_index: int, page: Page, xml_path: Path):
     """A dialog to show line details, allow editing and navigation."""
     center_dialog()
-
     page = st.session_state.page if 'page' in st.session_state else page
-    all_lines = st.session_state.lines if 'lines' in st.session_state else all_lines
+    if 'lines' not in st.session_state:
+        st.session_state.lines = all_lines
+    all_lines = st.session_state.lines
 
     if 'current_line_index' not in st.session_state or st.session_state.get('start_index') != start_index:
         st.session_state.current_line_index = start_index
@@ -71,7 +72,7 @@ def line_detail_dialog(all_lines: list, image: Image.Image, start_index: int, pa
         options=line_ids,
         index=idx,
         format_func=lambda line_id: f"({line_id_to_idx[line_id] + 1}/{len(all_lines)}) {line_id}",
-        key=f"line_jumper_{start_index}"
+        key=f"line_jumper_{idx}"
     )
 
     # If the selection changed, update the index in session state and rerun
@@ -139,8 +140,7 @@ def line_detail_dialog(all_lines: list, image: Image.Image, start_index: int, pa
             line.update_text(new_text)
         if line.get_tag() != new_tag:
             line.set_tag(new_tag)
-        all_lines[idx] = line
-        st.session_state.lines = all_lines
+        st.session_state.lines[idx] = line
         st.session_state.page = page
 
     if b_col1.button("⬅️ Previous", disabled=idx <= 0):

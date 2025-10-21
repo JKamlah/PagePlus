@@ -404,7 +404,7 @@ async def kraken_segment_cli(
             # Build kraken command
             cmd = [str(kraken_exe)]
 
-            if template in ["pagexml", "alto"]:
+            if template in ["page", "alto"]:
                 cmd.extend(['-f', template])
             else:
                 template_path = get_kraken_template_path().parent / template
@@ -460,7 +460,7 @@ async def kraken_segment_cli(
 
 
 async def kraken_recognize_cli(
-    image_files: List[str],
+    xml_files: List[str],
     model_path: Path,
     output_dir: Optional[Path] = None,
     device: str = 'cpu',
@@ -495,17 +495,16 @@ async def kraken_recognize_cli(
 
     no_xml = []
 
-    async def worker(image_file: str, semaphore: asyncio.Semaphore) -> tuple[str, str, str]:
+    async def worker(xml_file: str, semaphore: asyncio.Semaphore) -> tuple[str, str, str]:
         async with semaphore:
-            image_path = Path(image_file)
-            xml_path = image_path.with_suffix('.xml')
+            xml_path = Path(xml_file)
 
             if not xml_path.exists():
-                no_xml.append(image_path.name)
-                logging.warning(f"No XML found for {image_path.name}, skipping...")
+                no_xml.append(xml_file.name)
+                logging.warning(f"No XML found for {xml_file.name}, skipping...")
                 if progress_callback:
                     progress_callback()
-                return image_path.name, "skipped", "No XML found"
+                return xml_file.name, "skipped", "No XML found"
 
             # Determine output path
             if output_dir:
@@ -516,9 +515,9 @@ async def kraken_recognize_cli(
 
             # Build kraken command
             cmd = [str(kraken_exe)]
-
+            cmd.extend(['-f', 'page'])
             if template in ["pagexml", "alto"]:
-                cmd.extend(['-f', template])
+                cmd.extend(['-t', template])
             else:
                 template_path = get_kraken_template_path().parent / template
                 if template_path.exists():
@@ -528,27 +527,27 @@ async def kraken_recognize_cli(
                 cmd.extend(['--device', device])
 
             cmd.extend(['--threads', str(threads)])
-            cmd.extend(['-x', '-i', str(xml_path), str(output_path)])
+            cmd.extend(['-i', f"{str(xml_path)}", f"{str(output_path)}"])
             cmd.extend(['ocr', '-m', str(model_path)])
             if text_direction:
                 cmd.extend(['-d', text_direction])
-
+            print(' '.join(cmd))
             # Run command
             returncode, _, stderr = await run_async_subprocess(cmd, timeout=600)
-
+            print(stderr)
             if progress_callback:
                 progress_callback()
 
             if returncode == 0:
-                logging.info(f"Recognized: {image_path.name}")
-                return image_path.name, "success", ""
+                logging.info(f"Recognized: {xml_path.name}")
+                return xml_path.name, "success", ""
             else:
-                logging.error(f"Recognition failed for {image_path.name}: {stderr}")
-                return image_path.name, "failed", stderr
+                logging.error(f"Recognition failed for {xml_path.name}: {stderr}")
+                return xml_path.name, "failed", stderr
 
     try:
         semaphore = asyncio.Semaphore(jobs)
-        tasks = [worker(img_file, semaphore) for img_file in image_files]
+        tasks = [worker(xml_file, semaphore) for xml_file in xml_files]
         results = await asyncio.gather(*tasks)
 
         processed = sum(1 for r in results if r[1] == "success")
@@ -564,7 +563,7 @@ async def kraken_recognize_cli(
         return {
             "success": len(failed) == 0,
             "processed_files": processed,
-            "total_files": len(image_files),
+            "total_files": len(xml_files),
             "failed_files": failed,
             "skipped_files": skipped,
             "error_details": error_details,
@@ -630,8 +629,8 @@ async def kraken_segment_and_recognize_cli(
             # Build kraken command
             cmd = [str(kraken_exe)]
 
-            if template in ["page", "alto"]:
-                cmd.extend(['-f', template])
+            if template in ["pagexml", "alto"]:
+                cmd.extend(['-t', template])
             else:
                 template_path = get_kraken_template_path().parent / template
                 if template_path.exists():
@@ -641,7 +640,7 @@ async def kraken_segment_and_recognize_cli(
                 cmd.extend(['--device', device])
 
             cmd.extend(['--threads', str(threads)])
-            cmd.extend(['-x', '-i', str(image_path), str(output_path)])
+            cmd.extend(['-i', str(image_path), str(output_path)])
             cmd.extend(['segment', '-bl', '-i', str(seg_model_path)])
             if seg_text_direction:
                 cmd.extend(['-d', seg_text_direction])

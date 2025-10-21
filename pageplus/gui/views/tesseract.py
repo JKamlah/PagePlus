@@ -350,6 +350,17 @@ def show_tesseract(cli_bridge: TesseractBridge):
             else:
                 create_polygon = False
 
+            create_subfolder = st.checkbox(
+                "Create subfolders for output",
+                value=False,
+                help="Create subfolders for each output format (e.g., 'page/', 'alto/')."
+            )
+            rename_page_xml = st.checkbox(
+                "Rename .page.xml to .xml",
+                value=False,
+                help="Rename the final PageXML file from '.page.xml' to '.xml'."
+            )
+
             # Initialize session state for parameters if not exists
             if 'tesseract_custom_params' not in st.session_state:
                 st.session_state.tesseract_custom_params = []
@@ -436,6 +447,8 @@ def show_tesseract(cli_bridge: TesseractBridge):
                 params["output_formats"] = output_formats
                 params["custom_params"] = st.session_state.get('tesseract_custom_params', [])
                 params["create_polygon"] = create_polygon
+                params["create_subfolder"] = create_subfolder
+                params["rename_page_xml"] = rename_page_xml
 
             # Process files with progress tracking
             try:
@@ -461,7 +474,8 @@ def show_tesseract(cli_bridge: TesseractBridge):
                 params['progress_callback'] = update_progress
 
                 # Start processing
-                result = cli_bridge.run_ocr(**params)
+                with st.spinner("Tesseract is processing your files... 🔤", show_time=True):
+                    result = cli_bridge.run_ocr(**params)
 
                 # Update progress bar to 100% when complete
                 with progress_container:
