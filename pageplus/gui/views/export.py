@@ -216,7 +216,7 @@ def show_export(bridge):
 
         dpi = st.number_input(
             "DPI", min_value=72, max_value=1200, value=None)
-        draw_options = ["baseline", "border", "textline", "textregion"]
+        draw_options = ["Baseline", "Textline", "TextRegion"]
         draw = st.multiselect(
             "Draw Elements",
             options=draw_options,

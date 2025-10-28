@@ -59,20 +59,27 @@ class ExportBridge(CLIBridge):
                    files: List[Path],
                    output_dir: Optional[Path] = None,
                    images: Optional[List[str]] = None,
-                   dpi: int = 400,
-                   max_resolution: int = 72,
+                   dpi: int = 300,
+                   jpeg_quality: int = 85,
                    draw: List[str] = None,
                    substitutions: Optional[dict] = None,
                    output_filename: str = "PagePlus", **kwargs) -> List[Path]:
         """Export files to PDF format."""
         try:
-            return pdf(files,
-                       images=images,
-                       dpi=dpi,
-                       max_resolution=max_resolution,
-                       draw=draw or [],
-                       substitutions=substitutions,
-                       output_filename=output_filename)
+            # The new `pdf` function in cli/export.py handles everything.
+            # We just need to call it with the right parameters.
+            pdf(inputs=files,
+                images=images,
+                dpi=dpi,
+                jpeg_quality=jpeg_quality,
+                draw=draw or [],
+                substitutions=substitutions,
+                output_filename=output_filename,
+                **kwargs)  # Pass any other GUI options
+            
+            output_path = output_dir.joinpath(output_filename + '.pdf') if output_dir else Path(files[0]).parent.joinpath(output_filename + '.pdf')
+            return [output_path] if output_path.exists() else []
+
         except Exception as e:
             logger.error(f"Error exporting to PDF: {str(e)}")
             return []
@@ -93,6 +100,8 @@ class ExportBridge(CLIBridge):
             # Map img_dir to image_folder for PDF exports
             if 'img_dir' in kwargs:
                 kwargs['image_folder'] = kwargs.pop('img_dir')
+            if 'max_resolution' in kwargs:
+                del kwargs['max_resolution']
             return self.export_pdf(files, output_dir, **kwargs)
         else:
             logger.error(f"Unknown export format: {format}")

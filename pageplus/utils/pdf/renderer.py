@@ -1,381 +1,350 @@
 # SPDX-FileCopyrightText: 2023 James R. Barlow
 # SPDX-License-Identifier: MPL-2.0
 # Edited: 2025, Jan Kamlah
+# Improved for performance and file size optimization
 
-import re
 import io
-import tempfile
-import os
-from importlib import util
+import re
 from math import pi
-from typing import Optional, Tuple
+from typing import List, Tuple, Optional
 
 from PIL import Image
 from rich import print
 
+# Assuming these are your project's internal models
 from pageplus.models.page import Page
 from pageplus.models.text_elements import TextRegion, Textline
 
-if (spec := util.find_spec('pikepdf')) is not None:
-    from pikepdf import Matrix, Name
+# pikepdf imports
+try:
+    from pikepdf import Matrix, Name, Pdf, ObjectStreamMode, Dictionary, Stream
     from pikepdf.canvas import (
         BLUE,
         CYAN,
         MAGENTA,
-        Canvas,
+        GREEN,
+        # Import the low-level building blocks
+        ContentStreamBuilder,
+        _CanvasAccessor,
+        LoadedImage,
         Text,
         TextDirection,
-        Color
-    )
-    from pikepdf import (
-        Name,
+        Color,
     )
     from pageplus.utils.pdf.font import GlyphlessFont
+except ImportError:
+    print("[bold red]Error: pikepdf or pageplus is not installed.[/bold red]")
+    # Define dummy classes to allow the script to be parsed without pikepdf
+    class Canvas: pass
+    class GlyphlessFont: pass
+    class Page: pass
+    class TextRegion: pass
+    class Textline: pass
+    # etc.
+
+# --- Constants ---
+POINTS_PER_INCH = 72.0
 
 
-def get_image_dpi(image: Image.Image) -> Tuple[int, int]:
+def _get_image_dpi(image: Image.Image) -> Tuple[int, int]:
     """
-    Get the DPI of an image, with fallback to common scan DPI values.
-    
-    Args:
-        image: PIL Image object
-        
-    Returns:
-        Tuple of (x_dpi, y_dpi) - typically both are the same for scanned documents
+    Get the DPI of an image from its metadata, with a fallback to 300 DPI.
     """
-    # Try to get DPI from image info
-    if hasattr(image, 'info') and 'dpi' in image.info:
-        dpi_x, dpi_y = image.info['dpi']
-        if dpi_x > 0 and dpi_y > 0:
-            return int(dpi_x), int(dpi_y)
-    
-    # Common scan DPI values - try to infer from image size
-    # Most document scans are 200, 300, 400, or 600 DPI
-    width, height = image.size
-    
-    # For typical document sizes (A4 = 8.27" x 11.69")
-    # Check if dimensions match common DPI values
-    common_dpis = [200, 300, 400, 600]
-    
-    for dpi in common_dpis:
-        # A4 dimensions in inches
-        a4_width_inches = 8.27
-        a4_height_inches = 11.69
-        
-        expected_width = int(a4_width_inches * dpi)
-        expected_height = int(a4_height_inches * dpi)
-        
-        # Allow some tolerance (±5%)
-        tolerance = 0.05
-        if (abs(width - expected_width) / expected_width < tolerance and
-            abs(height - expected_height) / expected_height < tolerance):
-            return dpi, dpi
-    
-    # Default to 300 DPI if we can't determine
+    if 'dpi' in image.info:
+        dpi = image.info['dpi']
+        if isinstance(dpi, (tuple, list)) and len(dpi) == 2:
+            return int(dpi[0]), int(dpi[1])
     return 300, 300
 
 
-def optimize_image_for_pdf(image: Image.Image, target_format: str = 'JPEG', 
-                          quality: int = 85, max_resolution: int = None) -> str:
+def _optimize_image(
+    image: Image.Image,
+    page_width_pt: float,
+    page_height_pt: float,
+    target_dpi: int = 300,
+    jpeg_quality: int = 85,
+) -> tuple[io.BytesIO, str]:
     """
-    Optimize image for PDF embedding and save to temporary file.
-    
+    Optimize and resize an image for PDF embedding, returning it as an in-memory BytesIO object.
+
     Args:
-        image: PIL Image object
-        target_format: Target format ('JPEG' for photos/scans, 'PNG' for graphics)
-        quality: JPEG quality (1-100, higher = better quality, larger file)
-        max_resolution: Maximum resolution (DPI) to resize to (e.g., 300 for 300 DPI)
-        
+        image: The source PIL Image.
+        page_width_pt: The width of the target PDF page in points.
+        page_height_pt: The height of the target PDF page in points.
+        target_dpi: The desired maximum resolution of the image on the page.
+        jpeg_quality: The quality setting for JPEG compression (1-95).
+
     Returns:
-        Path to temporary optimized image file
+        A tuple containing the io.BytesIO buffer and the final image mode ('L' or 'RGB').
     """
-    # Resize image if max_resolution is specified
-    if max_resolution is not None:
-        # Calculate target dimensions based on max_resolution
-        # Assuming A4 page size (8.27" x 11.69")
-        a4_width_inches = 8.27
-        a4_height_inches = 11.69
-        
-        target_width = int(a4_width_inches * max_resolution)
-        target_height = int(a4_height_inches * max_resolution)
-        
-        # Resize image if it's larger than target
-        if image.size[0] > target_width or image.size[1] > target_height:
-            # Calculate scaling factor to fit within target dimensions
-            scale_x = target_width / image.size[0]
-            scale_y = target_height / image.size[1]
-            scale = min(scale_x, scale_y)
-            
-            new_width = int(image.size[0] * scale)
-            new_height = int(image.size[1] * scale)
-            
-            print(f"Resizing image from {image.size} to ({new_width}, {new_height}) "
-                  f"for {max_resolution} DPI")
-            
-            # Use high-quality resizing for downscaling
-            image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-    
-    # Convert to RGB if needed (JPEG doesn't support alpha)
-    if target_format == 'JPEG' and image.mode in ('RGBA', 'LA', 'P'):
-        # Create white background for transparent images
-        if image.mode == 'RGBA':
-            background = Image.new('RGB', image.size, (255, 255, 255))
-            background.paste(image, mask=image.split()[-1])  # Use alpha channel as mask
-            image = background
-        else:
-            image = image.convert('RGB')
-    
-    # For scanned documents, JPEG is usually more efficient than PNG
-    # PNG is better for graphics with sharp edges or limited colors
-    if target_format == 'JPEG':
-        # Convert to RGB if not already
-        if image.mode != 'RGB':
-            image = image.convert('RGB')
-    
-    # Create temporary file with appropriate extension
-    suffix = '.jpg' if target_format == 'JPEG' else '.png'
-    temp_file = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
-    temp_path = temp_file.name
-    temp_file.close()
-    
-    # Save optimized image to temporary file
-    if target_format == 'JPEG':
-        image.save(temp_path, 'JPEG', quality=quality, optimize=True)
-    else:
-        image.save(temp_path, 'PNG', optimize=True)
-    
-    return temp_path
+    # 1. Resize image if its resolution is higher than target_dpi on the page
+    target_width_px = int(page_width_pt * target_dpi / POINTS_PER_INCH)
+    target_height_px = int(page_height_pt * target_dpi / POINTS_PER_INCH)
 
-
-def page_to_pdf(page: Page,
-                image: Image = None,
-                fontname: Name = Name("/f-0-0"),
-                font: GlyphlessFont = GlyphlessFont(),
-                invisible_text: bool = True,
-                draw: list = None,
-                dpi: int = None,
-                substitutions: list = None,
-                image_quality: int = 85,
-                optimize_compression: bool = True,
-                max_resolution: int = None) -> Canvas:
-
-    # Determine actual image DPI (do this once and reuse)
-    detected_dpi_x, detected_dpi_y = None, None
-    if image is not None:
-        detected_dpi_x, detected_dpi_y = get_image_dpi(image)
-        print(f"Detected image DPI: {detected_dpi_x}x{detected_dpi_y}")
-    
-    # Use provided DPI or detected DPI or default
-    if dpi is None:
-        dpi = detected_dpi_x if detected_dpi_x else 300
-        print(f"Using DPI: {dpi} for scaling")
-    
-    # Calculate proper scaling based on actual DPI
-    INCH = 72.0
-    SCALING = INCH / dpi
-    
-    # Optimize image if provided
-    temp_image_path = None
-    if image is not None and optimize_compression:
-        # Determine best format based on image characteristics
-        if image.mode in ('RGB', 'RGBA') and image.size[0] * image.size[1] > 1000000:
-            # Large color image - use JPEG
-            target_format = 'JPEG'
-        else:
-            # Small image or grayscale - use PNG for better compression
-            target_format = 'PNG'
-        
-        # If no max_resolution specified, use native resolution
-        if max_resolution is None:
-            max_resolution = detected_dpi_x if detected_dpi_x else 300
-            print(f"Using native resolution: {max_resolution} DPI")
-        
-        temp_image_path = optimize_image_for_pdf(
-            image, target_format, quality=image_quality, max_resolution=max_resolution
+    if image.width > target_width_px or image.height > target_height_px:
+        print(
+            f"Image resolution ({image.width}x{image.height}) is higher than target "
+            f"({target_width_px}x{target_height_px} for {target_dpi} DPI). Resizing."
         )
-        print(f"Optimized image saved to: {temp_image_path}")
+        image.thumbnail((target_width_px, target_height_px), Image.Resampling.LANCZOS)
 
-    def _add_textregion(canvas: Canvas,
-                        region: TextRegion):
-        if draw and 'region' in draw:
-            with canvas.do.save_state():
-                # draw box around paragraph
-                canvas.do.stroke_color(CYAN).line_width(0.2)
-                region_bbx = region.get_coordinates(returntype='mrr').bounds
-                canvas.do.rect(int(region_bbx[0]*SCALING),
-                               int(region_bbx[1]*SCALING),
-                               int((region_bbx[2] - region_bbx[0])*SCALING),
-                               int((region_bbx[3] - region_bbx[1])*SCALING),
-                               fill=False)
-        for line in region.textlines:
-            direction = line.get_reading_direction()
-            direction = TextDirection(1) if direction is None or direction != 'left-to-right' else TextDirection(2)
-            _add_line(canvas,
-                      line,
-                      direction)
+    # 2. Optimize image format and color mode for size
+    output_format = 'JPEG'
 
-    def _add_line(canvas: Canvas,
-        line: Textline | None,
-        text_direction: TextDirection = TextDirection(1)):
-        """
-        Render the textline with optimized font usage
-        """
-        line_mrr = line.get_coordinates(returntype='mrr')
-        line_bbox = [x*SCALING for x in line_mrr.bounds]
-        height = abs(line_bbox[3] - line_bbox[1])
-        width = abs(line_bbox[2] - line_bbox[0])
-        if not line_bbox:
-            return
+    # For scanned documents, grayscale is common and saves a lot of space.
+    if image.mode == 'L':
+        # Already grayscale, perfect for JPEG
+        pass
+    # Handle transparency by pasting on a white background for JPEG
+    elif image.mode in ('RGBA', 'LA'):
+        background = Image.new('RGB', image.size, (255, 255, 255))
+        background.paste(image, mask=image.split()[-1])
+        image = background
+    # Convert palette images or others to RGB
+    elif image.mode != 'RGB':
+        image = image.convert('RGB')
 
-        line_text = line.get_text()
-        if substitutions:
-            for (pattern, replacement) in substitutions:
-                re.sub(rf'{pattern}', rf'{replacement}', line_text)
+    # For bi-tonal (black and white) scans, CCITTFaxDecode would be even better,
+    # but that requires more complex handling. JPEG on a 'L' mode image is a great compromise.
 
-        if (line_bbox[0], line_bbox[1]) == (line_bbox[2], line_bbox[3]):
-            print("line box is invalid so we cannot render it: box=%s text=%s",
-                line_bbox,
-                line_text)
-            return
-
-        if draw and 'line' in draw:
-            with canvas.do.save_state():
-                canvas.do.stroke_color(BLUE).line_width(0.15).rect(
-                    line_bbox[0], line_bbox[1], width, height, fill=False
-                )
-        if draw and 'baseline' in draw:
-            baseline_tuple = line.get_baseline_coordinates(returntype='tuple')
-            baseline_points = [int(baseline_tuple[0][0]*SCALING),
-                               int(baseline_tuple[0][1]*SCALING),
-                               int(baseline_tuple[-1][0]*SCALING),
-                               int(baseline_tuple[-1][1]*SCALING)]
-            canvas.do.stroke_color(MAGENTA).line_width(0.25).line(*baseline_points)
-
-        angle = 0 #line.angle()
-        line_matrix = (
-            Matrix()
-            .translated(line_bbox[0], line_bbox[3])
-            .scaled(1, -1)
-            .rotated(angle / pi * 180)
-        )
-        with canvas.do.save_state(cm=line_matrix):
-            text = Text(direction=text_direction)
-            fontsize = font.calculate_fontsize(line_text, width)
-            text.font(fontname, fontsize)
-            text.render_mode(0 if draw is None or not draw else 1)
-            text._cs.show_text(line_text.encode("utf-16be"))
-            
-            if draw is None or not draw or 'word' in draw:
-                # Use transparent color for invisible text
-                canvas.do.fill_color(Color(1, 1, 1, 0)).draw_text(text)
-
-    # MAIN Function
-    # Get page size and create canvas with proper dimensions
-    if page is not None:
-        width, height = page.page_size()
-        canvas = Canvas(page_size=(width * SCALING, height * SCALING))
-    else:
-        # If no page provided, use A4 size
-        width, height = 595, 842  # A4 size in points
-        canvas = Canvas(page_size=(width, height))
-        SCALING = 1.0  # No scaling needed for A4
-    
-    # Add font only once to avoid duplication
-    canvas.add_font(fontname, font)
-
-    if page is not None:
-        page_matrix = (
-            Matrix()
-            .translated(0, height*SCALING)
-            .scaled(1, -1)
-        )
-    else:
-        page_matrix = (
-            Matrix()
-            .translated(0, height)
-            .scaled(1, -1)
-        )
-
-    # Draw image in background if debug mode is on
-    if image is not None and (draw is not None and draw):
-        if temp_image_path and optimize_compression:
-            # Use optimized image file
-            canvas.do.draw_image(temp_image_path, 0, 0, width=width * SCALING, height=height * SCALING)
-        else:
-            # Use original image
-            canvas.do.draw_image(image, 0, 0, width=width * SCALING, height=height * SCALING)
-    
-    # Add text content
-    if page is not None:
-        with canvas.do.save_state(cm=page_matrix):
-            for region in page.get_ordered_regions():
-                region_tag = region.get_localname()
-                if region_tag in ['TextRegion', 'TableRegion']:
-                    _add_textregion(canvas, region)
-    
-    # Draw image in foreground (normal mode)
-    if image is not None and (draw is None or not draw):
-        if temp_image_path and optimize_compression:
-            # Use optimized image file
-            canvas.do.draw_image(temp_image_path, 0, 0, width=width * SCALING, height=height * SCALING)
-        else:
-            # Use original image
-            canvas.do.draw_image(image, 0, 0, width=width * SCALING, height=height * SCALING)
-
-    # Clean up temporary file
-    if temp_image_path and os.path.exists(temp_image_path):
-        try:
-            os.unlink(temp_image_path)
-        except:
-            pass  # Ignore cleanup errors
-
-    return canvas
-
-
-def create_optimized_pdf(pages_and_images: list, 
-                        output_path: str,
-                        compress_streams: bool = True,
-                        object_stream_mode: str = 'generate',
-                        recompress_flate: bool = True) -> None:
-    """
-    Create an optimized PDF from multiple pages with compression settings.
-    
-    Args:
-        pages_and_images: List of tuples (page, image) or (page, None)
-        output_path: Path to save the PDF
-        compress_streams: Enable stream compression
-        object_stream_mode: Object stream mode for PDF optimization
-        recompress_flate: Recompress existing Flate streams
-    """
-    from pikepdf import Pdf, ObjectStreamMode
-    
-    pdf_files = []
-    
-    for page, image in pages_and_images:
-        try:
-            canvas = page_to_pdf(page, image, optimize_compression=True)
-            pdf_files.append(canvas.to_pdf())
-        except Exception as e:
-            print(f"Error processing page: {e}")
-            continue
-    
-    if not pdf_files:
-        raise ValueError("No valid pages to create PDF")
-    
-    # Create merged PDF with optimization
-    merged_pdf = Pdf.new()
-    
-    # Add all pages
-    for pdf_file in pdf_files:
-        merged_pdf.pages.extend(pdf_file.pages)
-    
-    # Save with optimization settings
-    merged_pdf.save(
-        output_path,
-        compress_streams=compress_streams,
-        recompress_flate=recompress_flate,
-        object_stream_mode=ObjectStreamMode[object_stream_mode.upper()],
-        linearize=False,
-        normalize_content=False,
-        qdf=False
+    # 3. Save to an in-memory buffer
+    buffer = io.BytesIO()
+    image.save(
+        buffer,
+        format=output_format,
+        quality=jpeg_quality,
+        dpi=(POINTS_PER_INCH, POINTS_PER_INCH),  # Embed standard PDF DPI
+        optimize=True,
     )
+    buffer.seek(0)
+    return buffer, image.mode
+
+
+def _add_page_to_pdf(
+    cs_accessor: _CanvasAccessor,
+    pdf: Pdf,
+    page: Pdf.pages,
+    page_obj: Page,
+    image: Optional[Image.Image] = None,
+    fontname: Name = Name("/f-0-0"),
+    font: GlyphlessFont = GlyphlessFont(),
+    invisible_text: bool = True,
+    draw: Optional[List[str]] = None,
+    target_dpi: int = 300,
+    jpeg_quality: int = 85,
+    substitutions: Optional[List[Tuple[str, str]]] = None,
+) -> None:
+    """
+    Constructs a single PDF page on the given canvas with an image and text overlays.
+    """
+    if draw is None:
+        draw = []
+
+    # Get page size in pixels from the Page object
+    page_width_px, page_height_px = page_obj.page_size()
+
+    # Use image DPI to calculate scaling from pixels to PDF points
+    # This ensures the text overlay matches the image content's scale.
+    # If no image, assume a common scan DPI for scaling.
+    image_dpi = _get_image_dpi(image)[0] if image is not None else 300
+    SCALING = POINTS_PER_INCH / image_dpi
+
+    page_width_pt = page_width_px * SCALING
+    page_height_pt = page_height_px * SCALING
+
+    # Add background image
+    if image is not None:
+        optimized_image_buffer, final_mode = _optimize_image(
+            image, page_width_pt, page_height_pt, target_dpi, jpeg_quality
+        )
+        # Manually create an Image XObject Stream. This is the correct low-level
+        # way to embed a pre-compressed image without re-compression.
+        image_xobject = Stream(pdf, optimized_image_buffer.read())
+        image_xobject.Type = Name.XObject
+        image_xobject.Subtype = Name.Image
+        image_xobject.Width = image.width
+        image_xobject.Height = image.height
+        if final_mode == 'L':
+            image_xobject.ColorSpace = Name.DeviceGray
+        else:
+            image_xobject.ColorSpace = Name.DeviceRGB
+        image_xobject.BitsPerComponent = 8
+        image_xobject.Filter = Name.DCTDecode
+
+        image_name = Name(f"/Im{len(page.Resources.XObject) + 1}")
+        page.Resources.XObject[image_name] = image_xobject
+
+        # The image is drawn to fill the entire page.
+        with cs_accessor.save_state(cm=Matrix(page_width_pt, 0, 0, page_height_pt, 0, 0)):
+            cs_accessor._cs.draw_xobject(image_name)
+
+    # Add text content
+    # Transformation matrix to flip the Y-axis (PDF origin is bottom-left)
+    page_matrix = Matrix().translated(0, page_height_pt).scaled(1, -1)
+
+    with cs_accessor.save_state(cm=page_matrix):
+        for region in page_obj.get_ordered_regions():
+            if region.get_localname() in ['TextRegion', 'TableRegion']:
+                _draw_text_region(cs_accessor, region, SCALING, font, fontname, invisible_text, draw, substitutions)
+
+
+def _draw_text_region(cs_accessor: _CanvasAccessor, region: TextRegion, scaling: float, font, fontname, invisible_text, draw, substitutions):
+    """Helper to draw a single text region."""
+    if 'TextRegion' in draw:
+        with cs_accessor.save_state():
+            cs_accessor.stroke_color(GREEN).line_width(0.2)
+            bbx = region.get_coordinates(returntype='mrr').bounds
+            cs_accessor.rect(
+                bbx[0] * scaling, bbx[1] * scaling,
+                (bbx[2] - bbx[0]) * scaling, (bbx[3] - bbx[1]) * scaling,
+                fill=False
+            )
+    for line in region.textlines:
+        _draw_text_line(cs_accessor, line, scaling, font, fontname, invisible_text, draw, substitutions)
+
+
+def _draw_text_line(cs_accessor: _CanvasAccessor, line, scaling, font, fontname, invisible_text, draw, substitutions):
+    """Helper to draw a single text line."""
+    line_mrr = line.get_coordinates(returntype='mrr')
+    if not line_mrr or not line_mrr.bounds:
+        return
+
+    line_bbox_pt = [coord * scaling for coord in line_mrr.bounds]
+    height_pt = abs(line_bbox_pt[3] - line_bbox_pt[1])
+    width_pt = abs(line_bbox_pt[2] - line_bbox_pt[0])
+
+    line_text = line.get_text()
+    if substitutions:
+        for pattern, replacement in substitutions:
+            line_text = re.sub(pattern, replacement, line_text)
+
+    if not line_text.strip():
+        return
+
+    # Set text rendering mode: 3 for invisible, 0 for fill.
+    render_mode = 3 if invisible_text and 'line' not in draw else 0
+
+    if 'Textline' in draw:
+        with cs_accessor.save_state():
+            cs_accessor.stroke_color(BLUE).line_width(0.15).rect(
+                line_bbox_pt[0], line_bbox_pt[1], width_pt, height_pt, fill=False
+            )
+    if 'Baseline' in draw:
+        baseline_tuple = line.get_baseline_coordinates(returntype='tuple')
+        baseline_points = [int(baseline_tuple[0][0]*scaling),
+                           int(baseline_tuple[0][1]*scaling),
+                           int(baseline_tuple[-1][0]*scaling),
+                           int(baseline_tuple[-1][1]*scaling)]
+        with cs_accessor.save_state():
+            cs_accessor.stroke_color(BLUE).line_width(0.15).line(
+                baseline_points[0], baseline_points[1], baseline_points[2], baseline_points[3]
+            )
+
+    # Re-instating the correct matrix calculation from the previous implementation.
+    angle = 0  # line.angle() is not implemented
+    line_matrix = (
+        Matrix()
+        .translated(line_bbox_pt[0], line_bbox_pt[3])  # Translate to top-left
+        .scaled(1, -1)  # Flip y-axis for drawing
+        .rotated(angle / 180 * pi)
+    )
+
+    with cs_accessor.save_state(cm=line_matrix):
+        text = Text()
+        fontsize = font.calculate_fontsize(line_text, width_pt)
+        text.font(fontname, fontsize)
+        text.render_mode(render_mode)
+        text.show(line_text)
+        cs_accessor.draw_text(text)
+
+
+def create_pdf(
+    pages_and_images: List[Tuple[Page, Optional[Image.Image]]],
+    output_path: str,
+    font: Optional[GlyphlessFont] = None,
+    invisible_text: bool = True,
+    draw: Optional[List[str]] = None,
+    target_dpi: int = 300,
+    jpeg_quality: int = 85,
+    substitutions: Optional[List[Tuple[str, str]]] = None,
+) -> None:
+    """
+    Creates an optimized, multi-page PDF from Page objects and images.
+
+    Args:
+        pages_and_images: A list of tuples, where each tuple is a (Page, PIL.Image) pair.
+        output_path: The path to save the final PDF file.
+        font: The font to use for text rendering (defaults to a new GlyphlessFont).
+        invisible_text: If True, text is invisible but selectable.
+        draw: A list of elements to draw for debugging ('region', 'line').
+        target_dpi: The maximum resolution for images in the PDF. Lower values reduce file size.
+        jpeg_quality: The JPEG quality for embedded images (1-95).
+        substitutions: Regex substitutions to apply to text content.
+    """
+    if not pages_and_images:
+        raise ValueError("Input list 'pages_and_images' cannot be empty.")
+
+    # Use a default glyphless font if none is provided
+    active_font = font if font is not None else GlyphlessFont()
+    fontname = Name("/Gf0")
+
+    # 1. Create the main PDF object
+    pdf = Pdf.new()
+
+    # 2. Loop through pages, creating and adding them one by one
+    for i, (page_obj, image) in enumerate(pages_and_images):
+        print(f"Processing page {i + 1}/{len(pages_and_images)}...")
+        try:
+            # Determine page size in points
+            page_width_px, page_height_px = page_obj.page_size()
+            image_dpi = _get_image_dpi(image)[0] if image is not None else 300
+            scaling = POINTS_PER_INCH / image_dpi
+            page_size = (page_width_px * scaling, page_height_px * scaling)
+
+            # Add a blank page to the PDF
+            new_page = pdf.add_blank_page(page_size=page_size)
+            new_page.Resources = Dictionary(Font={}, XObject={})
+
+            # --- Manually create a canvas-like environment ---
+            cs_builder = ContentStreamBuilder()
+            accessor = _CanvasAccessor(cs_builder)
+            accessor.push()  # Manually initialize the graphics state
+
+            # Add font to the page's resources
+            new_page.Resources.Font[fontname] = active_font.register(pdf)
+
+            # Use the drawing function to add content
+            _add_page_to_pdf(
+                cs_accessor=accessor,
+                pdf=pdf,
+                page=new_page,
+                page_obj=page_obj,
+                image=image,
+                fontname=fontname,
+                font=active_font,
+                invisible_text=invisible_text,
+                draw=draw,
+                target_dpi=target_dpi,
+                jpeg_quality=jpeg_quality,
+                substitutions=substitutions,
+            )
+
+            # Finalize the page content
+            new_page.Contents = pdf.make_stream(cs_builder.build())
+
+        except Exception as e:
+            print(f"[bold red]Error processing page {i + 1}: {e}[/bold red]")
+            # Optionally, you could add a blank page here to keep page numbering consistent
+            # pdf.add_blank_page()
+            continue
+
+    # 3. Save the final PDF with optimization settings
+    print(f"Saving optimized PDF to {output_path}...")
+    pdf.save(
+        output_path,
+        compress_streams=True,
+        recompress_flate=True,
+        object_stream_mode=ObjectStreamMode.generate,
+        linearize=False,  # Linearization is for web view, not smallest size
+    )
+    print("[bold green]PDF creation complete.[/bold green]")

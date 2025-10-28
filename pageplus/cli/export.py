@@ -134,7 +134,10 @@ def line_images(inputs: Annotated[List[str],
                         f'Wrote modified xml file to output directory: {fout}')
                     fout.open('w').write(
                         f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<PcGts xmlns="http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15 http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15/pagecontent.xsd">
+<PcGts xmlns="http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15
+       http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15/pagecontent.xsd">
     <Metadata>
         <Creator>PagePlus</Creator>
         <Created>{datetime.now()}</Created>
@@ -520,11 +523,9 @@ else:
                 help="Image file extensions to try (only active with 'same_names')", case_sensitive=False
             )] = ['.png', '.jpg', '.jpeg', '.tif', '.tiff'],
             dpi: Annotated[int, typer.Option(
-                help="Resolution of the image (use None for auto-detection)")] = None,
-            optimize_compression: Annotated[bool, typer.Option(
-                help="Enable image compression optimization")] = True,
-            max_resolution: Annotated[Optional[int], typer.Option(
-                help="Maximum image resolution (DPI) for resizing (None = use native)")] = None,
+                help="Resolution of the image (use None for auto-detection)")] = 300,
+            jpeg_quality: Annotated[int, typer.Option(
+                help="JPEG quality for embedded images (1-95)")] = 85,
             draw: Annotated[Optional[list[DrawingsPDF]], typer.Option(
                 help="Activate drawing for region, line, baseline and words. (Debug Option)")] = None,
             substitutions: Annotated[List[str], typer.Option(
@@ -533,14 +534,13 @@ else:
         """
         Creates a PDF file without word level
         """
-        from pageplus.utils.pdf.renderer import page_to_pdf
-        from pikepdf import Pdf, ObjectStreamMode
+        from pageplus.utils.pdf.renderer import create_pdf
         # Read XML
         xml_files = collect_xml_files(map(Path, inputs))
         # Raise error if no xml files are found
         if not xml_files:
             raise FileNotFoundError('No xml files found in input directory')
-        pdf_files = []
+        pages_and_images = []
         for xml_file in track(xml_files,
                               description="Rendering data to a PDF file.."):
             # Read XML content
@@ -558,7 +558,6 @@ else:
                         imagePath = find_image(
                             imageFilename, xml_file.parent / image_folder)
                     else:
-                        imagePath = None
                         for ext in image_extensions:
                             candidate = xml_file.with_suffix(ext.value).name
                             candidate_path = find_image(
@@ -570,37 +569,27 @@ else:
                             image_extensions[0].value).name
                     if not imagePath:
                         print(
-                            f"Warning: Image {imageFilename} not found in {image_folder}")
+                            f"Warning: Image not found for {xml_file.name}")
+                        pages_and_images.append((page, None))
                         continue
                 image = Image.open(imagePath)
-                image = image.convert('RGB')
-                canvas = page_to_pdf(page, image, draw=draw, dpi=dpi,
-                                     substitutions=substitutions,
-                                     optimize_compression=optimize_compression,
-                                     max_resolution=max_resolution)
+                pages_and_images.append((page, image))
             except Exception as e:
                 print(f"Error: {e}")
                 continue
-            pdf_files.append(canvas.to_pdf())
 
-        if pdf_files is not None:
-            # Create a new empty PDF
-            merged_pdf = Pdf.new()
-
-            # Loop through each PDF and append its pages
-            for pdf_file in pdf_files:
-                merged_pdf.pages.extend(pdf_file.pages)
-
-            # Save the merged PDF
+        if pages_and_images:
             output_path = xml_files[0].parent.joinpath(output_filename + '.pdf')
             print(f"Converted all PAGE XML files to pdf: '{output_path}'.")
-            merged_pdf.save(output_path,
-                            compress_streams=True,
-                            recompress_flat=True,
-                            object_stream_mode=ObjectStreamMode.generate,  # <--- use the ENUM, not a string!
-                            linearize=False,
-                            normalize_content=False,
-                            qdf=False)
+            create_pdf(
+                pages_and_images=pages_and_images,
+                output_path=str(output_path),
+                target_dpi=dpi,
+                jpeg_quality=jpeg_quality,
+                draw=draw,
+                substitutions=substitutions
+            )
+
 
 if __name__ == "__main__":
     app()
