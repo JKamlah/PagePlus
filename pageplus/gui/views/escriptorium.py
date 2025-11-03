@@ -362,6 +362,12 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
     with tabs[2]:  # Download Document
         st.subheader("Download Document")
 
+        def pick_download_directory():
+            """Callback to pick a directory and update session state."""
+            selected_dir = pick_directory()
+            if selected_dir:
+                st.session_state.download_folderpath = selected_dir
+
         # --- Selector for Saved PKs ---
         pks_data_download = load_escriptorium_pks()
         saved_pks_download = list(pks_data_download.get("pks", {}).keys())
@@ -379,20 +385,36 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
             trans_info = selected_data.get("transcription", {})
 
             st.session_state.escriptorium_name = doc_info.get("name", selected_pk_to_load)
-            st.session_state.escriptorium_doc_pk = doc_info.get("pk")
-            st.session_state.escriptorium_trans_pk = trans_info.get("pk")
+            st.session_state.download_doc_pk = doc_info.get("pk")
+            st.session_state.download_trans_pk = trans_info.get("pk")
+            st.session_state.download_project_name = project_info.get("name")
             st.rerun()
 
+        if not selected_pk_to_load and st.session_state.get('last_download_pk') is not None:
+            st.session_state.last_download_pk = None
+            st.session_state.download_doc_pk = None
+            st.session_state.download_trans_pk = None
+            st.session_state.download_project_name = None
+            st.session_state.escriptorium_name = "MAIN"
+            st.rerun()
+
+        if st.session_state.get("download_project_name"):
+            st.info(f"Project: {st.session_state.download_project_name}")
+
         # Initialize session state for widgets if not present
-        if "escriptorium_doc_pk" not in st.session_state:
-            st.session_state.escriptorium_doc_pk = None
-        if "escriptorium_trans_pk" not in st.session_state:
-            st.session_state.escriptorium_trans_pk = None
+        if "download_doc_pk" not in st.session_state:
+            st.session_state.download_doc_pk = None
+        if "download_trans_pk" not in st.session_state:
+            st.session_state.download_trans_pk = None
         if "escriptorium_name" not in st.session_state:
             st.session_state.escriptorium_name = "MAIN"
+        if "download_folderpath" not in st.session_state:
+            st.session_state.download_folderpath = ""
+        if "download_project_name" not in st.session_state:
+            st.session_state.download_project_name = None
 
-        doc_pk = st.number_input("Document PK", min_value=1, step=1, value=st.session_state.get("escriptorium_doc_pk"), key="download_doc_pk")
-        trans_pk = st.number_input("Transcription PK", min_value=1, step=1, value=st.session_state.get("escriptorium_trans_pk"), key="download_trans_pk")
+        doc_pk = st.number_input("Document PK", min_value=1, step=1, key="download_doc_pk")
+        trans_pk = st.number_input("Transcription PK", min_value=1, step=1, key="download_trans_pk")
         pages_str = st.text_input("Pages (comma-separated, optional)")
 
         cols = st.columns(2)
@@ -406,17 +428,12 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
         with col_path:
             st.text_input(
                 "Folder path (optional)",
-                key="download_folderpath_input",
-                value=st.session_state.get("download_folderpath", "")
+                key="download_folderpath",
             )
         with col_btn:
             st.write("")  # Spacer
             st.write("")
-            if st.button("Select Directory", key="select_download_dir"):
-                selected_dir = pick_directory()
-                if selected_dir:
-                    st.session_state.download_folderpath = selected_dir
-                    st.rerun()
+            st.button("Select Directory", key="select_download_dir", on_click=pick_download_directory)
 
         workspace = st.text_input("Workspace name", value=st.session_state.get("escriptorium_name", ""), key="download_workspace_name")
 
@@ -429,7 +446,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
                     transcription_pk=trans_pk,
                     pages=pages,
                     load_images=load_images,
-                    folderpath=st.session_state.get("download_folderpath") if st.session_state.get("download_folderpath") else None,
+                    folderpath=st.session_state.download_folderpath if st.session_state.download_folderpath else None,
                     workspace=workspace if workspace != "" else None,
                     overwrite_ws=overwrite_ws,
                     loading=loading
@@ -461,12 +478,31 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
             trans_info = selected_data.get("transcription", {})
 
             st.session_state.escriptorium_name = doc_info.get("name", selected_pk_to_update)
-            st.session_state.escriptorium_doc_pk = doc_info.get("pk")
-            st.session_state.escriptorium_trans_name = trans_info.get("name")
+            st.session_state.update_doc_pk = doc_info.get("pk")
+            st.session_state.update_trans_name = trans_info.get("name")
+            st.session_state.update_project_name = project_info.get("name")
             st.rerun()
 
-        doc_pk_update = st.number_input("Document PK (optional)", min_value=1, step=1, value=st.session_state.get("escriptorium_doc_pk"), key="update_doc_pk")
-        trans_name_update = st.text_input("New transcription name (optional)", value=st.session_state.get("escriptorium_trans_name"))
+        if not selected_pk_to_update and st.session_state.get('last_update_pk') is not None:
+            st.session_state.last_update_pk = None
+            st.session_state.update_doc_pk = None
+            st.session_state.update_trans_name = None
+            st.session_state.update_project_name = None
+            st.rerun()
+
+        if st.session_state.get("update_project_name"):
+            st.info(f"Project: {st.session_state.update_project_name}")
+
+        # Initialize session state for widgets if not present
+        if "update_doc_pk" not in st.session_state:
+            st.session_state.update_doc_pk = None
+        if "update_trans_name" not in st.session_state:
+            st.session_state.update_trans_name = None
+        if "update_project_name" not in st.session_state:
+            st.session_state.update_project_name = None
+
+        doc_pk_update = st.number_input("Document PK (optional)", min_value=1, step=1, key="update_doc_pk")
+        trans_name_update = st.text_input("New transcription name (optional)", key="update_trans_name")
         pages_update_str = st.text_input("Pages to update (comma-separated, optional)")
         overwrite_update = st.checkbox("Overwrite existing transcription", value=True)
 
@@ -576,12 +612,22 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
             doc_info = selected_data.get("document", {})
             trans_info = selected_data.get("transcription", {})
 
-            # Load project PK and name if available, otherwise leave as None
             st.session_state.add_project_name = project_info.get("name", "")
-            st.session_state.add_project_pk = project_info.get("pk") if project_info.get("pk") else None
+            st.session_state.add_project_pk = project_info.get("pk")
             st.session_state.add_document_pk = doc_info.get("pk")
             st.session_state.add_transcription_name = trans_info.get("name")
             st.rerun()
+
+        if not selected_pk_to_add and st.session_state.get('last_add_pk') is not None:
+            st.session_state.last_add_pk = None
+            st.session_state.add_project_name = ""
+            st.session_state.add_project_pk = None
+            st.session_state.add_document_pk = None
+            st.session_state.add_transcription_name = None
+            st.rerun()
+
+        if st.session_state.get("add_project_name"):
+            st.info(f"Project: {st.session_state.add_project_name}")
 
         # Initialize session state for widgets if not present
         if "add_project_name" not in st.session_state:
@@ -590,24 +636,25 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
             st.session_state.add_project_pk = None
         if "add_document_pk" not in st.session_state:
             st.session_state.add_document_pk = None
+        if "add_transcription_name" not in st.session_state:
+            st.session_state.add_transcription_name = None
 
         col1, col2, col3 = st.columns(3)
         with col1:
-            project_name = st.text_input("Project Name", value=st.session_state.get("add_project_name", ""), help="Name of the project", key="add_project_name_input")
+            project_name = st.text_input("Project Name", help="Name of the project", key="add_project_name")
         with col2:
             project_pk = st.number_input(
                 "Project PK (optional)",
                 min_value=0,
                 step=1,
-                value=st.session_state.get("add_project_pk") or 0,
                 help="Primary key of the project (use if project name fails)",
-                key="add_project_pk_input"
+                key="add_project_pk"
             )
             # Convert 0 to None for easier checking
             if project_pk == 0:
                 project_pk = None
         with col3:
-            document_pk = st.number_input("Document PK", min_value=1, step=1, value=st.session_state.get("add_document_pk"), help="Primary key of the existing document")
+            document_pk = st.number_input("Document PK", min_value=1, step=1, help="Primary key of the existing document", key="add_document_pk")
 
         col4, col5 = st.columns(2)
         with col4:
@@ -639,7 +686,7 @@ def show_escriptorium(bridge: EscriptoriumBridge) -> None:
                 if len(st.session_state.add_xml_files) > 5:
                     st.write(f"... and {len(st.session_state.add_xml_files) - 5} more")
 
-        transcription_name_add = st.text_input("Transcription Name (optional)", value=st.session_state.get("add_transcription_name", ""), help="Name for the transcription", key="add_transcription")
+        transcription_name_add = st.text_input("Transcription Name (optional)", help="Name for the transcription", key="add_transcription_name")
 
         # Manual PK setting section
         with st.expander("Set Document/Transcription PK Manually", expanded=False):

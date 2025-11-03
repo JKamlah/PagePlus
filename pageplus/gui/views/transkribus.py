@@ -278,30 +278,44 @@ def show_transkribus(bridge: TranskribusBridge):
     with tab3:
         st.header("Download Document")
 
+        def pick_transkribus_directory():
+            """Callback to pick a directory and update session state."""
+            selected_dir = pick_directory()
+            if selected_dir:
+                st.session_state.transkribus_folderpath = selected_dir
+
         # Load saved configurations for download
         ids_data_download = load_transkribus_ids()
         saved_ids_download = list(ids_data_download.get("ids", {}).keys())
 
-        if saved_ids_download:
-            selected_saved_id_download = st.selectbox(
-                "Load saved configuration",
-                options=[""] + saved_ids_download,
-                key="saved_id_selector_download"
-            )
-            if selected_saved_id_download and ('last_download_id' not in st.session_state or st.session_state.last_download_id != selected_saved_id_download):
-                st.session_state.last_download_id = selected_saved_id_download
-                selected_data = ids_data_download["ids"][selected_saved_id_download]
-                col_info = selected_data.get("collection", {})
-                doc_info = selected_data.get("document", {})
-                st.session_state.transkribus_col_id = col_info.get("id")
-                st.session_state.transkribus_doc_id = doc_info.get("id")
-                st.rerun()
+        selected_saved_id_download = st.selectbox(
+            "Load saved configuration",
+            options=[""] + saved_ids_download,
+            key="saved_id_selector_download"
+        )
+        if selected_saved_id_download and ('last_download_id' not in st.session_state or st.session_state.last_download_id != selected_saved_id_download):
+            st.session_state.last_download_id = selected_saved_id_download
+            selected_data = ids_data_download["ids"][selected_saved_id_download]
+            col_info = selected_data.get("collection", {})
+            doc_info = selected_data.get("document", {})
+            st.session_state.transkribus_load_col_id = col_info.get("id")
+            st.session_state.transkribus_load_doc_id = doc_info.get("id")
+            st.session_state.transkribus_collection_name = col_info.get("name")
+            st.rerun()
+
+        if not selected_saved_id_download and st.session_state.get('last_download_id') is not None:
+            st.session_state.last_download_id = None
+            st.session_state.transkribus_load_col_id = None
+            st.session_state.transkribus_load_doc_id = None
+            st.session_state.transkribus_collection_name = None
+            st.rerun()
+
+        if st.session_state.get("transkribus_collection_name"):
+            st.info(f"Collection: {st.session_state.transkribus_collection_name}")
 
         collection_id = st.number_input("Collection ID", min_value=1, step=1,
-                                        value=st.session_state.get("transkribus_col_id"),
                                         key="transkribus_load_col_id")
         document_id = st.number_input("Document ID", min_value=1, step=1,
-                                      value=st.session_state.get("transkribus_doc_id"),
                                       key="transkribus_load_doc_id")
         pages = st.text_input("Pages (e.g., 1, 5, 10-15)", key="transkribus_load_pages",
                               help="Comma-separated list of pages or page ranges.")
@@ -316,13 +330,8 @@ def show_transkribus(bridge: TranskribusBridge):
         workspace = st.text_input("Workspace name", value="MAIN", key="transkribus_load_workspace")
 
         st.text_input("Folder path (optional)",
-                      value=st.session_state.get("transkribus_folderpath", ""),
-                      key="transkribus_folderpath_input")
-        if st.button("Select Directory", key="transkribus_select_load_dir"):
-            selected_dir = pick_directory()
-            if selected_dir:
-                st.session_state.transkribus_folderpath = selected_dir
-                st.rerun()
+                      key="transkribus_folderpath")
+        st.button("Select Directory", key="transkribus_select_load_dir", on_click=pick_transkribus_directory)
 
         if st.button("Download Document"):
             if not all([collection_id, document_id]):
@@ -362,24 +371,33 @@ def show_transkribus(bridge: TranskribusBridge):
         ids_data_update = load_transkribus_ids()
         saved_ids_update = list(ids_data_update.get("ids", {}).keys())
 
-        if saved_ids_update:
-            selected_saved_id_update = st.selectbox(
-                "Load Saved Configuration",
-                options=[""] + saved_ids_update,
-                key="saved_id_selector_update"
-            )
-            if selected_saved_id_update and ('last_update_id' not in st.session_state or st.session_state.last_update_id != selected_saved_id_update):
-                st.session_state.last_update_id = selected_saved_id_update
-                selected_data = ids_data_update["ids"][selected_saved_id_update]
-                col_info = selected_data.get("collection", {})
-                doc_info = selected_data.get("document", {})
-                st.session_state.transkribus_col_id = col_info.get("id")
-                st.session_state.transkribus_doc_id = doc_info.get("id")
-                st.rerun()
+        selected_saved_id_update = st.selectbox(
+            "Load Saved Configuration",
+            options=[""] + saved_ids_update,
+            key="saved_id_selector_update"
+        )
+        if selected_saved_id_update and ('last_update_id' not in st.session_state or st.session_state.last_update_id != selected_saved_id_update):
+            st.session_state.last_update_id = selected_saved_id_update
+            selected_data = ids_data_update["ids"][selected_saved_id_update]
+            col_info = selected_data.get("collection", {})
+            doc_info = selected_data.get("document", {})
+            st.session_state.transkribus_update_col_id = col_info.get("id")
+            st.session_state.transkribus_update_doc_id = doc_info.get("id")
+            st.session_state.transkribus_update_collection_name = col_info.get("name")
+            st.rerun()
 
-        collection_id_up = st.number_input("Collection ID", min_value=1, step=1, value=st.session_state.get("transkribus_col_id"), key="transkribus_update_col_id")
+        if not selected_saved_id_update and st.session_state.get('last_update_id') is not None:
+            st.session_state.last_update_id = None
+            st.session_state.transkribus_update_col_id = None
+            st.session_state.transkribus_update_doc_id = None
+            st.session_state.transkribus_update_collection_name = None
+            st.rerun()
+
+        if st.session_state.get("transkribus_update_collection_name"):
+            st.info(f"Collection: {st.session_state.transkribus_update_collection_name}")
+
+        collection_id_up = st.number_input("Collection ID", min_value=1, step=1, key="transkribus_update_col_id")
         document_id_up = st.number_input("Document ID", min_value=1, step=1,
-                                         value=st.session_state.get("transkribus_doc_id"),
                                          key="transkribus_update_doc_id")
         pages_up = st.text_input("Pages (optional, e.g., 1, 5, 10-15)", key="transkribus_update_pages",
                                  help="Restricts upload to specific page numbers. If empty, all selected files will be uploaded based on their filenames.")
