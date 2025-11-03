@@ -323,12 +323,12 @@ def show_pdf_export(cli_bridge):
     st.subheader("PDF Export")
 
     # PDF options
-    image_folder = st.text_input(
-        "Image Folder",
-        value="images",
-        label_visibility="visible"
-    )
-    dpi = st.number_input("DPI", value=400, min_value=72, max_value=1200)
+    # image_folder = st.text_input(
+    #    "Image Folder",
+    #    value="images",
+    #    label_visibility="visible"
+    # )
+    # dpi = st.number_input("DPI", value=400, min_value=72, max_value=1200)
 
     if st.button("Export to PDF"):
         with st.spinner("Exporting to PDF...", show_time=True):
