@@ -1,11 +1,12 @@
-from typing import List
+from typing import List, Dict, Any, Optional
 from pathlib import Path
 
-from pageplus.cli.gemini import (check_model, check_valid_key, ocr,
+from pageplus.cli.gemini import (RecognizeLevel, check_model, check_valid_key, ocr,
                                  ocr_multithread, reocr_multithread,
                                  set_api_key, set_model, show_model,
                                  show_modeldetails, show_models, show_settings)
 from pageplus.gui.utils.undo import UndoManager
+from pageplus.gui.utils.pipeline_manager import PipelineManager
 
 
 class GeminiBridge:
@@ -52,10 +53,23 @@ class GeminiBridge:
     def show_modeldetails(self, model: str) -> dict:
         """Show details for a specific Gemini model."""
         try:
-            show_modeldetails(model)
+            details = show_modeldetails(model)
+            if isinstance(details, str) and details.startswith("Error:"):
+                return {"success": False, "output": details}
+            details_dict = {
+                "Name": getattr(details, 'name', 'N/A'),
+                "Display Name": getattr(details, 'display_name', 'N/A'),
+                "Description": getattr(details, 'description', 'N/A'),
+                "Version": getattr(details, 'version', 'N/A'),
+                "Input Token Limit": getattr(details, 'input_token_limit', 'N/A'),
+                "Output Token Limit": getattr(details, 'output_token_limit', 'N/A'),
+                "Supported Actions": ", ".join(getattr(details, 'supported_actions', []))
+            }
             return {
                 "success": True,
-                "output": f"Details for model {model} displayed successfully."}
+                "output": f"Details for model {model} displayed successfully.",
+                "details": details_dict
+            }
         except Exception as e:
             return {"success": False, "output": str(e)}
 
@@ -125,7 +139,10 @@ class GeminiBridge:
             calls_per_minute: int = 150,
             dry_run: bool = False,
             system_prompt: str = None,
+            reocr_system_prompt: str = None,
             overwrite: bool = True,
+            recognize_level: str = "TextRegions",
+            multi_stage: bool = False,
             thinking_budget: int = 0) -> dict:
         """Run OCR on files using Gemini with different default settings."""
         try:
@@ -148,7 +165,10 @@ class GeminiBridge:
                 calls_per_minute=calls_per_minute,
                 dry_run=dry_run,
                 system_prompt=system_prompt,
+                reocr_system_prompt=reocr_system_prompt,
                 overwrite=overwrite,
+                recognize_level=RecognizeLevel(recognize_level),
+                multi_stage=multi_stage,
                 thinking_budget=thinking_budget)
             return {
                 "success": True,
@@ -167,6 +187,8 @@ class GeminiBridge:
             outputdir: str = None,
             system_prompt: str = None,
             update_page: bool = True,
+            recognize_level: str = "TextRegions",
+            update_elements: List[str] = ["Text", "Tags"],
             jobs: int = 4,
             calls_per_minute: int = 150,
             thinking_budget: int = 0,
@@ -186,6 +208,8 @@ class GeminiBridge:
                 outputdir=outputdir,
                 system_prompt=system_prompt,
                 update_page=update_page,
+                recognize_level=RecognizeLevel(recognize_level),
+                update_elements=update_elements,
                 jobs=jobs,
                 calls_per_minute=calls_per_minute,
                 thinking_budget=thinking_budget,
@@ -195,5 +219,168 @@ class GeminiBridge:
                 "success": True,
                 "output": "ReOCR completed successfully.",
                 "usage": usage}
+        except Exception as e:
+            return {"success": False, "output": str(e), "usage": None}
+    
+    # ===== PIPELINE SUPPORT METHODS =====
+    
+    def get_stage_config(self, collection_name: str, stage_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieves a stage configuration from the pipeline manager.
+        
+        Args:
+            collection_name: Name of the collection containing the stage
+            stage_id: ID of the stage
+            
+        Returns:
+            Stage configuration dictionary or None if not found
+        """
+        try:
+            manager = PipelineManager()
+            stage = manager.get_stage_by_id(collection_name, stage_id)
+            return stage
+        except Exception:
+            return None
+    
+    def execute_stage(
+            self,
+            stage_config: Dict[str, Any],
+            files: List[str],
+            outputdir: str = None,
+            jobs: int = 4,
+            calls_per_minute: int = 150,
+            dry_run: bool = False,
+            overwrite: bool = True) -> dict:
+        """
+        Executes a single stage from a pipeline configuration.
+        
+        Args:
+            stage_config: Stage configuration dictionary
+            files: List of file paths to process
+            outputdir: Output directory path
+            jobs: Number of parallel jobs
+            calls_per_minute: API rate limit
+            dry_run: Whether to perform a dry run
+            overwrite: Whether to overwrite existing files
+            
+        Returns:
+            Result dictionary with success status and output
+        """
+        try:
+            from pageplus.gui.utils.settings import Settings
+            settings = Settings()
+            
+            category = stage_config.get('category', 'OCR')
+            system_prompt = stage_config.get('system_prompt', '')
+            attributes = stage_config.get('attributes', {})
+            filters = stage_config.get('filters', {})
+            
+            # Merge with override attributes if present
+            if 'override_attributes' in stage_config:
+                attributes = {**attributes, **stage_config['override_attributes']}
+            if 'override_filters' in stage_config:
+                filters = {**filters, **stage_config['override_filters']}
+            
+            # Use settings default if not specified in stage
+            settings_thinking_budget = int(settings.get("THINKING_BUDGET", "0"))
+            thinking_budget = attributes.get('thinking_budget', settings_thinking_budget)
+            
+            if category == "OCR":
+                return self.ocr_multithread(
+                    files=files,
+                    outputdir=outputdir,
+                    system_prompt=system_prompt,
+                    jobs=jobs,
+                    calls_per_minute=calls_per_minute,
+                    dry_run=dry_run,
+                    overwrite=overwrite,
+                    thinking_budget=thinking_budget
+                )
+            elif category == "ReOCR":
+                update_elements = filters.get('update_elements', ['Text', 'Tags'])
+                recognize_level = "TextRegions"  # Default
+                
+                return self.reocr_multithread(
+                    xml_files=files,
+                    system_prompt=system_prompt,
+                    update_elements=update_elements,
+                    jobs=jobs,
+                    calls_per_minute=calls_per_minute,
+                    thinking_budget=thinking_budget,
+                    dry_run=dry_run,
+                    overwrite=overwrite,
+                    recognize_level=recognize_level
+                )
+            else:
+                return {"success": False, "output": f"Unknown category: {category}"}
+                
+        except Exception as e:
+            return {"success": False, "output": str(e), "usage": None}
+    
+    def run_pipeline(
+            self,
+            pipeline_name: str,
+            files: List[str],
+            outputdir: str = None,
+            jobs: int = 4,
+            calls_per_minute: int = 150,
+            dry_run: bool = False,
+            overwrite: bool = True) -> dict:
+        """
+        Executes a complete pipeline.
+        
+        Note: Currently executes only the first stage. Full multi-stage
+        pipeline execution will be implemented in a future update.
+        
+        Args:
+            pipeline_name: Name of the pipeline to execute
+            files: List of file paths to process
+            outputdir: Output directory path
+            jobs: Number of parallel jobs
+            calls_per_minute: API rate limit
+            dry_run: Whether to perform a dry run
+            overwrite: Whether to overwrite existing files
+            
+        Returns:
+            Result dictionary with success status and output
+        """
+        try:
+            manager = PipelineManager()
+            pipeline = manager.get_pipeline(pipeline_name)
+            
+            if not pipeline:
+                return {"success": False, "output": f"Pipeline '{pipeline_name}' not found"}
+            
+            stages = pipeline.get('stages', [])
+            if not stages:
+                return {"success": False, "output": "Pipeline is empty"}
+            
+            # For now, execute only the first stage
+            # Full multi-stage support to be implemented later
+            first_stage_ref = stages[0]
+            collection_name = first_stage_ref.get('collection')
+            stage_id = first_stage_ref.get('stage_id')
+            
+            stage = manager.get_stage_by_id(collection_name, stage_id)
+            if not stage:
+                return {"success": False, "output": f"Stage not found in collection '{collection_name}'"}
+            
+            # Merge overrides
+            stage_config = {
+                **stage,
+                'override_attributes': first_stage_ref.get('attributes', {}),
+                'override_filters': first_stage_ref.get('filters', {})
+            }
+            
+            return self.execute_stage(
+                stage_config=stage_config,
+                files=files,
+                outputdir=outputdir,
+                jobs=jobs,
+                calls_per_minute=calls_per_minute,
+                dry_run=dry_run,
+                overwrite=overwrite
+            )
+            
         except Exception as e:
             return {"success": False, "output": str(e), "usage": None}

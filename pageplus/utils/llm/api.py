@@ -264,8 +264,9 @@ if (spec := util.find_spec('google')) is not None and (
             None
             """
             try:
-                model = self.client().models.get(model=model)
-                print(model)
+                model_details = self.client().models.get(model=model)
+                print(model_details)
+                return model_details
             except ClientError as e:
                 print(f"{e.message}")
-                pass
+                return e.message

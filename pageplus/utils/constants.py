@@ -154,10 +154,28 @@ class TextLevel(str, Enum):
     Level of text
     """
     TextRegion = "TextRegion"
+    TableRegion = "TableRegion"
     Textline = "Textline"
     Word = "Word"
     Glyph = "Glyph"
+
+
+class RecognizeLevel(str, Enum):
+    """
+    Level of text
+    """
+    Page = "Page"
+    TextRegion = "TextRegion"
     TableRegion = "TableRegion"
+    Textline = "Textline"
+
+
+class UpdateElements(str, Enum):
+    """
+    Elements to update
+    """
+    TEXT = "Text"
+    TAGS = "Tags"
 
 
 class DrawingsPDF(str, Enum):
@@ -318,5 +336,5 @@ GUIDELINES_DIR = PACKAGE_ROOT / "utils" / "guidelines"
 
 # --- File Paths ---
 ENV_FILE = USER_DATA_DIR / ".env"
-LOGO_PATH = ASSETS_DIR / 'Tight_PagePlus_Logo.png'
-LOADING_PATH = ASSETS_DIR / 'loading_pageplus.gif'
+LOGO_PATH = ASSETS_DIR / 'img' / 'Tight_PagePlus_Logo.png'
+LOADING_PATH = ASSETS_DIR / 'img' / 'loading_pageplus.gif'

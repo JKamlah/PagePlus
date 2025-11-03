@@ -13,7 +13,7 @@ import typer
 from rich import print
 from typing_extensions import Annotated
 
-from pageplus.utils.constants import ProfileLevel, ImageExtension
+from pageplus.utils.constants import ProfileLevel, ImageExtension, RecognizeLevel, UpdateElements
 from pageplus.utils.fs import transform_inputs
 from pageplus.utils.image import get_image
 from pageplus.utils.profile import profile, ProfileFnRet
@@ -58,7 +58,7 @@ else:
     llm_workspace = Workspace(Environments.GEMINI)
     llm_api = GEMINIAPI(Environments.GEMINI)
 
-    ### PACKAGE ###
+    # PACKAGE
 
     @app.command(rich_help_panel="Package")
     def update_package() -> None:
@@ -67,7 +67,7 @@ else:
         """
         _install()
 
-    ### SETTINGS ###
+    # SETTINGS
 
     @app.command(rich_help_panel="Settings")
     def set_api_key(api_key: Annotated[str, typer.Argument(
@@ -92,15 +92,17 @@ else:
     def check_valid_key() -> None:
         return llm_api.check_valid_key()
 
-    ### MODELS ###
+    # MODELS
 
     @app.command()
     def show_models() -> None:
         return llm_api.show_models()
 
     @app.command()
-    def show_modeldetails(model: str) -> None:
-        llm_api.show_modeldetails(model)
+    def show_modeldetails(model: str):
+        details = llm_api.show_modeldetails(model)
+        print(details)
+        return details
 
     @app.command()
     def check_model(model: Annotated[str, typer.Argument(
@@ -307,8 +309,8 @@ else:
         request_timestamps = []
         for image_path in images_paths:
             image, image_format = get_image(image_path)
-            text_dict = {}
-            page_metrics = []
+            # text_dict = {}
+            # page_metrics = []
             # Find Textlines
             now = time.time()
             # Remove timestamps older than 60 seconds
@@ -348,14 +350,14 @@ else:
                         outputdir = Path(
                             outputdir) if outputdir else image_path.parent
                         output_path = outputdir.joinpath(
-                            f"json/").joinpath(image_path.with_suffix('.json').name)
+                            "json/").joinpath(image_path.with_suffix('.json').name)
                         output_path.parent.mkdir(exist_ok=True, parents=True)
                         with output_path.open("w", encoding="utf-8") as jf:
                             json.dump(data, jf, indent=4, ensure_ascii=False)
                         if create_page:
                             xml_content = gemini2d_to_page(data, image_path)
                             output_path = outputdir.joinpath(
-                                f"page/").joinpath(image_path.with_suffix('.xml').name)
+                                "page/").joinpath(image_path.with_suffix('.xml').name)
                             output_path.parent.mkdir(
                                 exist_ok=True, parents=True)
                             try:
@@ -367,7 +369,7 @@ else:
                                 print(
                                     f"Error writing PAGE XML file '{output_path}': {e}")
                 except BaseException:
-                    print(f"[red] Error: No valid output[/red]")
+                    print("[red] Error: No valid output[/red]")
             except Exception as e:
                 print("An error occurred during completion:", e)
                 continue
@@ -413,7 +415,7 @@ def ocr_single_image(
             if not overwrite and output_file.exists():
                 print(
                     f"Skipping {image_path} because {output_file} already exists.\n")
-                return image_path, True, None, None
+                return image_path, True, None, None, None
 
             image, image_format = get_image(image_path)
 
@@ -441,35 +443,37 @@ def ocr_single_image(
             data = json_repair.repair_json(response.text, return_objects=True)
             usage = response.usage_metadata
             print(f'Successfully OCR: {image_path.name}')
+            xml_output_path = None
             if not dry_run:
                 with output_file.open("w", encoding="utf-8") as jf:
                     json.dump(data, jf, indent=4, ensure_ascii=False)
                 if create_page:
                     xml_content = gemini2d_to_page(data, image_path)
                     output_path = outputdir_path.joinpath(
-                        f"page/").joinpath(image_path.with_suffix('.xml').name)
+                        "page/").joinpath(image_path.with_suffix('.xml').name)
                     output_path.parent.mkdir(exist_ok=True, parents=True)
                     try:
                         with open(output_path, 'w', encoding='utf-8') as f_out:
                             f_out.write(xml_content)
                         print(f"Successfully wrote PAGE XML to: {output_path}")
+                        xml_output_path = output_path
                     except Exception as e:
                         print(
                             f"Error writing PAGE XML file '{output_path}': {e}")
 
-            return image_path, True, None, usage
+            return image_path, True, None, usage, xml_output_path
 
         except Exception as e:
             print(f"An error occurred processing {image_path}: {e}")
             attempt += 1
             if attempt <= retries and e.code != 429:
-                print(f"[yellow]Retrying after 60 seconds...[/yellow]")
+                print("[yellow]Retrying after 60 seconds...[/yellow]")
                 time.sleep(60)
             else:
                 if e.code == 429:
                     print(
-                        f"[red]Rate limit reached. Or this model is not supported for free quota tier.[/red]")
-                return image_path, False, str(e), None
+                        "[red]Rate limit reached. Or this model is not supported for free quota tier.[/red]")
+                return image_path, False, str(e), None, None
     return None
 
 
@@ -479,6 +483,9 @@ def ocr_multithread(inputs: Annotated[List[str], typer.Argument(exists=True)],
                     system_prompt: Annotated[str, typer.Option()] = None,
                     image_extension: Annotated[str, typer.Option()] = '.jpg',
                     create_page: Annotated[bool, typer.Option()] = True,
+                    recognize_level: Annotated[RecognizeLevel, typer.Option(
+                        case_sensitive=False, help="Level to recognize.")] = RecognizeLevel.TextRegion,
+                    multi_stage: Annotated[bool, typer.Option(help="Run ReOCR stage after OCR.")] = False,
                     jobs: Annotated[int, typer.Option()] = 4,
                     calls_per_minute: Annotated[int, typer.Option()] = 150,
                     dry_run: Annotated[bool, typer.Option()] = False,
@@ -515,6 +522,7 @@ def ocr_multithread(inputs: Annotated[List[str], typer.Argument(exists=True)],
         raise FileNotFoundError('No image files found in input directory')
     all_usage = []
     count = 0
+    xml_files_for_reocr = []
     print(f"Processing {len(images_paths)} images with {llm_api.model}")
     with ThreadPoolExecutor(max_workers=jobs) as executor:
         future_to_image = {
@@ -534,11 +542,13 @@ def ocr_multithread(inputs: Annotated[List[str], typer.Argument(exists=True)],
 
         for future in as_completed(future_to_image):
             image_path = future_to_image[future]
-            path, success, error, usage = future.result()
+            path, success, error, usage, xml_output_path = future.result()
             all_usage.append(usage)
             count += 1
             if success:
                 print(f"[green]Successfully processed: {path}[/green]")
+                if xml_output_path:
+                    xml_files_for_reocr.append(str(xml_output_path))
             else:
                 print(f"[red]Failed processing {path}: {error}[/red]")
             print("Total tokens: ", getattr(usage, 'total_token_count', 0))
@@ -576,6 +586,8 @@ def reocr_single_image(
         calls_per_minute: int,
         update_page: bool,
         thinking_budget: int,
+        recognize_level: RecognizeLevel,
+        update_elements: List[UpdateElements],
         dry_run: bool = False,
         retries: int = 1,
         overwrite: bool = True):
@@ -703,11 +715,16 @@ def reocr_single_image(
                                 )
                             text = updated_line.get('text_content', '')
                             # Limit text to 500 characters (Loop effect)
-                            text = text if len(text) < 500 else text[:500]
-                            textline.update_text(text)
-                            textline.set_tag(
-                                tag=updated_line.get(
-                                    'type', 'paragraph'))
+                            if len(text) > 350:
+                                print(f"Textline {updated_line['id']} is too long: {text}")
+                                text = textline.get_text()
+                                updated_line['type'] = 'missed'
+                            if UpdateElements.TEXT in update_elements:
+                                textline.update_text(text)
+                            if UpdateElements.TAGS in update_elements:
+                                textline.set_tag(
+                                    tag=updated_line.get(
+                                        'type', 'paragraph'))
 
                     page.save_xml(xml_path)
                     print(f"Successfully updated PAGE XML: {xml_path}")
@@ -723,7 +740,7 @@ def reocr_single_image(
             else:
                 if getattr(e, 'code', None) == 429:
                     print(
-                        f"[red]Rate limit reached. Or this model is not supported for free quota tier.[/red]")
+                        "[red]Rate limit reached. Or this model is not supported for free quota tier.[/red]")
                 return image_path, False, str(e), None
     return None
 
@@ -745,6 +762,10 @@ def reocr_multithread(
     outputdir: Annotated[str, typer.Option(help="Path to the output directory.")] = None,
     system_prompt: Annotated[str, typer.Option(help="System prompt for the OCR model.")] = None,
     update_page: Annotated[bool, typer.Option(help="Updates PAGE XML output.")] = True,
+    recognize_level: Annotated[RecognizeLevel, typer.Option(
+        case_sensitive=False, help="Level to recognize.")] = RecognizeLevel.TextRegion,
+    update_elements: Annotated[List[UpdateElements], typer.Option(
+        case_sensitive=False, help="Elements to update.")] = [UpdateElements.TEXT, UpdateElements.TAGS],
     jobs: Annotated[int, typer.Option(help="Number of parallel jobs.")] = 4,
     calls_per_minute: Annotated[int, typer.Option(help="API call rate limit per minute.")] = 150,
     thinking_budget: Annotated[int, typer.Option(help="Thinking budget in tokens.(0 = no thinking)")] = 0,
@@ -753,42 +774,7 @@ def reocr_multithread(
 ):
     """Perform OCR on images using existing XML files as context for improved accuracy."""
     # Convert additional_checks to a set for efficient lookups
-    checks = set(additional_checks) if additional_checks else set()
-    system_prompt_advanced = """**Role:** You are an advanced Optical Character Recognition (OCR) and Document Layout Analysis (DLA) engine. Your specific function is to meticulously correct errors in provided JSON data by comparing it against a corresponding visual document.
-    **Primary Task:**
-    Given a visual input and a JSON dictionary detailing text regions and lines extracted from a previous OCR pass, your objective is to:
-    1.  **Identify Incorrect/Incomplete Lines:** For each `textline` in the input JSON, compare its `text_content` with the actual text visible in the corresponding area of the visual input. Identify all input `textlines` where the `text_content` is erroneous (e.g., misread characters, missing words, extra characters) or incomplete.
-    2.  **Correct Text and Attributes:** For each identified line:
-        *   **Correct `text_content`:** Transcribe the text from the visual input with extreme precision.
-        *   **Update `type` and `style`:** Re-evaluate and assign the correct `type` (for both the line and its parent region) and `style` (for the line) based on visual analysis of the *corrected* content and its layout.
-        *   **Preserve Line `id`:** The original `id` of the modified `textline` from the input JSON *must* be preserved.
-    3.  **Generate non-filtered updated JSON:** Updated JSON dictionary. Each such region in the output must *only* contain these specific modified `textlines`.
-    **Correction & Transcription Directives:**
-    *   **Extreme Accuracy:** Transcribe *every* visible textual element for the lines requiring correction. This includes:
-        *   Single, isolated characters (alphanumeric, e.g., 'A', '1').
-        *   Single, isolated symbols and punctuation (e.g., '-', '_', '.', ',', '*', '$', '%', '+', '=', '/', '\\', '©', '®', '™', and all other Unicode characters).
-        *   Fragmented or partially obscured characters/symbols relevant to the line.
-        *   Ensure a space separates a whole number from its following fraction (e.g., "1 1/2", not "11/2").
-    *   **No Normalization:** Transcribe historical glyphs, archaic spellings, or unique character variations *precisely as they appear*. Do not modernize or standardize them. (e.g. 'ſ' ,'⸗')
-    *   **Contextual Layout Awareness:** Pay critical attention to structured layouts (tables, forms, lists, diagrams). For any `textline` needing correction within such structures:
-        *   Ensure content within *every distinct cell, field, or demarcated area* is accurately extracted.
-        *   Do not dismiss small marks (e.g., a hyphen '-' in a table cell, a checkmark) if they represent textual information relevant to a line being corrected.
-    *   **Case and Spacing:** Preserve original casing and spacing (including multiple spaces if visually significant) meticulously.
-    **Output JSON Specification:**
-    *   **Root:** An updated JSON object with a single key `regions`, whose value is an array `[...]`.
-    *   **Region Object:**
-        *   `id` (String): **MUST BE PRESERVED AND UNCHANGED. HIGH PRIORITY.**
-        *   `type` (String): The visually determined `type` of the *output* region, reflecting the dominant content of the *modified lines* it contains. Update based on corrected content and visual layout. Examples: "paragraph", "heading", "table", "list", "caption", "form-field-group", "column".
-        *   `textlines` (Array): An array of modified and original `textline` objects.
-    *   **Textline Object (within `textlines` array):**
-        *   `id` (String): **MUST BE PRESERVED AND UNCHANGED. HIGH PRIORITY.**
-        *   `text_content` (String): The fully corrected text for the line, adhering to all transcription directives.
-        *   `type` (String): The visually determined contextual `type` of the *line itself* ("heading", "header", "paragraph", "table-header-1", "table-cell", "list-item", "page-number", "footnote", "caption-line"). This should be updated based on the corrected content and its visual role.
-        *   `style` (Array, **Optional**): **Optional** Only add if applied to the line. The visually determined font style(s) of the line and the position to apply it. Examples: [{"handwriting": [0, 10]}, "bold": [10, 20], "italic": [20, 30], "underline": [30, 40], "strikethrough": [40, 50]]. Combine if multiple apply (e.g., "bold italic"). Include only if clearly applicable. Update if necessary.
-    **Important:**
-    *   * Check every textline for correctness. *
-    *   * Output modified and unmodified textlines. Not allowed to remove any textlines. *
-    """
+    # checks = set(additional_checks) if additional_checks else set()
     system_prompt = """**Role:** You are an advanced Optical Character Recognition (OCR) and Document Layout Analysis (DLA) engine. Your specific function is to meticulously correct errors in provided JSON data by comparing it against a corresponding visual document.
     **Primary Task:**
     Given a visual input and a JSON dictionary detailing text regions and lines extracted from a previous OCR pass, your objective is to:
@@ -897,6 +883,8 @@ def reocr_multithread(
                 calls_per_minute=calls_per_minute,
                 update_page=update_page,
                 thinking_budget=thinking_budget,
+                recognize_level=recognize_level,
+                update_elements=update_elements,
                 dry_run=dry_run,
                 overwrite=overwrite): (
                 image_path,
