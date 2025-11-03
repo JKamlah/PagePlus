@@ -1,6 +1,6 @@
 # PagePlus
 
-![Logo](./assets/PagePlus_Logo.png)
+![Logo](./assets/img/PagePlus_Logo.png)
 
 PagePlus is a Python-based tool for processing and analyzing PAGE XML files, which are commonly used in document layout analysis. This tool provides a variety of functions to modify and extract data from these files, providing an efficient way to handle text and region-based information in document images. It offers both a command-line interface (CLI) for batch processing and a graphical user interface (GUI) for interactive use.
 
@@ -126,4 +126,4 @@ PagePlus is generously funded by the following organizations:
 
 | DFG | BERD@NFDI | HAdW |
 | :---: | :---: | :---: |
-| <img src="./assets/DFG-logo-blau.png" alt="DFG Logo" width="300"/> | <img src="./assets/Logo_BERD-NFDI.png" alt="BERD@NFDI Logo" width="300"/> | <img src="./assets/hadw_logo_blau.svg" alt="HAdW Logo" width="300"/> |  
+| <img src="./assets/img/DFG-logo-blau.png" alt="DFG Logo" width="300"/> | <img src="./assets/img/Logo_BERD-NFDI.png" alt="BERD@NFDI Logo" width="300"/> | <img src="./assets/img/hadw_logo_blau.svg" alt="HAdW Logo" width="300"/> |  
