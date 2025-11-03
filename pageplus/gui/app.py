@@ -224,7 +224,7 @@ def main():
             'iiif': IIIFBridge(),
             'tesseract': TesseractBridge(),
             'kraken': KrakenBridge(),
-            'kraken_new': KrakenBridge, # Added Kraken OCR New
+            'kraken_new': KrakenBridge,  # Added Kraken OCR New
         }
 
     # Initialize pages
@@ -427,7 +427,7 @@ def show_home():
     📊 Evaluation: Evaluate PAGE-XML files  
     🛠️ Modification: Modify processed documents  
     🤖 LLM: Perform different tasks on PAGE-XML files with LLMs  
-    🌟 Gemini: Use Gemini to process images and validate PAGE-XML output
+    🌟 Gemini: Use Gemini to process images and validate PAGE-XML output  
     🔤 Tesseract OCR: Do OCR on PAGE-XML files with Tesseract (if activated)  
     🐙 Kraken OCR: Do OCR on PAGE-XML files with Kraken (if activated)  
     📤 Export: Export PAGE-XML files to different formats (ALTO, PDF, Text)  
