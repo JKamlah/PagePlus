@@ -10,6 +10,18 @@ import streamlit as st
 from pageplus.cli.export import ReadingOrderMode
 from pageplus.gui.utils.picker import pick_directory
 from pageplus.gui.views.load_files import get_loaded_workspace_dir
+from pageplus.utils.guidelines.lib.settings import load_profiles
+from pageplus.utils.constants import GUIDELINES_DIR
+
+
+def get_mapping_profiles():
+    """Load mapping profiles from the JSON file."""
+    try:
+        mappings_path = GUIDELINES_DIR / "profiles" / "mappings.json"
+        mappings = load_profiles(mappings_path.as_posix())
+        return list(mappings.keys())
+    except Exception:
+        return []
 
 
 def _run_picker_script(command: List[str]) -> List[str]:
@@ -73,6 +85,13 @@ def show_export(bridge):
             disabled=True,
             label_visibility="visible"
         )
+    
+    mapping_profiles = get_mapping_profiles()
+    selected_profile = st.selectbox(
+        "Select a mapping profile (optional)",
+        options=["None"] + mapping_profiles,
+        index=0
+    )
 
     tab_dsv, tab_alto, tab_fulltext, tab_pdf = st.tabs(["💾 DSV", "💾 ALTO", "📝 Fulltext", "📕 PDF"])
 
@@ -93,6 +112,7 @@ def show_export(bridge):
                     "delimiter": delimiter,
                     "dehyphenate": dehyphenate,
                     "open_folder": open_folder,
+                    "mapping_profile": selected_profile if selected_profile != "None" else None,
                 }
                 bridge.export_files(
                     files=st.session_state.loaded_files, format="DSV", output_dir=Path(
@@ -109,9 +129,12 @@ def show_export(bridge):
             if 'export_dir' not in st.session_state:
                 st.session_state.export_dir = None
             try:
+                kwargs = {
+                    "mapping_profile": selected_profile if selected_profile != "None" else None,
+                }
                 bridge.export_files(
                     files=st.session_state.loaded_files, format="ALTO", output_dir=Path(
-                        st.session_state.export_dir) if st.session_state.export_dir else None)
+                        st.session_state.export_dir) if st.session_state.export_dir else None, **kwargs)
                 st.success("Files exported successfully!")
             except Exception as e:
                 st.error(f"Error during export: {str(e)}")
@@ -135,6 +158,7 @@ def show_export(bridge):
                     "ro": ro,
                     "ro_mode": ro_mode,
                     "open_folder": open_folder,
+                    "mapping_profile": selected_profile if selected_profile != "None" else None,
                 }
                 bridge.export_files(
                     files=st.session_state.loaded_files, format="Fulltext", output_dir=Path(
@@ -239,6 +263,7 @@ def show_export(bridge):
                         "max_resolution": None if dpi == 0 else dpi,
                         "draw": draw,
                         "output_filename": output_filename,
+                        "mapping_profile": selected_profile if selected_profile != "None" else None,
                     }
                     bridge.export_files(
                         files=st.session_state.loaded_files, format="PDF", output_dir=Path(

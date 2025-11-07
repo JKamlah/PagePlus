@@ -486,3 +486,48 @@ def get_modified_pagexml_path(page_path: Path) -> Path | None:
         return Path(get_key(get_env_path(), Environments.PAGEPLUS.as_prefix() + 'MODIFIED') / filename)
     except TypeError:
         return None
+
+
+def apply_mapping_to_files(xml_files: List[Path], mapping_profile: str, textnormalization: str = "NFC") -> Tuple[List[Tuple[Path, Path]], Any]:
+    """
+    Applies a mapping profile to a list of XML files and returns temporary files with their original paths.
+    """
+    import tempfile
+    import unicodedata
+    import shutil
+    from pageplus.models.page import Page
+    from pageplus.utils.guidelines.lib.processhandler import Mappinghandler
+
+    temp_dir = tempfile.TemporaryDirectory()
+    temp_dir_path = Path(temp_dir.name)
+    temp_files_with_originals = []
+
+    handler = Mappinghandler(fnames=[str(p) for p in xml_files], guideline=mapping_profile, textnormalization=textnormalization)
+
+    for xml_path in xml_files:
+        page = Page(xml_path)
+        is_modified = False
+        for region in page.regions.textregions:
+            for line in region.textlines:
+                original_text = line.get_text()
+                if not original_text:
+                    continue
+
+                unicode_normalized_text = unicodedata.normalize(textnormalization, original_text)
+
+                guideline_normalized_text = handler.mapping_by_guideline(
+                    unicode_normalized_text, line.get_id(), xml_path.name, mode='deterministic'
+                )
+
+                if original_text != guideline_normalized_text:
+                    line.update_text(guideline_normalized_text)
+                    is_modified = True
+
+        temp_file_path = temp_dir_path / xml_path.name
+        if is_modified:
+            page.save_xml(temp_file_path)
+        else:
+            shutil.copy(xml_path, temp_file_path)
+        temp_files_with_originals.append((temp_file_path, xml_path))
+
+    return temp_files_with_originals, temp_dir
