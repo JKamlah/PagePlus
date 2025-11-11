@@ -72,14 +72,24 @@ class LoadFilesPage:
         num_files = len(loaded_files)
 
         with st.container(border=True):
-            if num_files > 0:
-                parent_paths = sorted(list(set(f.parent for f in loaded_files)))
-                st.markdown(f"**✅ Currently loaded: {num_files} file{'s' if num_files > 1 else ''} from {len(parent_paths)} director{'ies' if len(parent_paths) > 1 else 'y'}.**")
-                with st.expander("View loaded directories"):
-                    for path in parent_paths:
-                        st.code(str(path), language="text")
-            else:
-                st.markdown("**ℹ️ 0 files are loaded.**")
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                if num_files > 0:
+                    parent_paths = sorted(list(set(f.parent for f in loaded_files)))
+                    st.markdown(f"**✅ Currently loaded: {num_files} file{'s' if num_files > 1 else ''} from {len(parent_paths)} director{'ies' if len(parent_paths) > 1 else 'y'}.**")
+                    with st.expander("View loaded directories"):
+                        for path in parent_paths:
+                            st.code(str(path), language="text")
+                else:
+                    st.markdown("**ℹ️ 0 files are loaded.**")
+            with col2:
+                if num_files > 0:
+                    if st.button("🗑️ Clear All", key="clear_all_top", use_container_width=True):
+                        st.session_state.loaded_files = []
+                        st.session_state.files_to_remove = set()
+                        st.session_state.search_filter = ""
+                        UndoManager.clear_stack()
+                        st.rerun()
 
         # Create tabs for better organization
         tab1, tab2 = st.tabs(["➕ Add Files", "📋 Manage Files"])

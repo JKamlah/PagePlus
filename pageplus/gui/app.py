@@ -336,10 +336,7 @@ def main():
     elif page == "🐙 Kraken OCR":
         kraken.show_kraken(st.session_state.bridges['kraken'])
     elif page == "🌟 Gemini":
-        if not st.session_state.loaded_files:
-            st.warning("Please load files first in the 'Input' page.")
-        else:
-            gemini.show_gemini(st.session_state.bridges['gemini'])
+        gemini.show_gemini(st.session_state.bridges['gemini'])
     elif page == "📤 Export":
         if not st.session_state.loaded_files:
             st.warning("Please load files first in the 'Input' page.")

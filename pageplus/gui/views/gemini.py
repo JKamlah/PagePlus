@@ -251,20 +251,20 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                 st.session_state.gemini_available_models = []
         else:
             st.session_state.gemini_available_models = []
-    if not st.session_state.loaded_files:
-        st.warning("Please load files first.")
-        return
-
     loaded_files = [str(files.absolute())
-                    for files in st.session_state.loaded_files]
+                    for files in st.session_state.loaded_files] if st.session_state.loaded_files else []
     # Initialize settings
     settings = Settings()
 
     # Operation tabs
     tab_names = ["⚙️ Settings", "🏗️ Pipeline Editor", "📁 I/O"]
     if 'modification_input' in st.session_state:
-        tab_names.extend(["🔡 OCR", "🔄 ReOCR"])
+        tab_names.append("🔬 Process")
     tabs = st.tabs(tab_names)
+
+    selected_files_for_ocr = []
+    if 'modification_input' in st.session_state:
+        selected_files_for_ocr = st.session_state.modification_input["files"]
 
     with tabs[0]:  # Settings
         st.subheader("Settings")
@@ -549,8 +549,6 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                 ])
                 st.dataframe(files_df, width='stretch')
 
-            selected_files_for_ocr = st.session_state.modification_input["files"]
-
             # Select output directory
             st.subheader("Output Directory")
             st.write(
@@ -583,9 +581,9 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                     del st.session_state.modification_dir
                     st.rerun()
 
-        if len(tab_names) > 3:  # Only show OCR tab if it exists
-            with tabs[3]:  # OCR
-                st.subheader("OCR")
+        if "🔬 Process" in tab_names:
+            with tabs[tab_names.index("🔬 Process")]:  # Process Tab
+                st.subheader("Processing")
 
                 # Initialize pipeline manager
                 pipeline_manager = PipelineManager()
@@ -596,52 +594,68 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                 config_mode = st.radio(
                     "Configuration Mode",
                     ["🎯 Quick Mode (Single Stage)", "⚙️ Pipeline Mode"],
-                    key="ocr_config_mode",
+                    key="process_config_mode",
                     horizontal=True
                 )
 
                 selected_stages = []
+                process_type = "OCR"  # Default process type
 
                 if config_mode == "🎯 Quick Mode (Single Stage)":
-                    # Quick mode: select a single All-in-One stage
-                    ocr_stages = pipeline_manager.get_stages_by_category("OCR")
-                    all_in_one_stages = [s for s in ocr_stages if s.get('type') == 'All-in-One']
+                    quick_mode_options = ["OCR"]
+                    if any(f.suffix == ".xml" for f in st.session_state.get('loaded_files', [])):
+                        quick_mode_options.append("ReOCR")
+
+                    process_type = st.selectbox(
+                        "Select Process Type",
+                        quick_mode_options,
+                        key="process_type_quick_select"
+                    )
+
+                    stages = pipeline_manager.get_stages_by_category(process_type)
+                    all_in_one_stages = [s for s in stages if s.get('type') == 'All-in-One']
 
                     if not all_in_one_stages:
-                        st.warning("⚠️ No All-in-One OCR stages available. Please create one in the Pipeline Editor.")
+                        st.warning(f"⚠️ No All-in-One {process_type} stages available. Please create one in the Pipeline Editor.")
                     else:
                         stage_options = {f"{s.get('name')} ({s.get('collection')})": s for s in all_in_one_stages}
                         selected_stage_name = st.selectbox(
-                            "Select OCR Stage",
+                            f"Select {process_type} Stage",
                             list(stage_options.keys()),
-                            key="ocr_quick_stage_select"
+                            key=f"{process_type.lower()}_quick_stage_select"
                         )
                         selected_stages = [stage_options[selected_stage_name]] if selected_stage_name else []
 
-                        # Show stage details
                         if selected_stages:
                             with st.expander("📋 Stage Details", expanded=True):
                                 stage = selected_stages[0]
                                 st.write(f"**Type:** {stage.get('type')}")
                                 st.write(f"**Collection:** {stage.get('collection')}")
 
-                                # Recognize Level selector
-                                recognize_level_quick = st.selectbox(
+                                st.selectbox(
                                     "Recognize Level",
                                     options=["Page", "TextRegion", "Textline"],
-                                    index=0,  # Default to TextRegion
-                                    key="ocr_quick_recognize_level"
+                                    index=0,
+                                    key=f"{process_type.lower()}_quick_recognize_level"
                                 )
+
+                                if process_type == "ReOCR":
+                                    st.multiselect(
+                                        "Update Elements",
+                                        options=["Text", "Tags"],
+                                        default=stage.get('filters', {}).get('update_elements', ["Text", "Tags"]),
+                                        key="reocr_quick_update_elements"
+                                    )
 
                                 st.text_area(
                                     "System Prompt",
                                     value=stage.get('system_prompt', ''),
                                     height=100,
                                     disabled=True,
-                                    key="ocr_quick_prompt_display"
+                                    key=f"{process_type.lower()}_quick_prompt_display"
                                 )
-                else:
-                    # Pipeline mode: select a pipeline
+                else:  # Pipeline Mode
+                    st.info("Pipeline mode selected. Currently only OCR pipelines are supported in this view.")
                     ocr_pipelines = pipeline_manager.get_pipelines_by_category("OCR")
 
                     if not ocr_pipelines:
@@ -652,514 +666,134 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                             ocr_pipelines,
                             key="ocr_pipeline_select"
                         )
-
                         if selected_pipeline_name:
                             pipeline_data = pipeline_manager.get_pipeline(selected_pipeline_name)
                             st.info(f"ℹ️ {pipeline_data.get('description', 'No description')}")
-
-                            # Show pipeline stages
-                            pipeline_stages = pipeline_data.get('stages', [])
-                            if pipeline_stages:
-                                st.write(f"**Pipeline: {len(pipeline_stages)} stage(s)**")
-                                for i, stage_ref in enumerate(pipeline_stages):
+                            pipeline_stages_refs = pipeline_data.get('stages', [])
+                            if pipeline_stages_refs:
+                                st.write(f"**Pipeline: {len(pipeline_stages_refs)} stage(s)**")
+                                for i, stage_ref in enumerate(pipeline_stages_refs):
                                     collection_name = stage_ref.get('collection')
                                     stage_id = stage_ref.get('stage_id')
                                     stage = pipeline_manager.get_stage_by_id(collection_name, stage_id)
                                     if stage:
-                                        selected_stages.append({
-                                            **stage,
-                                            'collection': collection_name,
-                                            'override_attributes': stage_ref.get('attributes', {}),
-                                            'override_filters': stage_ref.get('filters', {})
-                                        })
-                                        st.write(f"{i+1}. {stage.get('name')} ({stage.get('type')})")
+                                        selected_stages.append({**stage, 'collection': collection_name, 'override_attributes': stage_ref.get('attributes', {}), 'override_filters': stage_ref.get('filters', {})})
+                                        st.write(f"{i + 1}. {stage.get('name')} ({stage.get('type')})")
 
-                # OCR-Multithread Settings
                 with st.expander("Execution Settings", expanded=True):
+                    jobs_multi = st.number_input("Number of Jobs", min_value=1, value=4, key="processing_jobs")
+                    calls_per_minute_multi = st.number_input("Calls per Minute", min_value=1, value=150, key="processing_calls_per_minute")
+                    dry_run_multi = st.checkbox("Dry run", key="processing_dry_run")
+                    overwrite_multi = st.checkbox("Overwrite", key="processing_overwrite", value=True)
 
-                    jobs_multi = st.number_input(
-                        "Number of Jobs",
-                        min_value=1,
-                        value=4,
-                        key="ocring_jobs"
-                    )
-                    calls_per_minute_multi = st.number_input(
-                        "Calls per Minute",
-                        min_value=1,
-                        value=150,
-                        key="ocring_calls_per_minute"
-                    )
-                    dry_run_multi = st.checkbox(
-                        "Dry run", key="ocring_dry_run")
-                    overwrite_multi = st.checkbox(
-                        "Overwrite", key="ocring_overwrite", value=True)
+                    recognize_level = st.session_state.get(f'{process_type.lower()}_quick_recognize_level', 'TextRegion')
+                    update_elements = ["Text", "Tags"]  # Default
+                    if process_type == "ReOCR":
+                        update_elements = st.session_state.get('reocr_quick_update_elements', ["Text", "Tags"])
 
-                    # Get recognize_level from Quick Mode or default
-                    recognize_level = st.session_state.get('ocr_quick_recognize_level', 'TextRegion')
-
-                    # Terminal display area
                     terminal_container = st.empty()
-                    terminal_text = terminal_container.text_area(
-                        "Process Terminal",
-                        value="",
-                        height=200,
-                        disabled=True,
-                        key="terminal_output_display_initial"
-                    )
+                    terminal_text = terminal_container.text_area("Process Terminal", value="", height=200, disabled=True, key="terminal_output_display_initial_process")
 
-                    if st.button(
-                        "Run multithreaded OCR",
-                            key="run_multithreaded_ocr_button"):
-
+                    if st.button(f"Run multithreaded {process_type}", key=f"run_multithreaded_{process_type.lower()}_button"):
                         if not selected_stages:
                             st.error("No stages selected. Please configure pipeline first.")
                         else:
-                            # Use the first stage's prompt (for single stage or first stage in pipeline)
                             first_stage = selected_stages[0]
                             system_prompt_selected = first_stage.get('system_prompt', '')
-
-                            # Merge default attributes with overrides
                             stage_attributes = {**first_stage.get('attributes', {}), **first_stage.get('override_attributes', {})}
-                            thinking_budget = stage_attributes.get('thinking_budget', thinking_budget)
+                            thinking_budget_val = int(settings.get("THINKING_BUDGET", "0"))
+                            thinking_budget = stage_attributes.get('thinking_budget', thinking_budget_val)
 
-                            # Clear terminal
                             current_model_output = bridge.show_model().get('output', 'N/A')
-                            terminal_text += terminal_container.text_area(
-                                "Process Terminal",
-                                value=f"Starting OCR process with {current_model_output}...",
-                                height=200,
-                                disabled=True,
-                                key="terminal_output_clear"
-                            )
+                            terminal_container.text_area("Process Terminal", value=f"Starting {process_type} process with {current_model_output}...", height=200, disabled=True, key="terminal_output_clear_process")
 
-                            # Create a queue for output
                             output_queue = queue.Queue()
-                            # Create a buffer to store all output
                             output_buffer = StringIO()
 
-                            with st.spinner("Running OCR...", show_time=True):
+                            with st.spinner(f"Running {process_type}...", show_time=True):
+                                result_container = {"result": None}
 
-                                # Run OCR with real-time output capture
-                                def run_ocr_process():
+                                def run_process():
                                     old_stdout = sys.stdout
-                                    sys.stdout = QueueOutput(
-                                        output_queue, output_buffer)
-                                    # Since usage data per file seems unavailable from ocr_multithread,
-                                    # we'll focus on capturing the string outputs.
-                                    aggregated_usage = {  # Initialize but expect it to remain empty
-                                        "prompt_tokens": 0,
-                                        "candidates_tokens": 0,
-                                        "total_tokens": 0
-                                    }
-                                    overall_success = True  # Assume success unless an error is caught
+                                    sys.stdout = QueueOutput(output_queue, output_buffer)
+                                    aggregated_usage = {"prompt_tokens": 0, "candidates_tokens": 0, "total_tokens": 0}
+                                    overall_success = True
                                     main_output_message = ""
 
                                     try:
-                                        # Assuming bridge.ocr_multithread now returns a
-                                        # list of strings
-                                        st.write(f"Overwrite: {overwrite_multi}")
-                                        # Note: multi_stage is False for now (pipeline mode not fully implemented yet)
-                                        individual_results_messages = bridge.ocr_multithread(
-                                            files=selected_files_for_ocr,
-                                            outputdir=st.session_state.get('modification_dir'),
-                                            jobs=jobs_multi,
-                                            calls_per_minute=calls_per_minute_multi,
-                                            dry_run=dry_run_multi,
-                                            system_prompt=system_prompt_selected,
-                                            overwrite=overwrite_multi,
-                                            recognize_level=recognize_level,
-                                            multi_stage=False,
-                                            thinking_budget=thinking_budget
-                                        )
-
-                                        # The bridge.ocr_multithread might return a single dictionary for the whole
-                                        # batch if it can provide a summary and global
-                                        # usage.
-                                        if isinstance(
-                                                individual_results_messages,
-                                                dict) and "usage" in individual_results_messages:
-                                            overall_success = individual_results_messages.get(
-                                                "success", True)
-                                            main_output_message = individual_results_messages.get(
-                                                "output", "Multithreaded process completed.")
-                                            usage_data_list = individual_results_messages.get(
-                                                'usage')
-                                            if usage_data_list and isinstance(
-                                                    usage_data_list, list):
-                                                for usage_meta in usage_data_list:
-                                                    if hasattr(
-                                                            usage_meta, 'prompt_token_count'):
-                                                        aggregated_usage["prompt_tokens"] += getattr(
-                                                            usage_meta, 'prompt_token_count', 0)
-                                                        aggregated_usage["candidates_tokens"] += getattr(
-                                                            usage_meta, 'candidates_token_count', 0)
-                                                        aggregated_usage["total_tokens"] += getattr(
-                                                            usage_meta, 'total_token_count', 0)
-                                                    elif isinstance(usage_meta, dict):
-                                                        aggregated_usage["prompt_tokens"] += usage_meta.get(
-                                                            'prompt_token_count', 0)
-                                                        aggregated_usage["candidates_tokens"] += usage_meta.get(
-                                                            'candidates_token_count', 0)
-                                                        aggregated_usage["total_tokens"] += usage_meta.get(
-                                                            'total_token_count', 0)
-                                        elif isinstance(individual_results_messages, list):
-                                            main_output_message = (f"Multithreaded OCR process initiated for " f"{len(selected_files_for_ocr)} files. Output below.")
-                                        else:
-                                            main_output_message = (
-                                                "Multithreaded OCR process returned an unexpected data type."
+                                        if process_type == "OCR":
+                                            result_data = bridge.ocr_multithread(
+                                                files=selected_files_for_ocr,
+                                                outputdir=st.session_state.get('modification_dir'),
+                                                jobs=jobs_multi,
+                                                calls_per_minute=calls_per_minute_multi,
+                                                dry_run=dry_run_multi,
+                                                system_prompt=system_prompt_selected,
+                                                overwrite=overwrite_multi,
+                                                recognize_level=recognize_level,
+                                                multi_stage=(config_mode != "🎯 Quick Mode (Single Stage)"),
+                                                thinking_budget=thinking_budget
                                             )
+                                        elif process_type == "ReOCR":
+                                            stage_filters = {**first_stage.get('filters', {}), **first_stage.get('override_filters', {})}
+                                            update_elements_stage = stage_filters.get('update_elements', update_elements)
+                                            result_data = bridge.reocr_multithread(
+                                                xml_files=loaded_files,
+                                                image_files=selected_files_for_ocr,
+                                                image_folder=None,
+                                                same_names=True,
+                                                additional_checks=None,
+                                                outputdir=st.session_state.get('modification_dir'),
+                                                system_prompt=system_prompt_selected,
+                                                update_page=True,
+                                                recognize_level=recognize_level,
+                                                update_elements=update_elements_stage,
+                                                jobs=jobs_multi,
+                                                calls_per_minute=calls_per_minute_multi,
+                                                thinking_budget=thinking_budget,
+                                                dry_run=dry_run_multi,
+                                                overwrite=overwrite_multi
+                                            )
+
+                                        if isinstance(result_data, dict) and "usage" in result_data:
+                                            overall_success = result_data.get("success", True)
+                                            main_output_message = result_data.get("output", "Multithreaded process completed.")
+                                            usage_data_list = result_data.get('usage')
+                                            if usage_data_list and isinstance(usage_data_list, list):
+                                                for usage_meta in usage_data_list:
+                                                    aggregated_usage["prompt_tokens"] += usage_meta.get('prompt_token_count', 0)
+                                                    aggregated_usage["candidates_tokens"] += usage_meta.get('candidates_token_count', 0)
+                                                    aggregated_usage["total_tokens"] += usage_meta.get('total_token_count', 0)
+                                        else:
+                                            main_output_message = f"Multithreaded {process_type} process returned an unexpected data type."
                                             overall_success = False
 
-                                        # Ensure all pending stdout is flushed before
-                                        # returning from the thread
-                                        sys.stdout.flush()
-
-                                        return {
-                                            "success": overall_success,
-                                            "output": main_output_message,
-                                            "aggregated_usage": aggregated_usage
-                                        }
                                     except Exception as e:
-                                        error_msg = f"Error during OCR processing: {str(e)}"
-                                        # This print should go to the redirected stdout
-                                        # (QueueOutput)
-                                        print(error_msg)
-                                        sys.stdout.flush()  # Ensure error message is flushed
-                                        return {
-                                            "success": False,
-                                            "output": error_msg,
-                                            "aggregated_usage": aggregated_usage
-                                        }
+                                        main_output_message = f"Error during {process_type} processing: {str(e)}"
+                                        print(main_output_message)
+                                        overall_success = False
                                     finally:
+                                        sys.stdout.flush()
                                         sys.stdout = old_stdout
+                                        result_container["result"] = {"success": overall_success, "output": main_output_message, "aggregated_usage": aggregated_usage}
 
-                                result_container = {"result": None}
+                                process_thread = threading.Thread(target=run_process)
+                                process_thread.start()
 
-                                def run_ocr_and_store_result():
-                                    result_container["result"] = run_ocr_process()
-
-                                ocr_thread = threading.Thread(
-                                    target=run_ocr_and_store_result)
-                                ocr_thread.start()
-
-                                while ocr_thread.is_alive():
-                                    update_terminal_display(
-                                        output_queue, output_buffer, terminal_container)
+                                while process_thread.is_alive():
+                                    update_terminal_display(output_queue, output_buffer, terminal_container)
                                     time.sleep(0.1)
 
-                                ocr_thread.join()
+                                process_thread.join()
                                 result = result_container["result"]
 
-                                process_result(
-                                    result,
-                                    output_buffer,
-                                    terminal_container,
-                                    terminal_text,
-                                    settings,
-                                    process_type="OCR"
-                                )
+                                process_result(result, output_buffer, terminal_container, "", settings, process_type=process_type)
 
+                            download_button_key = f"download_{process_type.lower()}_output"
                             st.download_button(
                                 label="Download Terminal Output",
-                                data=terminal_text,
-                                file_name="ocr_terminal_output.txt",
-                                mime="text/plain")
-
-        if len(tab_names) > 4:  # Only show ReOCR tab if it exists
-            with tabs[4]:  # ReOCR
-                st.subheader("ReOCR")
-
-                # Initialize pipeline manager
-                reocr_pipeline_manager = PipelineManager()
-
-                # Pipeline Configuration
-                st.markdown("### ⚙️ Pipeline Configuration")
-
-                reocr_config_mode = st.radio(
-                    "Configuration Mode",
-                    ["🎯 Quick Mode (Single Stage)", "⚙️ Pipeline Mode"],
-                    key="reocr_config_mode",
-                    horizontal=True
-                )
-
-                reocr_selected_stages = []
-
-                if reocr_config_mode == "🎯 Quick Mode (Single Stage)":
-                    # Quick mode: select a single ReOCR stage
-                    reocr_stages = reocr_pipeline_manager.get_stages_by_category("ReOCR")
-
-                    if not reocr_stages:
-                        st.warning("⚠️ No ReOCR stages available. Please create one in the Pipeline Editor.")
-                    else:
-                        reocr_stage_options = {f"{s.get('name')} ({s.get('collection')})": s for s in reocr_stages}
-                        reocr_selected_stage_name = st.selectbox(
-                            "Select ReOCR Stage",
-                            list(reocr_stage_options.keys()),
-                            key="reocr_quick_stage_select"
-                        )
-                        reocr_selected_stages = [reocr_stage_options[reocr_selected_stage_name]] if reocr_selected_stage_name else []
-
-                        # Show stage details
-                        if reocr_selected_stages:
-                            with st.expander("📋 Stage Details", expanded=True):
-                                stage = reocr_selected_stages[0]
-                                st.write(f"**Type:** {stage.get('type')}")
-                                st.write(f"**Collection:** {stage.get('collection')}")
-
-                                # Recognize Level selector
-                                recognize_level_quick_reocr = st.selectbox(
-                                    "Recognize Level",
-                                    options=["Page", "TextRegion", "Textline"],
-                                    index=0,  # Default to TextRegion
-                                    key="reocr_quick_recognize_level"
-                                )
-
-                                # Update Elements selector
-                                update_elements_quick = st.multiselect(
-                                    "Update Elements",
-                                    options=["Text", "Tags"],
-                                    default=stage.get('filters', {}).get('update_elements', ["Text", "Tags"]),
-                                    key="reocr_quick_update_elements"
-                                )
-
-                                st.text_area(
-                                    "System Prompt",
-                                    value=stage.get('system_prompt', ''),
-                                    height=100,
-                                    disabled=True,
-                                    key="reocr_quick_prompt_display"
-                                )
-                else:
-                    # Pipeline mode: select a pipeline
-                    reocr_pipelines = reocr_pipeline_manager.get_pipelines_by_category("ReOCR")
-
-                    if not reocr_pipelines:
-                        st.warning("⚠️ No ReOCR pipelines available. Please create one in the Pipeline Editor.")
-                    else:
-                        reocr_selected_pipeline_name = st.selectbox(
-                            "Select Pipeline",
-                            reocr_pipelines,
-                            key="reocr_pipeline_select"
-                        )
-
-                        if reocr_selected_pipeline_name:
-                            reocr_pipeline_data = reocr_pipeline_manager.get_pipeline(reocr_selected_pipeline_name)
-                            st.info(f"ℹ️ {reocr_pipeline_data.get('description', 'No description')}")
-
-                            # Show pipeline stages
-                            reocr_pipeline_stages = reocr_pipeline_data.get('stages', [])
-                            if reocr_pipeline_stages:
-                                st.write(f"**Pipeline: {len(reocr_pipeline_stages)} stage(s)**")
-                                for i, stage_ref in enumerate(reocr_pipeline_stages):
-                                    collection_name = stage_ref.get('collection')
-                                    stage_id = stage_ref.get('stage_id')
-                                    stage = reocr_pipeline_manager.get_stage_by_id(collection_name, stage_id)
-                                    if stage:
-                                        reocr_selected_stages.append({
-                                            **stage,
-                                            'collection': collection_name,
-                                            'override_attributes': stage_ref.get('attributes', {}),
-                                            'override_filters': stage_ref.get('filters', {})
-                                        })
-                                        st.write(f"{i+1}. {stage.get('name')} ({stage.get('type')})")
-
-                # ReOCR-Multithread Settings
-                with st.expander("Execution Settings", expanded=True):
-
-                    jobs_multi = st.number_input(
-                        "Number of Jobs",
-                        min_value=1,
-                        value=4,
-                        key="reocring_jobs"
-                    )
-                    calls_per_minute_multi = st.number_input(
-                        "Calls per Minute",
-                        min_value=1,
-                        value=150,
-                        key="reocring_calls_per_minute"
-                    )
-                    dry_run_multi = st.checkbox(
-                        "Dry run", key="reocring_dry_run")
-                    overwrite_multi = st.checkbox(
-                        "Overwrite", key="reocring_overwrite", value=True)
-
-                    # Get recognize_level and update_elements from Quick Mode or defaults
-                    recognize_level = st.session_state.get('reocr_quick_recognize_level', 'TextRegion')
-                    update_elements = st.session_state.get('reocr_quick_update_elements', ["Text", "Tags"])
-
-                    # Additional checks
-                    # additional_checks = st.multiselect(
-                    #    "Additional Checks",
-                    #    options=["type", "style", "region", "reading_order"],
-                    #    default=["type", "style"],
-                    #     key="reocr_additional_checks"
-                    # )
-
-                    # Terminal display area
-                    terminal_container = st.empty()
-                    terminal_text = terminal_container.text_area(
-                        "Process Terminal",
-                        value="",
-                        height=200,
-                        disabled=True,
-                        key="reocr_terminal_output_display_initial"
-                    )
-
-                    if st.button(
-                        "Run multithreaded ReOCR",
-                            key="run_multithreaded_reocr_button"):
-
-                        if not reocr_selected_stages:
-                            st.error("No stages selected. Please configure pipeline first.")
-                        else:
-                            # Use the first stage's prompt (for single stage or first stage in pipeline)
-                            first_stage = reocr_selected_stages[0]
-                            system_prompt_multi_selected = first_stage.get('system_prompt', '')
-
-                            # Merge default attributes/filters with overrides
-                            stage_attributes = {**first_stage.get('attributes', {}), **first_stage.get('override_attributes', {})}
-                            stage_filters = {**first_stage.get('filters', {}), **first_stage.get('override_filters', {})}
-
-                            # Override thinking_budget and update_elements if specified
-                            thinking_budget_reocr = stage_attributes.get('thinking_budget', thinking_budget)
-                            update_elements_stage = stage_filters.get('update_elements', update_elements)
-
-                            # Clear terminal
-                            current_model_output = bridge.show_model().get('output', 'N/A')
-                            terminal_text += terminal_container.text_area(
-                                "Process Terminal",
-                                value=f"Starting ReOCR process with {current_model_output}...",
-                                height=200,
-                                disabled=True,
-                                key="reocr_terminal_output_clear"
+                                data=output_buffer.getvalue(),
+                                file_name=f"{process_type.lower()}_terminal_output.txt",
+                                mime="text/plain",
+                                key=download_button_key
                             )
-                            with st.spinner("Running ReOCR...", show_time=True):
-                                # Create a queue for output
-                                output_queue = queue.Queue()
-                                # Create a buffer to store all output
-                                output_buffer = StringIO()
-
-                                # Run ReOCR with real-time output capture
-                                def run_reocr_process():
-                                    old_stdout = sys.stdout
-                                    sys.stdout = QueueOutput(
-                                        output_queue, output_buffer)
-                                    # Since usage data per file seems unavailable from reocr_multithread,
-                                    # we'll focus on capturing the string outputs.
-                                    aggregated_usage = {  # Initialize but expect it to remain empty
-                                        "prompt_tokens": 0,
-                                        "candidates_tokens": 0,
-                                        "total_tokens": 0
-                                    }
-                                    overall_success = True  # Assume success unless an error is caught
-                                    main_output_message = ""
-
-                                    try:
-                                        # Run reocr command
-                                        result = bridge.reocr_multithread(
-                                            xml_files=loaded_files,
-                                            image_files=selected_files_for_ocr,
-                                            image_folder=None,
-                                            same_names=True,
-                                            additional_checks=None,
-                                            outputdir=st.session_state.get('modification_dir'),
-                                            system_prompt=system_prompt_multi_selected,
-                                            update_page=True,
-                                            recognize_level=recognize_level,
-                                            update_elements=update_elements_stage,
-                                            jobs=jobs_multi,
-                                            calls_per_minute=calls_per_minute_multi,
-                                            thinking_budget=thinking_budget_reocr,
-                                            dry_run=dry_run_multi,
-                                            overwrite=overwrite_multi
-                                        )
-
-                                        # The bridge.reocr_multithread might return a single dictionary for the whole
-                                        # batch if it can provide a summary and global
-                                        # usage.
-                                        if isinstance(
-                                                result, dict) and "usage" in result:
-                                            overall_success = result.get(
-                                                "success", True)
-                                            main_output_message = result.get(
-                                                "output", "Multithreaded process completed."
-                                            )
-                                            usage_data_list = result.get('usage')
-                                            if usage_data_list and isinstance(
-                                                    usage_data_list, list):
-                                                for usage_meta in usage_data_list:
-                                                    if hasattr(
-                                                            usage_meta, 'prompt_token_count'):
-                                                        aggregated_usage["prompt_tokens"] += getattr(
-                                                            usage_meta, 'prompt_token_count', 0)
-                                                        aggregated_usage["candidates_tokens"] += getattr(
-                                                            usage_meta, 'candidates_token_count', 0)
-                                                        aggregated_usage["total_tokens"] += getattr(
-                                                            usage_meta, 'total_token_count', 0)
-                                                    elif isinstance(usage_meta, dict):
-                                                        aggregated_usage["prompt_tokens"] += usage_meta.get(
-                                                            'prompt_token_count', 0)
-                                                        aggregated_usage["candidates_tokens"] += usage_meta.get(
-                                                            'candidates_token_count', 0)
-                                                        aggregated_usage["total_tokens"] += usage_meta.get(
-                                                            'total_token_count', 0)
-                                        else:
-                                            main_output_message = (
-                                                "Multithreaded ReOCR process returned an unexpected data type."
-                                            )
-                                            overall_success = False
-
-                                        # Ensure all pending stdout is flushed before
-                                        # returning from the thread
-                                        sys.stdout.flush()
-
-                                        return {
-                                            "success": overall_success,
-                                            "output": main_output_message,
-                                            "aggregated_usage": aggregated_usage
-                                        }
-                                    except Exception as e:
-                                        error_msg = f"Error during ReOCR processing: {str(e)}"
-                                        # This print should go to the redirected stdout
-                                        # (QueueOutput)
-                                        print(error_msg)
-                                        sys.stdout.flush()  # Ensure error message is flushed
-                                        return {
-                                            "success": False,
-                                            "output": error_msg,
-                                            "aggregated_usage": aggregated_usage
-                                        }
-                                    finally:
-                                        sys.stdout = old_stdout
-
-                                result_container = {"result": None}
-
-                                def run_reocr_and_store_result():
-                                    result_container["result"] = run_reocr_process()
-
-                                reocr_thread = threading.Thread(
-                                    target=run_reocr_and_store_result)
-                                reocr_thread.start()
-
-                                while reocr_thread.is_alive():
-                                    update_terminal_display(
-                                        output_queue, output_buffer, terminal_container)
-                                    time.sleep(0.1)
-
-                                reocr_thread.join()
-                                result = result_container["result"]
-
-                                process_result(
-                                    result,
-                                    output_buffer,
-                                    terminal_container,
-                                    terminal_text,
-                                    settings,
-                                    process_type="ReOCR"
-                                )
-
-                            st.download_button(
-                                label="Download Terminal Output",
-                                data=terminal_text,
-                                file_name="reocr_terminal_output.txt",
-                                mime="text/plain")
