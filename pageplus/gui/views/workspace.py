@@ -124,7 +124,8 @@ def show_workspace(cli_bridge):
         st.subheader("Add New Workspace")
 
         if st.button("Select Directory"):
-            selected_paths = pick_directory()
+            initial_dir = st.session_state.get('workspace_dir', None)
+            selected_paths = pick_directory(initial_dir=initial_dir)
             if selected_paths:
                 st.session_state.workspace_dir = selected_paths
                 # Suggest the last folder name as workspace name
