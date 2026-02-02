@@ -67,11 +67,23 @@
                 {
                     "id": "0007",
                     "name": "Default",
-                    "category": "TableRecognition",
+                    "category": "OCR",
                     "type": "TableRecognition",
                     "system_prompt": "**Role:** You are a specialized document analysis engine with an expert focus on recognizing and structuring complex tabular data.\n    **Task:** Your task is to analyze the provided image, detect any tables, and extract their complete structure and content with unparalleled precision. This includes all cells, headers, and data, even if cells are empty or contain only minimal characters.\n    **Structural Interpretation Rules:**\n        *   **Grid Integrity:** Your primary directive is to represent **every single cell** in the table's grid. If a cell is visually empty, you must still generate a cell object for it with an empty `text_content` string. If a cell contains only a single character (e.g., '-', 'x', '*'), that character must be its `text_content`.\n        *   **Merged Cells:** Accurately identify and represent cells that span multiple rows (`rowspan`) or multiple columns (`colspan`). The default value for both is 1.\n        *   **Curly Brace Dissolution (Left-side Grouping):** Pay critical attention to curly braces (`{}`) used for grouping. A curly brace on the **left** of a column, visually linking an item to multiple rows of content in adjacent columns, indicates that the item spans those rows. You must **dissolve** this structure by creating a cell for that item with the appropriate `rowspan` value. For example, if 'Category A' has a brace connecting it to three rows, its cell should have `\"rowspan\": 3`.\n        *   **Curly Brace Dissolution (Right-side Summation):** A curly brace on the **right**, grouping multiple items within a single row that point to a single summary value (e.g., a total), indicates the summary cell spans the columns of the grouped items. You must represent the summary cell with the correct `colspan` value. For example, if a 'Total' cell summarizes two preceding cells, it should have `\"colspan\": 2`.\n    **Output Format:** Generate a JSON output containing a root object. The root object will have a key `\"tables\"`, which is a list of detected table objects.\n    **Table Object Structure:** Each object in the `\"tables\"` list must contain:\n        *   `\"box_2d\"`: A list of four integers for the bounding box of the *entire table* `[y_min, x_min, y_max, x_max]`.\n        *   `\"rows\"`: A list of row objects, representing all rows in the table in order.\n    **Row Object Structure:** Each object in the `\"rows\"` list must contain:\n        *   `\"cells\"`: A list of cell objects for that specific row, in column order.\n    **Cell Object Structure:** Each object in the `\"cells\"` list must be a complete representation of a single cell and contain:\n        *   `\"box_2d\"`: A list of four integers for the cell's bounding box `[y_min, x_min, y_max, x_max]`.\n        *   `\"text_content\"`: A string containing the exact text from the cell. Preserve case, spacing, and all characters. This will be an empty string `\"\"` for empty cells.\n        *   `\"row_index\"`: The zero-based index of the row this cell belongs to.\n        *   `\"column_index\"`: The zero-based index of the column this cell belongs to.\n        *   `\"is_header\"`: A boolean value (`true` or `false`) indicating if the cell is part of the table header.\n        *   `\"rowspan\"`: An integer indicating how many rows the cell spans. Default is 1.\n        *   `\"colspan\"`: An integer indicating how many columns the cell spans. Default is 1.\n        *   `\"style\"`: A list of strings for font styles that apply. Possible values include: `\"handwriting\"`, `\"bold\"`, `\"italic\"`. An empty list `[]` if none apply.\n    **Strictness:** Adhere strictly to this hierarchical JSON schema. Do not add extra keys, omit required keys, or deviate from the requested format. The structural integrity of the table grid representation is paramount.",
                     "user_prompt": "<|input|>\\n",
                     "attributes": {},
+                    "filters": {}
+                },
+                {
+                    "id": "0008",
+                    "name": "Default",
+                    "category": "OCR",
+                    "type": "Segmentation",
+                    "system_prompt": "You are a specialized table recognition engine.",
+                    "user_prompt": "<|input|>\\n",
+                    "attributes": {
+                        "prompt_path": "Prompt/TableRecognition-Prompt.txt"
+                    },
                     "filters": {}
                 }
             ]

@@ -7,6 +7,7 @@ from pageplus.cli.gemini import (RecognizeLevel, check_model, check_valid_key, o
                                  show_modeldetails, show_models, show_settings)
 from pageplus.gui.utils.undo import UndoManager
 from pageplus.gui.utils.pipeline_manager import PipelineManager
+from pageplus.stages.table_recognition import TableRecognitionStage
 
 
 class GeminiBridge:
@@ -139,7 +140,6 @@ class GeminiBridge:
             calls_per_minute: int = 150,
             dry_run: bool = False,
             system_prompt: str = None,
-            reocr_system_prompt: str = None,
             overwrite: bool = True,
             recognize_level: str = "TextRegions",
             multi_stage: bool = False,
@@ -165,7 +165,6 @@ class GeminiBridge:
                 calls_per_minute=calls_per_minute,
                 dry_run=dry_run,
                 system_prompt=system_prompt,
-                reocr_system_prompt=reocr_system_prompt,
                 overwrite=overwrite,
                 recognize_level=RecognizeLevel(recognize_level),
                 multi_stage=multi_stage,
@@ -219,6 +218,46 @@ class GeminiBridge:
                 "success": True,
                 "output": "ReOCR completed successfully.",
                 "usage": usage}
+        except Exception as e:
+            return {"success": False, "output": str(e), "usage": None}
+
+    def table_recognition(
+        self,
+        files: List[str],
+        outputdir: str = None,
+        prompt_path: str = None,
+        thinking_budget: int = 0
+    ) -> dict:
+        """Run Table Recognition on files."""
+        try:
+            stage = TableRecognitionStage(prompt_path=prompt_path)
+            usage_list = []
+            
+            # TODO: Multithreading support for TableRecognition? For now single threaded loop.
+            for file_path in files:
+                result = stage.process(
+                    image_path=file_path,
+                    output_dir=outputdir,
+                    thinking_budget=thinking_budget
+                )
+                if not result["success"]:
+                    return {"success": False, "output": result.get("error", "Unknown error")}
+                if "usage" in result:
+                    usage_list.append(result["usage"])
+            
+            # Aggregate usage
+            aggregated_usage = {"prompt_tokens": 0, "candidates_tokens": 0, "total_tokens": 0}
+            for usage in usage_list:
+                aggregated_usage["prompt_tokens"] += getattr(usage, 'prompt_token_count', 0)
+                aggregated_usage["candidates_tokens"] += getattr(usage, 'candidates_token_count', 0)
+                aggregated_usage["total_tokens"] += getattr(usage, 'total_token_count', 0)
+                
+            return {
+                "success": True,
+                "output": "Table Recognition completed successfully.",
+                "usage": usage_list, # List of usages
+                "aggregated_usage": aggregated_usage # Aggregate for UI
+            }
         except Exception as e:
             return {"success": False, "output": str(e), "usage": None}
     
@@ -310,6 +349,24 @@ class GeminiBridge:
                     dry_run=dry_run,
                     overwrite=overwrite,
                     recognize_level=recognize_level
+                )
+            elif category == "TableRecognition":
+                # Assuming system_prompt in stage config could override or path is used
+                # We need to resolve the prompt path. 
+                # If system_prompt is provided in config (loaded from file maybe?), we might need to handle it.
+                # TableRecognitionStage expects a path. Use a default or pass strict prompt.
+                # Ideally, we pass the prompts directory path + filename.
+                
+                # Check attributes for prompt path
+                prompt_path = attributes.get('prompt_path', 'Prompt/TableRecognition-Prompt.txt')
+                # If prompt text is directly in system_prompt, stage needs update to accept text.
+                # Current stage takes path.
+                
+                return self.table_recognition(
+                    files=files,
+                    outputdir=outputdir,
+                    prompt_path=prompt_path,
+                    thinking_budget=thinking_budget
                 )
             else:
                 return {"success": False, "output": f"Unknown category: {category}"}

@@ -436,3 +436,353 @@ def gemini2d_preprocess(
         })
 
     return img_dimensions, region_output
+
+
+def table_json_to_page(data: Dict[str, Any], image_path: Path, offset: Tuple[int, int] = (0, 0)) -> str:
+    """
+    Converts TableRecognition JSON output to PAGE XML.
+    Handles coordinate scaling from JSON (0-1000) to Image absolute + offset.
+    Maps Tables -> TableRegion -> TableCell -> TextLine.
+
+    Args:
+        data: JSON data from Gemini Response.
+        image_path: Path to the image file.
+        offset: (x_offset, y_offset) in pixels to add to coordinates (for cropped processing).
+    
+    Returns:
+        String containing the full PAGE XML.
+    """
+    try:
+        with Image.open(image_path) as img:
+            img_width, img_height = img.size
+    except Exception as e:
+        logging.error(f"Error reading image dimensions: {e}")
+        # Fallback to meta if available, or error
+        if isinstance(data, dict) and "meta" in data and "dim" in data["meta"]:
+            img_height, img_width = data["meta"]["dim"] # JSON is [h, w] usually
+        else:
+             return ""
+
+    page_xml_lines = [
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+        '<PcGts xmlns="http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15" '
+        'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
+        'xsi:schemaLocation="http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15 '
+        'http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15/pagecontent.xsd">',
+        "    <Metadata>",
+        "        <Creator>PagePlus - TableRecognition</Creator>",
+        f"        <Created>{datetime.now().isoformat()}</Created>",
+        "    </Metadata>",
+        f'    <Page imageFilename="{image_path.name}" imageWidth="{img_width}" imageHeight="{img_height}">'
+    ]
+
+    # Handle if data is just the 'tables' list or the root object
+    tables = []
+    if isinstance(data, list):
+        tables = data
+    elif isinstance(data, dict):
+        tables = data.get("tables", [])
+    
+    x_off, y_off = offset
+
+    for t_idx, table in enumerate(tables):
+        table_id = table.get("id", f"t{t_idx}")
+        # Table BBox (0-1000)
+        # JSON format: box_2d [y1, x1, y2, x2] (Gemini style usually) or [min_y, min_x, max_y, max_x] as per prompt
+        # Prompt says: `box_2d` (y1, x1, y2, x2)
+        
+        t_bbox = table.get("box_2d", [0, 0, 1000, 1000])
+        # Validate bbox
+        if len(t_bbox) != 4:
+            t_bbox = [0, 0, 1000, 1000]
+
+        # Convert table bbox to pixels
+        # y1, x1, y2, x2 -> pixels
+        ty1 = (t_bbox[0] / 1000 * img_height) + y_off
+        tx1 = (t_bbox[1] / 1000 * img_width) + x_off
+        ty2 = (t_bbox[2] / 1000 * img_height) + y_off
+        tx2 = (t_bbox[3] / 1000 * img_width) + x_off
+        
+        table_width_px = tx2 - tx1
+        table_height_px = ty2 - ty1
+
+        table_coords = f"{int(tx1)},{int(ty1)} {int(tx2)},{int(ty1)} {int(tx2)},{int(ty2)} {int(tx1)},{int(ty2)}"
+
+        page_xml_lines.append(f'        <TableRegion id="{table_id}">')
+        page_xml_lines.append(f'            <Coords points="{table_coords}"/>')
+
+        # Process Columns Info
+        col_widths = table.get("columns", {}).get("width", [])
+        # col_widths are ratios 0-1.
+        
+        # Process Sections
+        sections = table.get("sections", {})
+        
+        # We need a running Y for rows within the table
+        current_y = ty1
+        
+        row_counter = 0
+
+        # Order: header -> data -> summary (or just iterate sections if ordered dict, but specific keys are safer)
+        # Prompt says: "note" (above cols), "header", "data", "summary"
+        section_order = ["note", "header", "data", "summary"]
+        
+        for sec_name in section_order:
+            rows = sections.get(sec_name, [])
+            if not rows:
+                continue
+                
+            for row in rows:
+                # Row format: [Col1, Col2, ..., HeightRatio]
+                if not row: continue
+                
+                # Height is the last element
+                try:
+                    row_height_ratio = float(row[-1])
+                    cells_content = row[:-1]
+                except (ValueError, IndexError):
+                    # Fallback
+                    row_height_ratio = 0.05
+                    cells_content = row
+
+                row_height_px = row_height_ratio * table_height_px
+                
+                # Calculate Cell Coordinates
+                current_x = tx1
+                
+                # Iterate through cells (columns)
+                # Note: "note" section might not respect columns? 
+                # Prompt: "note" (additional text, if its above all columns, still handle as the other sections and indicate merged cells with -1)
+                # So we treat it as row.
+                
+                # We need to handle horizontal spans (-1)
+                # We group contents by their starting column index
+                
+                merged_cells = [] # list of (start_col_idx, span, content)
+                
+                skip_indices = set()
+                
+                display_col_idx = 0
+                for c_idx, content in enumerate(cells_content):
+                    if c_idx in skip_indices:
+                        continue
+                        
+                    # Check for span
+                    span = 1
+                    # Look ahead for -1
+                    for next_c in range(c_idx + 1, len(cells_content)):
+                        if cells_content[next_c] == -1:
+                            span += 1
+                            skip_indices.add(next_c)
+                        else:
+                            break
+                    
+                    merged_cells.append((display_col_idx, span, content))
+                    display_col_idx += span
+                
+                # Now generate cells
+                row_y1 = current_y
+                row_y2 = current_y + row_height_px
+                
+                # Map logical columns to physical geometry
+                # We need cumulative widths
+                
+                for col_start_idx, span, content in merged_cells:
+                    # Calculate X Width based on col_widths
+                    # If col_widths not enough, assume equal distribution of remaining?
+                    
+                    # Get width for this span
+                    cell_w_ratio = 0
+                    for k in range(span):
+                        eff_idx = col_start_idx + k
+                        if eff_idx < len(col_widths):
+                            cell_w_ratio += col_widths[eff_idx]
+                        else:
+                            # Fallback if no width info: 1.0 / len(cells_content) ?
+                            # Or remaining width / remaining cols?
+                            # Simple fallback:
+                            cell_w_ratio += (1.0 - sum(col_widths)) / (len(cells_content) - len(col_widths)) if (len(cells_content) - len(col_widths)) > 0 else 0.1
+
+                    cell_w_px = cell_w_ratio * table_width_px
+                    
+                    # Calculate X1
+                    # Access cumulative width before col_start_idx
+                    pre_w_ratio = sum(col_widths[:col_start_idx])
+                    # Warning: this assumes col_widths covers everything.
+                    
+                    cell_x1 = tx1 + (pre_w_ratio * table_width_px)
+                    cell_x2 = cell_x1 + cell_w_px
+                    
+                    # Handle Vertical Grouping (Nested Rows)
+                    # Content can be String or List
+                    sub_rows = []
+                    if isinstance(content, list):
+                        sub_rows = content
+                    else:
+                        sub_rows = [content]
+                    
+                    num_sub = len(sub_rows)
+                    if num_sub == 0: num_sub = 1
+                    sub_h = row_height_px / num_sub
+                    
+                    for s_idx, sub_content in enumerate(sub_rows):
+                        # Coordinates for this specific cell (or sub-cell)
+                        cy1 = row_y1 + (s_idx * sub_h)
+                        cy2 = cy1 + sub_h
+                        
+                        cell_coords = f"{int(cell_x1)},{int(cy1)} {int(cell_x2)},{int(cy1)} {int(cell_x2)},{int(cy2)} {int(cell_x1)},{int(cy2)}"
+                        
+                        cell_id = f"{table_id}_r{row_counter}_c{col_start_idx}_s{s_idx}"
+                        
+                        page_xml_lines.append(f'            <TableCell id="{cell_id}" row="{row_counter}" col="{col_start_idx}" rowSpan="{1}" colSpan="{span}">')
+                        page_xml_lines.append(f'                <Coords points="{cell_coords}"/>')
+                        page_xml_lines.append('                <TextLine id="tl_' + cell_id + '">')
+                        page_xml_lines.append(f'                    <Coords points="{cell_coords}"/>')
+                        page_xml_lines.append('                    <TextEquiv>')
+                        page_xml_lines.append(f'                        <Unicode>{escape(str(sub_content))}</Unicode>')
+                        page_xml_lines.append('                    </TextEquiv>')
+                        page_xml_lines.append('                </TextLine>')
+                        page_xml_lines.append('            </TableCell>')
+                
+                # End Row Loop
+                current_y += row_height_px
+                row_counter += 1
+
+        page_xml_lines.append("        </TableRegion>")
+
+    page_xml_lines.append("    </Page>")
+    page_xml_lines.append("</PcGts>")
+    
+    return "\n".join(page_xml_lines)
+
+
+def segmentation_to_page(result: Dict[str, Any], image_path: Path) -> str:
+    """
+    Converts Segmentation JSON output (with 'regions' and 'ro') to PAGE XML.
+    
+    Args:
+        result: JSON data containing 'regions' and 'ro'.
+        image_path: Path to the source image.
+        
+    Returns:
+        String containing the full PAGE XML.
+    """
+    try:
+        with Image.open(image_path) as img:
+            img_width, img_height = img.size
+    except Exception as e:
+        logging.error(f"Error reading image dimensions: {e}")
+        return ""
+
+    page_xml_lines = [
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+        '<PcGts xmlns="http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15" '
+        'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
+        'xsi:schemaLocation="http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15 '
+        'http://schema.primaresearch.org/PAGE/gts/pagecontent/2013-07-15/pagecontent.xsd">',
+        "    <Metadata>",
+        "        <Creator>PagePlus - Segmentation</Creator>",
+        f"        <Created>{datetime.now().isoformat()}</Created>",
+        "    </Metadata>",
+        f'    <Page imageFilename="{image_path.name}" imageWidth="{img_width}" imageHeight="{img_height}">'
+    ]
+
+    # Process Reading Order
+    ro_data = result.get("ro", [])
+    if ro_data:
+        page_xml_lines.append("        <ReadingOrder>")
+        page_xml_lines.append('            <OrderedGroup id="ro_1604576329971" caption="Regions reading order">')
+        
+        # Flatten and index the reading order
+        # The PROMPT says ro can be ["r0", ["r1", "r2"], ...]
+        # Simple implementation: flatten everything into one ordered group for basic compatibility?
+        # Or preserve groups? PageXML allows nested OrderedGroups.
+        # Let's try to preserve the structure if it's nested list.
+        
+        group_counter = 0
+        
+        def process_ro_item(item, index, parent_indent="                "):
+            nonlocal group_counter
+            if isinstance(item, str):
+                # It's a region ref
+                return f'{parent_indent}<RegionRefIndexed index="{index}" regionRef="{item}"/>'
+            elif isinstance(item, list):
+                # It's a group (e.g. valid reading order group, maybe columns or lines)
+                group_id = f"ro_group_{group_counter}"
+                group_counter += 1
+                lines = []
+                lines.append(f'{parent_indent}<OrderedGroup id="{group_id}" caption="Group {group_counter}" index="{index}">')
+                for sub_idx, sub_item in enumerate(item):
+                    lines.append(process_ro_item(sub_item, sub_idx, parent_indent + "    "))
+                lines.append(f'{parent_indent}</OrderedGroup>')
+                return "\n".join(lines)
+            return ""
+
+        for idx, item in enumerate(ro_data):
+            page_xml_lines.append(process_ro_item(item, idx))
+            
+        page_xml_lines.append("            </OrderedGroup>")
+        page_xml_lines.append("        </ReadingOrder>")
+
+    # Process Regions
+    regions = result.get("regions", [])
+    for region in regions:
+        r_id = region.get("id", f"r{regions.index(region)}")
+        r_box = region.get("box_2d", [0, 0, 1000, 1000]) # y1, x1, y2, x2
+        r_type_raw = region.get("type", "Text").lower()
+        r_content = region.get("content", "")
+        r_structure = region.get("structure", "")
+        
+        # Map Type
+        # Common PageXML Types: TextRegion, ImageRegion, TableRegion, SeparatorRegion, GraphicRegion, etc.
+        tag_name = "TextRegion"
+        if "table" in r_type_raw:
+            tag_name = "TableRegion"
+        elif "image" in r_type_raw or "figure" in r_type_raw:
+            tag_name = "ImageRegion"
+        elif "separator" in r_type_raw:
+            tag_name = "SeparatorRegion"
+        elif "formula" in r_type_raw or "math" in r_type_raw:
+            tag_name = "MathsRegion"
+        elif "chart" in r_type_raw:
+            tag_name = "ChartRegion"
+        
+        # Convert coords 0-1000 -> pixels
+        # y1, x1, y2, x2
+        ymin, xmin, ymax, xmax = r_box
+        
+        # Clip to 0-1000 range just in case
+        ymin = max(0, min(1000, ymin))
+        xmin = max(0, min(1000, xmin))
+        ymax = max(0, min(1000, ymax))
+        xmax = max(0, min(1000, xmax))
+        
+        abs_ymin = int((ymin / 1000) * img_height)
+        abs_xmin = int((xmin / 1000) * img_width)
+        abs_ymax = int((ymax / 1000) * img_height)
+        abs_xmax = int((xmax / 1000) * img_width)
+        
+        # Create a simple box polygon
+        coords_str = f"{abs_xmin},{abs_ymin} {abs_xmax},{abs_ymin} {abs_xmax},{abs_ymax} {abs_xmin},{abs_ymax}"
+        
+        # Construct Element
+        custom_attr = ""
+        if r_structure:
+            custom_attr = f' custom="structure {{type:{escape(r_structure)};}}"'
+            
+        page_xml_lines.append(f'    <{tag_name} id="{r_id}"{custom_attr}>')
+        page_xml_lines.append(f'        <Coords points="{coords_str}"/>')
+        
+        # Add content as TextEquiv only for TextRegion and TableRegion (though Table usually has structure)
+        # Assuming "content" is the text content
+        if tag_name in ["TextRegion"] and r_content:
+             page_xml_lines.append('        <TextEquiv>')
+             page_xml_lines.append(f'            <Unicode>{escape(str(r_content))}</Unicode>')
+             page_xml_lines.append('        </TextEquiv>')
+             
+        page_xml_lines.append(f'    </{tag_name}>')
+
+    page_xml_lines.append("    </Page>")
+    page_xml_lines.append("</PcGts>")
+
+    return "\n".join(page_xml_lines)

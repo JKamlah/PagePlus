@@ -602,27 +602,51 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                 process_type = "OCR"  # Default process type
 
                 if config_mode == "🎯 Quick Mode (Single Stage)":
-                    quick_mode_options = ["OCR"]
+                    st.markdown("#### 🎯 Quick Mode Settings")
+                    
+                    # 1. Mode Selection (OCR vs ReOCR)
+                    mode_options = ["OCR"]
                     if any(f.suffix == ".xml" for f in st.session_state.get('loaded_files', [])):
-                        quick_mode_options.append("ReOCR")
-
-                    process_type = st.selectbox(
-                        "Select Process Type",
-                        quick_mode_options,
-                        key="process_type_quick_select"
+                        mode_options.append("ReOCR")
+                    
+                    operation_mode = st.radio(
+                        "Operation Mode",
+                        mode_options,
+                        horizontal=True,
+                        key="quick_mode_operation_mode"
                     )
 
-                    stages = pipeline_manager.get_stages_by_category(process_type)
-                    all_in_one_stages = [s for s in stages if s.get('type') == 'All-in-One']
+                    # 2. Process Selection
+                    # Use keys that match STAGE_TYPES in pipeline_editor.py
+                    process_options = ["All-in-One", "Table Recognition", "Segmentation", "Field-Tagging"]
+                    process_selection = st.selectbox(
+                        "Select Process",
+                        process_options,
+                        key="quick_mode_process_selection"
+                    )
 
-                    if not all_in_one_stages:
-                        st.warning(f"⚠️ No All-in-One {process_type} stages available. Please create one in the Pipeline Editor.")
+                    # 3. Stage Selection
+                    # Logic: 
+                    # - Category = operation_mode (OCR or ReOCR)
+                    # - Type = process_selection
+                    
+                    target_category = operation_mode
+                    stages = pipeline_manager.get_stages_by_category(target_category)
+                    
+                    if process_selection == "All-in-One":
+                         # Allow "Text Recognition" as strictly equivalent/legacy for ReOCR or just general text extraction
+                         stages = [s for s in stages if s.get('type') in ["All-in-One", "Text Recognition"]]
                     else:
-                        stage_options = {f"{s.get('name')} ({s.get('collection')})": s for s in all_in_one_stages}
+                         stages = [s for s in stages if s.get('type') == process_selection]
+
+                    if not stages:
+                        st.warning(f"⚠️ No stages found for Type '{process_selection}' in Category '{operation_mode}'. Please create one in the Pipeline Editor.")
+                    else:
+                        stage_options = {f"{s.get('name')} ({s.get('collection')})": s for s in stages}
                         selected_stage_name = st.selectbox(
-                            f"Select {process_type} Stage",
+                            f"Select {process_selection} Stage",
                             list(stage_options.keys()),
-                            key=f"{process_type.lower()}_quick_stage_select"
+                            key=f"quick_mode_stage_select_{operation_mode}_{process_selection.replace(' ', '_')}"
                         )
                         selected_stages = [stage_options[selected_stage_name]] if selected_stage_name else []
 
@@ -632,14 +656,40 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                                 st.write(f"**Type:** {stage.get('type')}")
                                 st.write(f"**Collection:** {stage.get('collection')}")
 
-                                st.selectbox(
-                                    "Recognize Level",
-                                    options=["Page", "TextRegion", "Textline"],
-                                    index=0,
-                                    key=f"{process_type.lower()}_quick_recognize_level"
-                                )
+                                # Recognize Level Logic
+                                recognize_level_options = ["Page", "TextRegion", "Textline"]
+                                default_index = 0
+                                disabled = False
+                                
+                                if process_selection == "Table Recognition":
+                                    if operation_mode == "OCR":
+                                        recognize_level_options = ["Page"]
+                                        default_index = 0
+                                        disabled = True # Force Page
+                                        st.info("ℹ️ Table Recognition in OCR mode requires 'Page' level.")
+                                    elif operation_mode == "ReOCR":
+                                        recognize_level_options = ["TableRegion"] 
+                                        default_index = 0
+                                        disabled = True
+                                        st.info("ℹ️ Table Recognition in ReOCR mode requires 'TableRegion' level.")
+                                
+                                # General default if not Table Rec
+                                elif operation_mode == "ReOCR" and not disabled:
+                                    # Default to TextRegion for ReOCR usually?
+                                    if "TextRegion" in recognize_level_options:
+                                         default_index = recognize_level_options.index("TextRegion")
 
-                                if process_type == "ReOCR":
+                                recognize_level = st.selectbox(
+                                    "Recognize Level",
+                                    options=recognize_level_options,
+                                    index=default_index,
+                                    disabled=disabled,
+                                    key=f"quick_recognize_level_{operation_mode}_{process_selection.replace(' ', '_')}"
+                                )
+                                # Store for execution
+                                st.session_state['selected_recognize_level'] = recognize_level
+
+                                if operation_mode == "ReOCR":
                                     st.multiselect(
                                         "Update Elements",
                                         options=["Text", "Tags"],
@@ -652,7 +702,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                                     value=stage.get('system_prompt', ''),
                                     height=100,
                                     disabled=True,
-                                    key=f"{process_type.lower()}_quick_prompt_display"
+                                    key=f"quick_prompt_display_{operation_mode}_{process_selection.replace(' ', '_')}"
                                 )
                 else:  # Pipeline Mode
                     st.info("Pipeline mode selected. Currently only OCR pipelines are supported in this view.")
@@ -686,17 +736,30 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                     dry_run_multi = st.checkbox("Dry run", key="processing_dry_run")
                     overwrite_multi = st.checkbox("Overwrite", key="processing_overwrite", value=True)
 
-                    recognize_level = st.session_state.get(f'{process_type.lower()}_quick_recognize_level', 'TextRegion')
+                    if config_mode == "🎯 Quick Mode (Single Stage)":
+                        # Use our new variables
+                        current_mode = operation_mode
+                        current_process = process_selection
+                        recognize_level = st.session_state.get('selected_recognize_level', 'TextRegion')
+                    else:
+                         # Pipeline mode defaults
+                         current_mode = "OCR" # Pipeline mode currently only OCR
+                         current_process = "Pipeline"
+                         recognize_level = "TextRegion" # Default might need adjustment for pipeline
+
                     update_elements = ["Text", "Tags"]  # Default
-                    if process_type == "ReOCR":
+                    if current_mode == "ReOCR":
                         update_elements = st.session_state.get('reocr_quick_update_elements', ["Text", "Tags"])
 
                     terminal_container = st.empty()
                     terminal_text = terminal_container.text_area("Process Terminal", value="", height=200, disabled=True, key="terminal_output_display_initial_process")
+                    
+                    # Update button text to reflect what we are doing
+                    run_label = f"Run {current_mode} ({current_process})"
 
-                    if st.button(f"Run multithreaded {process_type}", key=f"run_multithreaded_{process_type.lower()}_button"):
+                    if st.button(run_label, key=f"run_multithreaded_button"):
                         if not selected_stages:
-                            st.error("No stages selected. Please configure pipeline first.")
+                            st.error("No stages selected. Please configure pipeline/stage first.")
                         else:
                             first_stage = selected_stages[0]
                             system_prompt_selected = first_stage.get('system_prompt', '')
@@ -705,12 +768,12 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                             thinking_budget = stage_attributes.get('thinking_budget', thinking_budget_val)
 
                             current_model_output = bridge.show_model().get('output', 'N/A')
-                            terminal_container.text_area("Process Terminal", value=f"Starting {process_type} process with {current_model_output}...", height=200, disabled=True, key="terminal_output_clear_process")
+                            terminal_container.text_area("Process Terminal", value=f"Starting {current_mode} process with {current_model_output}...", height=200, disabled=True, key="terminal_output_clear_process")
 
                             output_queue = queue.Queue()
                             output_buffer = StringIO()
 
-                            with st.spinner(f"Running {process_type}...", show_time=True):
+                            with st.spinner(f"Running {current_mode}...", show_time=True):
                                 result_container = {"result": None}
 
                                 def run_process():
@@ -721,7 +784,8 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                                     main_output_message = ""
 
                                     try:
-                                        if process_type == "OCR":
+                                        if current_mode == "OCR":
+                                            # We use OCR engine for All-in-One OCR, TableRec OCR, etc.
                                             result_data = bridge.ocr_multithread(
                                                 files=selected_files_for_ocr,
                                                 outputdir=st.session_state.get('modification_dir'),
@@ -734,7 +798,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                                                 multi_stage=(config_mode != "🎯 Quick Mode (Single Stage)"),
                                                 thinking_budget=thinking_budget
                                             )
-                                        elif process_type == "ReOCR":
+                                        elif current_mode == "ReOCR":
                                             stage_filters = {**first_stage.get('filters', {}), **first_stage.get('override_filters', {})}
                                             update_elements_stage = stage_filters.get('update_elements', update_elements)
                                             result_data = bridge.reocr_multithread(
@@ -754,6 +818,14 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                                                 dry_run=dry_run_multi,
                                                 overwrite=overwrite_multi
                                             )
+                                        # Eliminated independent TableRecognition block essentially, 
+                                        # as we are now treating it as OCR/ReOCR with a specific prompt
+                                        # But if we really need to support the old single-thread standalone way 
+                                        # (which had TableRecStage), we could check current_process logic.
+                                        # However, user request implies unification or at least UI integration.
+                                        # The Implementation Plan assumed using ocr_multithread.
+                                        # If the prompt is passed to ocr_multithread, it acts as TableRec if the prompt is designed for it.
+                                        pass
 
                                         if isinstance(result_data, dict) and "usage" in result_data:
                                             overall_success = result_data.get("success", True)
@@ -761,15 +833,15 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                                             usage_data_list = result_data.get('usage')
                                             if usage_data_list and isinstance(usage_data_list, list):
                                                 for usage_meta in usage_data_list:
-                                                    aggregated_usage["prompt_tokens"] += usage_meta.get('prompt_token_count', 0)
-                                                    aggregated_usage["candidates_tokens"] += usage_meta.get('candidates_token_count', 0)
-                                                    aggregated_usage["total_tokens"] += usage_meta.get('total_token_count', 0)
+                                                    aggregated_usage["prompt_tokens"] += usage_meta.prompt_token_count
+                                                    aggregated_usage["candidates_tokens"] += usage_meta.candidates_token_count
+                                                    aggregated_usage["total_tokens"] += usage_meta.total_token_count
                                         else:
                                             main_output_message = f"Multithreaded {process_type} process returned an unexpected data type."
                                             overall_success = False
 
                                     except Exception as e:
-                                        main_output_message = f"Error during {process_type} processing: {str(e)}"
+                                        main_output_message = f"Error during {current_mode} ({current_process}) processing: {str(e)}"
                                         print(main_output_message)
                                         overall_success = False
                                     finally:

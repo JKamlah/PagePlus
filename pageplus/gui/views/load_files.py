@@ -102,33 +102,6 @@ class LoadFilesPage:
 
     def _show_add_files_tab(self):
         """Show the tab for adding files."""
-        # System file loading
-        with st.expander("🖥️ System Files", expanded=True):
-            st.markdown("Load files from anywhere on your system")
-            col1, col2 = st.columns(2)
-
-            with col1:
-                if st.button("📁 Add Directory", key="add_dir", use_container_width=True):
-                    selected_paths = pick_directory()
-                    if selected_paths:
-                        self.load_xml_files(
-                            [Path(selected_paths)],
-                            from_directory=True
-                        )
-                    elif selected_paths is not None:
-                        st.info("Directory selection cancelled.")
-
-            with col2:
-                if st.button("📄 Add Files", key="add_files", use_container_width=True):
-                    selected_paths = pick_files()
-                    if selected_paths:
-                        self.load_xml_files(
-                            [Path(p) for p in selected_paths],
-                            from_directory=False
-                        )
-                    elif selected_paths is not None:
-                        st.info("File selection cancelled.")
-
         # Workspace file loading
         with st.expander("🗂️ Workspace Files", expanded=True):
             st.markdown("Load files from your PagePlus workspaces")
@@ -193,6 +166,34 @@ class LoadFilesPage:
                                 [Path(p) for p in selected_paths],
                                 from_directory=False
                             )
+        # System file loading
+        with st.expander("🖥️ System Files", expanded=True):
+            st.markdown("Load files from anywhere on your system")
+            col1, col2 = st.columns(2)
+
+            with col1:
+                if st.button("📁 Add Directory", key="add_dir", use_container_width=True):
+                    selected_paths = pick_directory()
+                    if selected_paths:
+                        self.load_xml_files(
+                            [Path(selected_paths)],
+                            from_directory=True
+                        )
+                    elif selected_paths is not None:
+                        st.info("Directory selection cancelled.")
+
+            with col2:
+                if st.button("📄 Add Files", key="add_files", use_container_width=True):
+                    selected_paths = pick_files()
+                    if selected_paths:
+                        self.load_xml_files(
+                            [Path(p) for p in selected_paths],
+                            from_directory=False
+                        )
+                    elif selected_paths is not None:
+                        st.info("File selection cancelled.")
+
+
 
     def _show_manage_files_tab(self):
         """Show the tab for managing loaded files."""
@@ -485,13 +486,12 @@ class LoadFilesPage:
                 newly_added_files = []
 
                 if from_directory:
-                    found_files = collect_xml_files(paths_to_process)
-                else:
-                    found_files = [
-                        f for f in paths_to_process
-                        if f.is_file() and f.suffix.lower() == ".xml"
-                    ]
-
+                    for page_folder in ['', 'page', 'page-xml', 'page_xml', 'PAGE', 'PAGE-XML', 'PAGE_XML']:
+                        current_paths = [p.joinpath(page_folder) for p in paths_to_process if p.joinpath(page_folder).is_dir()] if page_folder != '' else paths_to_process
+                        if current_paths:
+                            found_files = collect_xml_files(current_paths)
+                            if found_files:
+                                break
                 existing_paths_str = {
                     str(f) for f in st.session_state.loaded_files
                 }
