@@ -187,7 +187,25 @@ def load_gemini2d_json(json_path: [str | Path]) -> List[dict]:
 # --- Generate PAGE XML Content (remains the same) ---
 
 
-def gemini2d_to_page(data: dict, image: Path, settings: dict = None) -> str:
+def gemini2d_to_page(
+    data: dict,
+    image: Path,
+    settings: dict = None,
+    use_bbox_fallback: bool = True
+) -> str:
+    """
+    Converts Gemini 2D JSON data to PAGE XML format.
+
+    Args:
+        data: JSON object containing bounding box and text data.
+        image: Path to the image file.
+        settings: Optional settings dict (can include 'use_bbox_fallback').
+        use_bbox_fallback: If True, use previous bbox with offset for entries without bbox.
+                           Default is True. Can be overridden by settings dict.
+
+    Returns:
+        String containing the full PAGE XML.
+    """
     try:
         with Image.open(image) as img:
             img_width, img_height = img.size
@@ -199,7 +217,14 @@ def gemini2d_to_page(data: dict, image: Path, settings: dict = None) -> str:
         logging.error(f"Error opening or reading image '{image}': {e}")
         return ""
 
-    _, data = gemini2d_preprocess(data, img, settings)
+    # Merge settings dict with direct parameter (direct param takes precedence)
+    if settings is None:
+        settings = {}
+    settings_for_preprocess = settings.copy()
+    if 'use_bbox_fallback' not in settings_for_preprocess:
+        settings_for_preprocess['use_bbox_fallback'] = use_bbox_fallback
+
+    _, data = gemini2d_preprocess(data, img, settings_for_preprocess)
 
     page_xml_lines = [
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
@@ -248,7 +273,8 @@ def gemini2d_to_page(data: dict, image: Path, settings: dict = None) -> str:
 def gemini2d_preprocess(
     data: json,
     img: Image.Image,
-    settings: dict = None
+    settings: dict = None,
+    use_bbox_fallback: bool = True
 ) -> Tuple[Optional[Tuple[int, int]], List[Dict[str, Any]]]:
     """
     Reads JSON bounding box data (relative 0-1000), calculates absolute line
@@ -257,6 +283,9 @@ def gemini2d_preprocess(
     Args:
         data (json): JSON object.
         img (Image.Image): Pillow Image object.
+        settings (dict): Optional settings dict.
+        use_bbox_fallback (bool): If True, use previous bbox with offset for entries without bbox.
+                                   Default is True.
 
     Returns:
         Tuple:
@@ -282,6 +311,14 @@ def gemini2d_preprocess(
     secondary_text_key = 'text_content'
     structure_type_key = 'type'
     secondary_structure_type_key = 'tag'
+
+    # Check settings for bbox_fallback preference
+    if settings and 'use_bbox_fallback' in settings:
+        use_bbox_fallback = settings['use_bbox_fallback']
+
+    # Track the last valid bbox for entries without bounding boxes
+    last_valid_bbox = None
+    height_offset = 30  # pixels to add to height for entries without bbox
 
     for i, entry in enumerate(data):
         if not isinstance(entry, dict):
@@ -309,12 +346,37 @@ def gemini2d_preprocess(
                 secondary_structure_type_key,
                 "paragraph")
 
+            # Handle missing or invalid bbox by using previous valid bbox with offset
             if not relative_bbox or len(relative_bbox) != 4:
-                logging.warning(
-                    f"Skipping entry {i} due to missing or invalid bbox: {relative_bbox}")
-                continue
+                if use_bbox_fallback and last_valid_bbox is not None:
+                    # Use previous bbox with +30 height offset
+                    logging.info(
+                        f"Entry {i} missing bbox, using previous bbox with +{height_offset}px height offset")
+                    ymin_rel, xmin_rel, ymax_rel, xmax_rel = last_valid_bbox
 
-            ymin_rel, xmin_rel, ymax_rel, xmax_rel = relative_bbox
+                    # Convert to pixels to check canvas bounds
+                    ymax_abs_check = ceil(ymax_rel * img_height / 1000)
+                    new_ymax_abs = ymax_abs_check + height_offset
+
+                    # Only add offset if within image canvas
+                    if new_ymax_abs < img_height:
+                        # Add offset in relative coordinates (0-1000 scale)
+                        height_offset_rel = (height_offset / img_height) * 1000
+                        ymax_rel = min(1000, ymax_rel + height_offset_rel)
+                    # else: use exact same coordinates (no offset)
+                else:
+                    if use_bbox_fallback:
+                        logging.warning(
+                            f"Skipping entry {i} due to missing bbox and no previous bbox available")
+                    else:
+                        logging.warning(
+                            f"Skipping entry {i} due to missing or invalid bbox (bbox_fallback is disabled)")
+                    continue
+            else:
+                ymin_rel, xmin_rel, ymax_rel, xmax_rel = relative_bbox
+
+            # Store this as the last valid bbox for future entries
+            last_valid_bbox = (ymin_rel, xmin_rel, ymax_rel, xmax_rel)
             xmin_abs = ceil(xmin_rel * img_width / 1000)
             ymin_abs = ceil(ymin_rel * img_height / 1000)
             xmax_abs = ceil(xmax_rel * img_width / 1000)
