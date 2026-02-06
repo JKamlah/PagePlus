@@ -22,7 +22,9 @@ def gemini2d(
         resolve_path=True
     )],  # Default to checking alongside JSON
     dry_run: Annotated[bool, typer.Option(
-        help="If True, the function will not write any files.")] = False
+        help="If True, the function will not write any files.")] = False,
+    use_bbox_fallback: Annotated[bool, typer.Option(
+        help="Use previous bbox with +30px offset for entries without bbox. Default from settings.")] = None
 ):
     """
     Converts line data from JSON files (relative 0-1000 bboxes) to PAGE XML.
@@ -45,7 +47,8 @@ def gemini2d(
     data = load_gemini2d_json(json_file)
 
     # Process JSON and Get Line Data (using updated function)
-    xml_content = gemini2d_to_page(data, image)
+    # Pass use_bbox_fallback parameter - will use global settings if None
+    xml_content = gemini2d_to_page(data, image, use_bbox_fallback=use_bbox_fallback)
 
     if not dry_run:
         try:

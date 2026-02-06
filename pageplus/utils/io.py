@@ -191,7 +191,7 @@ def gemini2d_to_page(
     data: dict,
     image: Path,
     settings: dict = None,
-    use_bbox_fallback: bool = True
+    use_bbox_fallback: bool = None
 ) -> str:
     """
     Converts Gemini 2D JSON data to PAGE XML format.
@@ -201,7 +201,8 @@ def gemini2d_to_page(
         image: Path to the image file.
         settings: Optional settings dict (can include 'use_bbox_fallback').
         use_bbox_fallback: If True, use previous bbox with offset for entries without bbox.
-                           Default is True. Can be overridden by settings dict.
+                           Default is None (reads from global Settings).
+                           Can be overridden by settings dict.
 
     Returns:
         String containing the full PAGE XML.
@@ -217,12 +218,30 @@ def gemini2d_to_page(
         logging.error(f"Error opening or reading image '{image}': {e}")
         return ""
 
-    # Merge settings dict with direct parameter (direct param takes precedence)
+    # Determine the final use_bbox_fallback value with priority:
+    # 1. Direct parameter (if not None)
+    # 2. Settings dict
+    # 3. Global Settings class
+    if use_bbox_fallback is None:
+        # Check if provided in settings dict
+        if settings and 'use_bbox_fallback' in settings:
+            use_bbox_fallback = settings['use_bbox_fallback']
+        else:
+            # Fall back to global Settings
+            try:
+                from pageplus.gui.utils.settings import Settings
+                global_settings = Settings()
+                fallback_str = global_settings.get('USE_BBOX_FALLBACK', 'True')
+                use_bbox_fallback = fallback_str.lower() in ('true', '1', 'yes', 'on')
+            except Exception:
+                # If Settings class is not available, default to True
+                use_bbox_fallback = True
+
+    # Merge settings dict with the determined value
     if settings is None:
         settings = {}
     settings_for_preprocess = settings.copy()
-    if 'use_bbox_fallback' not in settings_for_preprocess:
-        settings_for_preprocess['use_bbox_fallback'] = use_bbox_fallback
+    settings_for_preprocess['use_bbox_fallback'] = use_bbox_fallback
 
     _, data = gemini2d_preprocess(data, img, settings_for_preprocess)
 

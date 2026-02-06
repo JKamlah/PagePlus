@@ -99,6 +99,7 @@ from pageplus.gui.views import (
     settings as settings_view,
     iiif
 )
+from pageplus.gui.views import flow_editor
 from pageplus.gui.cli_bridges.gemini import GeminiBridge
 from pageplus.gui.cli_bridges.escriptorium import EscriptoriumBridge
 from pageplus.gui.cli_bridges.transkribus import TranskribusBridge
@@ -262,7 +263,7 @@ def main():
     kraken_configured = get_kraken_python_path() is not None
 
     main_pages = ["✨ Home", "🗂️ Workspace", "📂 Input", "🖼️ Viewer", "🔍 Analytics", "📝 Guidelines", "✅ Validation",
-                  "📊 Evaluation", "🛠️ Modification", "🌟 Gemini", "📤 Export",
+                  "📊 Evaluation", "🛠️ Modification", "🌟 Gemini", "🔀 Flow Editor", "📤 Export",
                   "⚙️ Settings"]
 
     # Add OCR pages if configured/activated
@@ -337,6 +338,8 @@ def main():
         kraken.show_kraken(st.session_state.bridges['kraken'])
     elif page == "🌟 Gemini":
         gemini.show_gemini(st.session_state.bridges['gemini'])
+    elif page == "🔀 Flow Editor":
+        flow_editor.flow_editor_view()
     elif page == "📤 Export":
         if not st.session_state.loaded_files:
             st.warning("Please load files first in the 'Input' page.")
@@ -412,30 +415,31 @@ def show_home():
     )
     st.header("✨ Welcome to PagePlus ✨")
     st.write("""
-    This is the GUI interface for PagePlus, a PAGE-XML file multi-tool.  
+    This is the GUI interface for PagePlus, a PAGE-XML file multi-tool.
     Disclaimer: A lot of the functionality is still under development and results should be checked carefully.
 
-    Use the sidebar to navigate between different sections:  
-    📂 Input: Load PAGE-XML files to process  
-    🖼️ Viewer: View PAGE-XML files with images  
-    🔍 Analytics: Analyze the content of PAGE-XML files  
-    📜 Guidelines: Evaluate and normalize text based on guideline profiles  
-    ✅ Validation: Validate PAGE-XML files  
-    📊 Evaluation: Evaluate PAGE-XML files  
-    🛠️ Modification: Modify processed documents  
-    🤖 LLM: Perform different tasks on PAGE-XML files with LLMs  
-    🌟 Gemini: Use Gemini to process images and validate PAGE-XML output  
-    🔤 Tesseract OCR: Do OCR on PAGE-XML files with Tesseract (if activated)  
-    🐙 Kraken OCR: Do OCR on PAGE-XML files with Kraken (if activated)  
-    📤 Export: Export PAGE-XML files to different formats (ALTO, PDF, Text)  
-    🗂️ Workspace: Manage workspaces  
+    Use the sidebar to navigate between different sections:
+    📂 Input: Load PAGE-XML files to process
+    🖼️ Viewer: View PAGE-XML files with images
+    🔍 Analytics: Analyze the content of PAGE-XML files
+    📜 Guidelines: Evaluate and normalize text based on guideline profiles
+    ✅ Validation: Validate PAGE-XML files
+    📊 Evaluation: Evaluate PAGE-XML files
+    🛠️ Modification: Modify processed documents
+    🤖 LLM: Perform different tasks on PAGE-XML files with LLMs
+    🌟 Gemini: Use Gemini to process images and validate PAGE-XML output
+    🔀 Flow Editor: Build complex workflows with visual node editor
+    🔤 Tesseract OCR: Do OCR on PAGE-XML files with Tesseract (if activated)
+    🐙 Kraken OCR: Do OCR on PAGE-XML files with Kraken (if activated)
+    📤 Export: Export PAGE-XML files to different formats (ALTO, PDF, Text)
+    🗂️ Workspace: Manage workspaces
     ⚙️ Settings: Configure application settings
 
-    External Resources:  
-    📜 eScriptorium: Work with eScriptorium  
-    🐇 Transkribus: Work with Transkribus  
-    🏛️ METS Tools: Work with METS/MODS files   
-    📑 IIIF: Download images from IIIF manifests  
+    External Resources:
+    📜 eScriptorium: Work with eScriptorium
+    🐇 Transkribus: Work with Transkribus
+    🏛️ METS Tools: Work with METS/MODS files
+    📑 IIIF: Download images from IIIF manifests
     """)
 
 

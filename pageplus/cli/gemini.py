@@ -355,7 +355,7 @@ else:
                         with output_path.open("w", encoding="utf-8") as jf:
                             json.dump(data, jf, indent=4, ensure_ascii=False)
                         if create_page:
-                            xml_content = gemini2d_to_page(data, image_path)
+                            xml_content = gemini2d_to_page(data, image_path, use_bbox_fallback=use_bbox_fallback)
                             output_path = outputdir.joinpath(
                                 "page/").joinpath(image_path.with_suffix('.xml').name)
                             output_path.parent.mkdir(
@@ -400,7 +400,8 @@ def ocr_single_image(
         dry_run=False,
         retries=1,
         overwrite=True,
-        thinking_budget=0):
+        thinking_budget=0,
+        use_bbox_fallback=None):
     attempt = 0
     while attempt <= retries:
         rate_limit(calls_per_minute)
@@ -451,7 +452,7 @@ def ocr_single_image(
                     if isinstance(data, dict) and "regions" in data:
                         xml_content = segmentation_to_page(data, image_path)
                     else:
-                        xml_content = gemini2d_to_page(data, image_path)
+                        xml_content = gemini2d_to_page(data, image_path, use_bbox_fallback=use_bbox_fallback)
                     output_path = outputdir_path.joinpath(
                         "page/").joinpath(image_path.with_suffix('.xml').name)
                     output_path.parent.mkdir(exist_ok=True, parents=True)
