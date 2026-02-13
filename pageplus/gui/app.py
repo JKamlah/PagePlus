@@ -415,31 +415,31 @@ def show_home():
     )
     st.header("✨ Welcome to PagePlus ✨")
     st.write("""
-    This is the GUI interface for PagePlus, a PAGE-XML file multi-tool.
+    This is the GUI interface for PagePlus, a PAGE-XML file multi-tool.  
     Disclaimer: A lot of the functionality is still under development and results should be checked carefully.
-
-    Use the sidebar to navigate between different sections:
-    📂 Input: Load PAGE-XML files to process
-    🖼️ Viewer: View PAGE-XML files with images
-    🔍 Analytics: Analyze the content of PAGE-XML files
-    📜 Guidelines: Evaluate and normalize text based on guideline profiles
-    ✅ Validation: Validate PAGE-XML files
-    📊 Evaluation: Evaluate PAGE-XML files
-    🛠️ Modification: Modify processed documents
-    🤖 LLM: Perform different tasks on PAGE-XML files with LLMs
-    🌟 Gemini: Use Gemini to process images and validate PAGE-XML output
-    🔀 Flow Editor: Build complex workflows with visual node editor
-    🔤 Tesseract OCR: Do OCR on PAGE-XML files with Tesseract (if activated)
-    🐙 Kraken OCR: Do OCR on PAGE-XML files with Kraken (if activated)
-    📤 Export: Export PAGE-XML files to different formats (ALTO, PDF, Text)
-    🗂️ Workspace: Manage workspaces
-    ⚙️ Settings: Configure application settings
-
-    External Resources:
-    📜 eScriptorium: Work with eScriptorium
-    🐇 Transkribus: Work with Transkribus
-    🏛️ METS Tools: Work with METS/MODS files
-    📑 IIIF: Download images from IIIF manifests
+  
+    Use the sidebar to navigate between different sections:  
+    📂 Input: Load PAGE-XML files to process  
+    🖼️ Viewer: View PAGE-XML files with images  
+    🔍 Analytics: Analyze the content of PAGE-XML files  
+    📜 Guidelines: Evaluate and normalize text based on guideline profiles  
+    ✅ Validation: Validate PAGE-XML files  
+    📊 Evaluation: Evaluate PAGE-XML files  
+    🛠️ Modification: Modify processed documents  
+    🤖 LLM: Perform different tasks on PAGE-XML files with LLMs  
+    🌟 Gemini: Use Gemini to process images and validate PAGE-XML output  
+    🔀 Flow Editor: Build complex workflows with visual node editor  
+    🔤 Tesseract OCR: Do OCR on PAGE-XML files with Tesseract (if activated)  
+    🐙 Kraken OCR: Do OCR on PAGE-XML files with Kraken (if activated)  
+    📤 Export: Export PAGE-XML files to different formats (ALTO, PDF, Text)  
+    🗂️ Workspace: Manage workspaces  
+    ⚙️ Settings: Configure application settings  
+  
+    External Resources:  
+    📜 eScriptorium: Work with eScriptorium  
+    🐇 Transkribus: Work with Transkribus  
+    🏛️ METS Tools: Work with METS/MODS files  
+    📑 IIIF: Download images from IIIF manifests  
     """)
 
 

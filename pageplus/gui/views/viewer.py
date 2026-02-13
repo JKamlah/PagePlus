@@ -161,10 +161,11 @@ def line_detail_dialog(all_lines: list, image: Image.Image, start_index: int, pa
 
     if b_col4.button("Save & Close"):
         auto_save()
+        # Clear selection BEFORE rerun to prevent dialog from reopening
+        st.session_state.line_editor['selection']['rows'] = []
         st.session_state.page.save_xml(xml_path)
         st.session_state.lines = None
         st.session_state.page = None
-        st.session_state.line_editor['selection']['rows'] = []
         if 'current_line_index' in st.session_state:
             del st.session_state.current_line_index
         if 'start_index' in st.session_state:
@@ -321,6 +322,13 @@ def show_viewer():
     # --- State management for selected file ---
     if 'viewer_selected_xml' not in st.session_state or st.session_state.viewer_selected_xml not in xml_display_options:
         st.session_state.viewer_selected_xml = None
+
+    # Clear line editor selection when file changes (to prevent wrong file being opened in dialog)
+    if ('viewer_selected_xml_prev' not in st.session_state or
+        st.session_state.viewer_selected_xml_prev != st.session_state.viewer_selected_xml):
+        if 'line_editor' in st.session_state:
+            st.session_state.line_editor['selection']['rows'] = []
+        st.session_state.viewer_selected_xml_prev = st.session_state.viewer_selected_xml
 
     # Find the index of the currently selected file
     current_file_index = None

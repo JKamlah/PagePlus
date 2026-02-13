@@ -157,10 +157,11 @@ def _initialize_node_types():
     ))
 
     # Modification nodes with subcategories
-    # Format & Metadata
+    # Format & Metadata (from modification view Tab 1)
     mod_format_metadata = [
-        ("mod_replace_tags", "🏷️", "Replace Tags", "Replace element tags"),
-        ("mod_remove_tags", "🚫", "Remove Tags", "Remove element tags"),
+        ("mod_set_page_version", "📄", "Set PAGE Version", "Update PAGE XML version"),
+        ("mod_set_metadata", "📝", "Set Metadata", "Update file metadata"),
+        ("mod_reassign_ids", "🔄", "Reassign IDs", "Reassign element IDs"),
     ]
     for node_id, icon, label, desc in mod_format_metadata:
         register_node_type(NodeType(
@@ -172,18 +173,53 @@ def _initialize_node_types():
             description=desc,
             sub_category="format_metadata"
         ))
+    # Text-Attributes (from modification view Tab 2)
+    mod_text_attributes = [
+        ("mod_replace_tags", "🏷️", "Replace Tags", "Replace element tags"),
+        ("mod_remove_tags", "🚫", "Remove Tags", "Remove element tags"),
+    ]
+    for node_id, icon, label, desc in mod_text_attributes:
+        register_node_type(NodeType(
+            id=node_id,
+            label=label,
+            icon=icon,
+            color="#9C27B0",
+            category="modification",
+            description=desc,
+            sub_category="text_attributes"
+        ))
+    
+    # Text-Content (from modification view Tab 3)
+    mod_text_content = [
+        ("mod_delete_text", "🗑️", "Delete Text", "Delete text content only"),
+    ]
+    for node_id, icon, label, desc in mod_text_content:
+        register_node_type(NodeType(
+            id=node_id,
+            label=label,
+            icon=icon,
+            color="#9C27B0",
+            category="modification",
+            description=desc,
+            sub_category="text_content"
+        ))
+    
 
-    # Geometry & Layout
-    mod_geometry_layout = [
+    # Text-Layout (from modification view Tab 2)
+    mod_text_layout = [
+        ("mod_remove_empty", "🧹", "Remove Empty", "Remove empty text levels"),
+        ("mod_delete_textlines", "🗑️", "Delete Textlines", "Delete textlines with content"),
         ("mod_translate_lines", "↔️", "Translate Lines", "Translate line coordinates"),
         ("mod_extend_lines", "↔️", "Extend Lines", "Extend line boundaries"),
         ("mod_rectangularize", "⬜", "Rectangularize", "Make regions rectangular"),
         ("mod_reduce_points", "📉", "Reduce Points", "Simplify polygon boundaries"),
         ("mod_simplify_polygon", "📉", "Simplify Polygon", "Simplify polygon"),
+        ("mod_pseudoline_polygon", "📐", "Pseudoline Polygon", "Generate pseudo-line polygons"),
+        ("mod_recalculate_polygon", "♻️", "Recalculate Polygon", "Recalculate TextRegion polygon"),
         ("mod_fit_into_parent", "📐", "Fit Into Parent", "Fit elements into parent boundaries"),
-        ("mod_split_big_regions", "✂️", "Split Big Regions", "Split large regions"),
+        ("mod_match_textlines", "🔗", "Match Textlines", "Match textlines to regions"),
     ]
-    for node_id, icon, label, desc in mod_geometry_layout:
+    for node_id, icon, label, desc in mod_text_layout:
         register_node_type(NodeType(
             id=node_id,
             label=label,
@@ -191,17 +227,34 @@ def _initialize_node_types():
             color="#9C27B0",
             category="modification",
             description=desc,
-            sub_category="geometry_layout"
+            sub_category="text_layout"
         ))
 
-    # Merging & Sorting
-    mod_merging_sorting = [
-        ("mod_merge_regions", "🔗", "Merge Regions", "Merge overlapping regions"),
+    # Merging & Splitting (from modification view Tab 2 continued)
+    mod_merging_splitting = [
+        ("mod_top_tier_region", "🏔️", "Top Tier Region", "Create top-tier region"),
         ("mod_merge_column_aligned", "📊", "Merge Column-Aligned", "Merge column-aligned regions"),
-        ("mod_sort_regions", "🔢", "Sort Regions", "Sort regions in reading order"),
+        ("mod_split_big_regions", "✂️", "Split Big Regions", "Split large regions"),
+        ("mod_merge_regions", "🔗", "Merge Regions", "Merge overlapping regions"),
+    ]
+    for node_id, icon, label, desc in mod_merging_splitting:
+        register_node_type(NodeType(
+            id=node_id,
+            label=label,
+            icon=icon,
+            color="#9C27B0",
+            category="modification",
+            description=desc,
+            sub_category="merging_splitting"
+        ))
+
+    # Sorting (from modification view Tab 2 continued)
+    mod_sorting = [
+        ("mod_sort", "🔢", "Sort", "Sort textlines per region"),
         ("mod_sort_and_merge", "🔢", "Sort and Merge", "Sort and merge textlines"),
+        ("mod_sort_regions", "🔢", "Sort Regions", "Sort regions in reading order"),
     ]
-    for node_id, icon, label, desc in mod_merging_sorting:
+    for node_id, icon, label, desc in mod_sorting:
         register_node_type(NodeType(
             id=node_id,
             label=label,
@@ -209,31 +262,13 @@ def _initialize_node_types():
             color="#9C27B0",
             category="modification",
             description=desc,
-            sub_category="merging_sorting"
+            sub_category="sorting"
         ))
 
-    # Content Editing
-    mod_content_editing = [
-        ("mod_remove_empty", "🧹", "Remove Empty", "Remove empty text levels"),
-        ("mod_delete_text", "🗑️", "Delete Text", "Delete text content"),
-        ("mod_delete_textlines", "🗑️", "Delete Textlines", "Delete textlines"),
-    ]
-    for node_id, icon, label, desc in mod_content_editing:
-        register_node_type(NodeType(
-            id=node_id,
-            label=label,
-            icon=icon,
-            color="#9C27B0",
-            category="modification",
-            description=desc,
-            sub_category="content_editing"
-        ))
-
-    # Structure Repair
+    # Structure Repair (from modification view Tab 5)
     mod_structure_repair = [
         ("mod_repair", "🔧", "Repair", "Repair PAGE-XML structure"),
         ("mod_repair_dummy", "🔧", "Repair Dummy", "Repair dummy regions"),
-        ("mod_top_tier_region", "🏔️", "Top Tier Region", "Create top-tier region"),
     ]
     for node_id, icon, label, desc in mod_structure_repair:
         register_node_type(NodeType(
@@ -246,13 +281,11 @@ def _initialize_node_types():
             sub_category="structure_repair"
         ))
 
-    # Gemini processing nodes
+    # Gemini processing nodes - only quick mode (All-in-One) and ReOCR available
+    # For other process types (Segmentation, Field-Tagging, Table Recognition), use pipelines
     gemini_nodes = [
-        ("gemini_ocr", "✨", "Gemini OCR", "Process images with Gemini OCR"),
+        ("gemini_ocr", "✨", "Gemini OCR", "Quick mode: All-in-One processing"),
         ("gemini_reocr", "🔄", "Gemini ReOCR", "Re-process XML with Gemini"),
-        ("gemini_segmentation", "✂️", "Segmentation", "Layout detection"),
-        ("gemini_field_tagging", "🏷️", "Field Tagging", "Classify regions"),
-        ("gemini_table_rec", "📊", "Table Recognition", "Extract tables"),
     ]
 
     for node_id, icon, label, desc in gemini_nodes:
@@ -377,12 +410,14 @@ CATEGORY_LABELS = {
     "input_modification": "💾 Input Modification",
 }
 
-# Subcategory labels for modification nodes
+# Subcategory labels for modification nodes (matching modification view tabs)
 MOD_SUBCATEGORY_LABELS = {
-    "format_metadata": "🏷️ Format & Metadata",
-    "geometry_layout": "📐 Geometry & Layout",
-    "merging_sorting": "🔗 Merging & Sorting",
-    "content_editing": "✏️ Content Editing",
+    "format_metadata": "🧾 Format & Metadata",
+    "text_attributes": "🏷️ Text-Attributes",
+    "text_layout": "📐 Text-Layout",
+    "merging_splitting": "🔗 Merging & Splitting",
+    "sorting": "🔢 Sorting",
+    "text_content": "📝 Text-Content",
     "structure_repair": "🔧 Structure Repair",
 }
 
@@ -1360,24 +1395,110 @@ def _render_modification_params(node: Dict, node_type: NodeType):
             default=params.get('levels', ["TextRegion", "Textline"]),
             key=f"levels_{node_id}"
         )
+        dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
+
         if node_type.id in ["mod_reduce_points", "mod_simplify_polygon"]:
             tolerance = st.number_input("Tolerance", min_value=0, value=params.get('tolerance', 2), key=f"tol_{node_id}")
-            node['params'] = {'levels': levels, 'tolerance': tolerance}
+            node['params'] = {'levels': levels, 'tolerance': tolerance, 'dry_run': dry_run}
         else:
-            dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
             node['params'] = {'levels': levels, 'dry_run': dry_run}
 
     elif node_type.id == "mod_replace_tags":
-        old_tag = st.text_input("Old Tag", value=params.get('old_tag', ''), key=f"old_tag_{node_id}")
-        new_tag = st.text_input("New Tag", value=params.get('new_tag', ''), key=f"new_tag_{node_id}")
+        # Initialize session state for tag options
+        tag_options_key = f'replace_tag_options_{node_id}'
+        if tag_options_key not in st.session_state:
+            st.session_state[tag_options_key] = []
+
+        # Define levels first (needed for scanning)
         levels = st.multiselect(
             "Apply to Levels",
             ["TextRegion", "Textline", "TableRegion"],
             default=params.get('levels', ["TextRegion", "Textline"]),
             key=f"levels_{node_id}"
         )
-        text_filter = st.text_input("Text Filter (regex, optional)", value=params.get('text_filter', ''), key=f"tf_{node_id}")
-        node['params'] = {'old_tag': old_tag, 'new_tag': new_tag, 'levels': levels, 'text_filter': text_filter}
+
+        # Update tags button - scans loaded files to get available tags
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.caption("**Old Tag Selection**")
+        with col2:
+            if st.button("Update Tags", key=f"update_tags_{node_id}", help="Scan loaded files to get available tags"):
+                if st.session_state.get('loaded_files'):
+                    with st.spinner("Scanning files for tags..."):
+                        try:
+                            from pageplus.models.page import Page
+                            from pageplus.utils.constants import TextLevel
+
+                            # Get selected levels to scan
+                            scan_levels = [TextLevel[level] for level in levels]
+                            all_tags = sorted(set(
+                                tag for tags in [
+                                    Page(Path(f)).get_tags(scan_levels)
+                                    for f in st.session_state.loaded_files
+                                ] for tag in tags
+                            ))
+                            st.session_state[tag_options_key] = all_tags
+                            st.success(f"Found {len(all_tags)} unique tag(s)")
+                        except Exception as e:
+                            st.error(f"Error scanning files: {e}")
+                else:
+                    st.warning("No files loaded. Please load files first.")
+
+        # Show available tags if any were scanned
+        # Use multiselect for tag selection (like in modification view)
+        if st.session_state[tag_options_key]:
+            old_tags_selected = st.multiselect(
+                "Old Tags (from scanned files)",
+                options=st.session_state[tag_options_key],
+                default=params.get('old_tags_selected', []),
+                key=f"old_tag_select_{node_id}",
+                help="Select one or more tags to replace"
+            )
+        else:
+            old_tags_selected = []
+
+        # Allow manual entry for multiple tags (comma-separated)
+        manual_old_tags = st.text_input(
+            "Or type Old Tags manually (comma-separated)",
+            value=params.get('manual_old_tags', ''),
+            key=f"old_tag_manual_{node_id}",
+            help="Enter tag names manually, separated by commas (e.g., tag1, tag2, tag3)"
+        )
+
+        # Combine both sources: multiselect and manual entry
+        all_old_tags = list(old_tags_selected)
+        if manual_old_tags:
+            # Split by comma and strip whitespace
+            manual_tags_list = [tag.strip() for tag in manual_old_tags.split(',') if tag.strip()]
+            all_old_tags.extend(manual_tags_list)
+
+        # Store combined list for params (empty list means scan all tags)
+        final_old_tags = all_old_tags if all_old_tags else []
+
+        new_tag = st.text_input("New Tag", value=params.get('new_tag', ''), key=f"new_tag_{node_id}")
+        text_filter = st.text_input(
+            "Text Filter (regex, optional)",
+            value=params.get('text_filter', ''),
+            key=f"tf_{node_id}",
+            help="Optional regex pattern to match text content"
+        )
+        skip_textfilter = st.checkbox(
+            "Skip Matching Text",
+            value=params.get('skip_textfilter', False),
+            key=f"skip_tf_{node_id}",
+            help="If checked, skip elements matching the text filter. If unchecked, only process elements matching the text filter."
+        )
+        dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
+        node['params'] = {
+            'old_tags': final_old_tags,  # List of tags (empty = scan all)
+            'new_tag': new_tag,
+            'levels': levels,
+            'text_filter': text_filter if text_filter else None,
+            'skip_textfilter': skip_textfilter,
+            'dry_run': dry_run,
+            'old_tags_selected': old_tags_selected,
+            'manual_old_tags': manual_old_tags
+        }
 
     elif node_type.id == "mod_remove_tags":
         tag_to_remove = st.text_input("Tag to Remove", value=params.get('tag_to_remove', ''), key=f"rem_tag_{node_id}")
@@ -1387,22 +1508,112 @@ def _render_modification_params(node: Dict, node_type: NodeType):
             default=params.get('levels', ["TextRegion", "Textline"]),
             key=f"levels_{node_id}"
         )
-        node['params'] = {'tag_to_remove': tag_to_remove, 'levels': levels}
-
-    elif node_type.id in ["mod_merge_regions", "mod_merge_column_aligned"]:
-        if node_type.id == "mod_merge_column_aligned":
-            based_on_baselines = st.checkbox("Based on baselines", value=params.get('based_on_baselines', False), key=f"bob_{node_id}")
-            max_height_distance = st.slider("Max height distance (%)", 0.0, 1.0, value=params.get('max_height_distance', 0.75), key=f"mhd_{node_id}")
-            tolerance = st.slider("Tolerance", 0.01, 1.0, value=params.get('tolerance', 0.1), key=f"tol_{node_id}")
-            node['params'] = {'based_on_baselines': based_on_baselines, 'max_height_distance': max_height_distance, 'tolerance': tolerance}
-        else:
-            min_overlap = st.slider("Min overlap (%)", 0.0, 100.0, value=params.get('min_overlap', 50.0), key=f"mo_{node_id}")
-            node['params'] = {'min_overlap': min_overlap}
+        dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
+        node['params'] = {'tag_to_remove': tag_to_remove, 'levels': levels, 'dry_run': dry_run}
 
     elif node_type.id == "mod_sort_regions":
         based_on_baselines = st.checkbox("Use mean baseline centroid", value=params.get('based_on_baselines', False), key=f"bob_{node_id}")
         overlap_pct = st.slider("Overlap percentage", 0.0, 100.0, value=params.get('overlap_pct', 60.0), key=f"op_{node_id}")
-        node['params'] = {'based_on_baselines': based_on_baselines, 'overlap_pct': overlap_pct}
+        dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
+        node['params'] = {'based_on_baselines': based_on_baselines, 'overlap_pct': overlap_pct, 'dry_run': dry_run}
+
+    # New Format & Metadata nodes
+    elif node_type.id == "mod_set_page_version":
+        from pageplus.utils.constants import PcGtsVersion
+        version_options = [v.value for v in PcGtsVersion]
+        version = st.selectbox(
+            "Target PAGE Version",
+            options=version_options,
+            index=len(version_options) - 1,
+            key=f"version_{node_id}"
+        )
+        validate = st.checkbox("Validate compatibility", value=True, key=f"validate_{node_id}")
+        dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
+        node['params'] = {'version': version, 'validate': validate, 'dry_run': dry_run}
+
+    elif node_type.id == "mod_set_metadata":
+        creator = st.text_input("Creator", value=params.get('creator', 'PagePlus'), key=f"creator_{node_id}")
+        comments = st.text_area("Comments", value=params.get('comments', ''), key=f"comments_{node_id}")
+        col1, col2 = st.columns(2)
+        with col1:
+            use_default = st.checkbox("Use Default Metadata", value=params.get('use_default', False), key=f"default_{node_id}")
+        with col2:
+            new_metadata = st.checkbox("Overwrite Existing", value=params.get('new_metadata', False), key=f"new_{node_id}")
+        dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
+        node['params'] = {'creator': creator, 'comments': comments, 'default': use_default, 'new': new_metadata, 'dry_run': dry_run}
+
+    elif node_type.id == "mod_reassign_ids":
+        mode = st.selectbox(
+            "Reading Order Mode",
+            ["auto", "left-to-right", "right-to-left", "top-to-bottom"],
+            index=0,
+            key=f"mode_{node_id}"
+        )
+        dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
+        node['params'] = {'reading_order_mode': mode, 'dry_run': dry_run}
+
+    # New Text-Layout nodes
+    elif node_type.id == "mod_pseudoline_polygon":
+        dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
+        node['params'] = {'dry_run': dry_run}
+
+    elif node_type.id == "mod_recalculate_polygon":
+        rectangular = st.checkbox("Rectangular", value=params.get('rectangular', False), key=f"rect_{node_id}")
+        min_textlines = st.number_input("Minimum Textlines", min_value=0, value=params.get('min_textlines', 0), key=f"min_tl_{node_id}")
+        dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
+        node['params'] = {'rectangular': rectangular, 'min_textlines': min_textlines, 'dry_run': dry_run}
+
+    elif node_type.id == "mod_match_textlines":
+        dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
+        node['params'] = {'dry_run': dry_run}
+
+    # New Sorting node
+    elif node_type.id == "mod_sort":
+        dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
+        node['params'] = {'dry_run': dry_run}
+
+    # Updated merge column aligned with new options
+    elif node_type.id == "mod_merge_column_aligned":
+        based_on_baselines = st.checkbox("Based on baselines", value=params.get('based_on_baselines', False), key=f"bob_{node_id}")
+        convex_hull_method = st.selectbox(
+            "Convex Hull Method",
+            ["region", "textlines"],
+            index=0,
+            key=f"hull_method_{node_id}"
+        )
+        max_height_distance = st.slider("Max Height Distance (%)", 0.0, 1.0, value=params.get('max_height_distance', 0.75), key=f"mhd_{node_id}")
+        mid_tolerance = st.slider("Mid Tolerance (%)", 0.0, 1.0, value=params.get('mid_tolerance', 0.0), key=f"mid_tol_{node_id}")
+        tolerance = st.slider("Tolerance", 0.01, 1.0, value=params.get('tolerance', 0.1), key=f"tol_{node_id}")
+        dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
+        node['params'] = {
+            'based_on_baselines': based_on_baselines,
+            'convex_hull_method': convex_hull_method,
+            'max_height_distance': max_height_distance,
+            'mid_tolerance': mid_tolerance,
+            'tolerance': tolerance,
+            'dry_run': dry_run
+        }
+
+    # Updated merge regions with new options
+    elif node_type.id == "mod_merge_regions":
+        min_overlap = st.slider("Min overlap (%)", 0.0, 100.0, value=params.get('min_overlap', 50.0), key=f"mo_{node_id}")
+        recalculate_hull = st.checkbox("Recalculate convex hull from textlines", value=params.get('recalculate_hull', False), key=f"recalc_{node_id}")
+        dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
+        node['params'] = {'min_overlap': min_overlap, 'recalculate_convex_hull': recalculate_hull, 'dry_run': dry_run}
+
+    # Updated split big regions with new options
+    elif node_type.id == "mod_split_big_regions":
+        split_min_area = st.number_input("Minimum Area for Splitting", min_value=0, value=params.get('split_min_area', 4500000), key=f"sma_{node_id}")
+        scale_min_area = st.number_input("Scale Area by Max Lines", min_value=0, value=params.get('scale_min_area', 140), key=f"sma_scale_{node_id}")
+        dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
+        node['params'] = {'split_min_area': split_min_area, 'scale_min_area_by_maxlines': scale_min_area, 'dry_run': dry_run}
+
+    # Updated sort and merge with new options
+    elif node_type.id == "mod_sort_and_merge":
+        merge_gap_x = st.number_input("Merge lines gap X", min_value=0, value=params.get('merge_gap_x', 64), key=f"mgx_{node_id}")
+        merge_gap_y = st.number_input("Merge lines gap Y", min_value=0, value=params.get('merge_gap_y', 10), key=f"mgy_{node_id}")
+        dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
+        node['params'] = {'merge_lines_gap_x': merge_gap_x, 'merge_lines_gap_y': merge_gap_y, 'dry_run': dry_run}
 
     else:
         st.caption("No parameters for this node")
@@ -1431,36 +1642,81 @@ def _render_processing_params(node: Dict, node_type: NodeType):
             st.warning("No models available. Please add models in Gemini Settings.")
             model = "Use Default"
 
-        # Process type selection
-        if node_type.id == "gemini_ocr":
-            proc_options = ["All-in-One", "Table Recognition", "Segmentation", "Field-Tagging"]
-        elif node_type.id == "gemini_reocr":
-            proc_options = ["Text Recognition"]
-        else:
-            proc_options = []
+        # Execution mode selection: All-in-One (quick mode) or Pipeline
+        exec_mode = st.radio(
+            "Execution Mode",
+            ["All-in-One", "Pipeline"],
+            index=0 if params.get('exec_mode', 'All-in-One') == 'All-in-One' else 1,
+            horizontal=True,
+            key=f"exec_mode_{node_id}",
+            help="All-in-One: Quick mode with single stage | Pipeline: Multi-stage workflow"
+        )
 
-        if proc_options:
-            proc_type = st.selectbox(
-                "Process Type",
-                proc_options,
-                index=proc_options.index(params.get('proc_type', proc_options[0])) if params.get('proc_type') in proc_options else 0,
-                key=f"proc_type_{node_id}"
-            )
+        # Get category and available stages/pipelines
+        category = "OCR" if "ocr" in node_type.id else "ReOCR"
+        all_stages = manager.get_stages_by_category(category)
+        all_pipelines = manager.get_pipelines_by_category(category)
 
-            # Show available stages
-            category = "OCR" if "ocr" in node_type.id else "ReOCR"
-            stages = manager.get_stages_by_category(category)
-            matching_stages = [s for s in stages if s.get('type') == proc_type]
+        if exec_mode == "All-in-One":
+            # Show All-in-One stages only
+            proc_type = "All-in-One" if node_type.id == "gemini_ocr" else "Text Recognition"
+            matching_stages = [s for s in all_stages if s.get('type') == proc_type]
 
             if matching_stages:
                 stage_names = [f"{s.get('name')} ({s.get('collection')})" for s in matching_stages]
+                selected_stage_index = 0
+                current_stage = params.get('stage')
+                if current_stage:
+                    for i, name in enumerate(stage_names):
+                        if current_stage in name:
+                            selected_stage_index = i + 1
+                            break
+
                 selected_stage = st.selectbox(
-                    "Or use existing stage",
-                    ["(None)"] + stage_names,
+                    "Select All-in-One Stage",
+                    ["(Default)"] + stage_names,
+                    index=selected_stage_index,
                     key=f"stage_{node_id}"
                 )
-                if selected_stage != "(None)":
+                if selected_stage != "(Default)":
                     node['params']['stage'] = selected_stage
+                else:
+                    node['params'].pop('stage', None)
+            else:
+                st.info("No All-in-One stages available. Create stages in the Pipeline Editor.")
+                node['params'].pop('stage', None)
+
+        else:  # Pipeline mode
+            # Show available pipelines
+            if all_pipelines:
+                pipeline_names = all_pipelines
+                selected_pipeline_index = 0
+                current_pipeline = params.get('pipeline')
+                if current_pipeline and current_pipeline in pipeline_names:
+                    selected_pipeline_index = pipeline_names.index(current_pipeline) + 1
+
+                selected_pipeline = st.selectbox(
+                    "Select Pipeline",
+                    ["(None)"] + pipeline_names,
+                    index=selected_pipeline_index,
+                    key=f"pipeline_{node_id}"
+                )
+                if selected_pipeline != "(None)":
+                    node['params']['pipeline'] = selected_pipeline
+                    # Show pipeline details
+                    pipeline_data = manager.get_pipeline(selected_pipeline)
+                    with st.expander("Pipeline Details", expanded=False):
+                        st.caption(f"**Description:** {pipeline_data.get('description', 'No description')}")
+                        st.caption(f"**Stages:** {len(pipeline_data.get('stages', []))}")
+                        for i, stage_ref in enumerate(pipeline_data.get('stages', []), 1):
+                            stage = manager.get_stage_by_id(stage_ref.get('collection'), stage_ref.get('stage_id'))
+                            if stage:
+                                st.caption(f"{i}. {stage.get('name')} ({stage.get('type')})")
+                else:
+                    node['params'].pop('pipeline', None)
+            else:
+                st.info("No pipelines available. Create pipelines in the Pipeline Editor.")
+                node['params'].pop('pipeline', None)
 
         # Thinking budget
         thinking_budget = st.number_input(
@@ -1493,11 +1749,16 @@ def _render_processing_params(node: Dict, node_type: NodeType):
 
         node['params'] = {
             'model': model,
-            'proc_type': proc_type if proc_options else None,
+            'exec_mode': exec_mode,
             'thinking_budget': thinking_budget,
             'recognize_level': recognize_level,
             'update_elements': update_elements if update_elements else []
         }
+        # Preserve stage/pipeline selections (set earlier in the code)
+        if 'stage' in node['params']:
+            node['params']['stage'] = node['params']['stage']
+        if 'pipeline' in node['params']:
+            node['params']['pipeline'] = node['params']['pipeline']
 
     elif node_type.id.startswith("tesseract_"):
         st.info("Tesseract OCR processing")
@@ -2030,6 +2291,7 @@ def _execute_modification_node(node_type_id: str, files: list, params: dict,
         'mod_merge_regions': 'merge_overlapping_textregions',
         'mod_merge_column_aligned': 'merge_columnaligned_regions',
         'mod_sort_regions': 'sort_regions',
+        'mod_sort': 'sort',
         'mod_sort_and_merge': 'sort_and_merge',
         'mod_replace_tags': 'replace_tag',
         'mod_remove_tags': 'remove_tag',
@@ -2040,6 +2302,14 @@ def _execute_modification_node(node_type_id: str, files: list, params: dict,
         'mod_fit_into_parent': 'fit_into_parent',
         'mod_top_tier_region': 'top_tier_textregion',
         'mod_split_big_regions': 'split_big_regions_vertical',
+        # New Format & Metadata nodes
+        'mod_set_page_version': 'set_page_version',
+        'mod_set_metadata': 'set_metadata',
+        'mod_reassign_ids': 'reassign_ids',
+        # New Text-Layout nodes
+        'mod_pseudoline_polygon': 'pseudolinepolygon',
+        'mod_recalculate_polygon': 'recalculate_textregion_polygon',
+        'mod_match_textlines': 'match_textlines_to_region',
     }
 
     method_name = method_map.get(node_type_id)
@@ -2088,26 +2358,83 @@ def _execute_modification_node(node_type_id: str, files: list, params: dict,
         kwargs['tolerance'] = params.get('tolerance', 2)
 
     elif node_type_id == 'mod_replace_tags':
-        kwargs['old_tag'] = params.get('old_tag', '')
+        # old_tags can be a list or None (empty list means scan all tags)
+        old_tags = params.get('old_tags', [])
+        # If empty list or None, the bridge will handle scanning all tags
+        if old_tags:
+            # Use first tag for old_tag (bridge handles single tag)
+            kwargs['old_tag'] = old_tags[0] if len(old_tags) == 1 else None
+        else:
+            kwargs['old_tag'] = None
         kwargs['new_tag'] = params.get('new_tag', '')
         kwargs['level'] = params.get('levels', ['TextRegion', 'Textline'])
-        kwargs['text_filter'] = params.get('text_filter', '')
+        text_filter = params.get('text_filter', '')
+        if text_filter:
+            kwargs['textfilter'] = text_filter
+            kwargs['skip_textfilter'] = params.get('skip_textfilter', False)
 
     elif node_type_id == 'mod_remove_tags':
         kwargs['tag'] = params.get('tag_to_remove', '')
         kwargs['level'] = params.get('levels', ['TextRegion', 'Textline'])
+        kwargs['dry_run'] = params.get('dry_run', dry_run)
 
     elif node_type_id == 'mod_merge_regions':
-        kwargs['min_overlap'] = params.get('min_overlap', 50.0)
+        kwargs['min_overlap_percentage'] = params.get('min_overlap', 50.0)
+        kwargs['recalculate_convex_hull'] = params.get('recalculate_hull', False)
 
     elif node_type_id == 'mod_merge_column_aligned':
         kwargs['based_on_baselines'] = params.get('based_on_baselines', False)
+        kwargs['convex_hull_method'] = params.get('convex_hull_method', 'region')
         kwargs['max_height_distance'] = params.get('max_height_distance', 0.75)
+        kwargs['mid_tolerance'] = params.get('mid_tolerance', 0.0)
         kwargs['tolerance'] = params.get('tolerance', 0.1)
 
     elif node_type_id == 'mod_sort_regions':
         kwargs['based_on_baselines'] = params.get('based_on_baselines', False)
         kwargs['overlap_pct'] = params.get('overlap_pct', 60.0)
+        kwargs['dry_run'] = params.get('dry_run', dry_run)
+
+    elif node_type_id == 'mod_sort':
+        # No special parameters
+        pass
+
+    elif node_type_id == 'mod_sort_and_merge':
+        kwargs['merge_lines_gap_x'] = params.get('merge_lines_gap_x', 64)
+        kwargs['merge_lines_gap_y'] = params.get('merge_lines_gap_y', 10)
+
+    elif node_type_id == 'mod_split_big_regions':
+        kwargs['split_min_area'] = params.get('split_min_area', 4500000)
+        kwargs['scale_min_area_by_maxlines'] = params.get('scale_min_area', 140)
+
+    # New Format & Metadata nodes
+    elif node_type_id == 'mod_set_page_version':
+        kwargs['version'] = params.get('version', '2019-07-15')
+        kwargs['validate'] = params.get('validate', True)
+        kwargs['dry_run'] = params.get('dry_run', dry_run)
+
+    elif node_type_id == 'mod_set_metadata':
+        kwargs['creator'] = params.get('creator', 'PagePlus')
+        kwargs['comments'] = params.get('comments', '')
+        kwargs['default'] = params.get('default', False)
+        kwargs['new'] = params.get('new_metadata', False)
+        kwargs['dry_run'] = params.get('dry_run', dry_run)
+
+    elif node_type_id == 'mod_reassign_ids':
+        kwargs['reading_order_mode'] = params.get('reading_order_mode', 'auto')
+        kwargs['dry_run'] = params.get('dry_run', dry_run)
+
+    # New Text-Layout nodes
+    elif node_type_id == 'mod_pseudoline_polygon':
+        # No special parameters
+        pass
+
+    elif node_type_id == 'mod_recalculate_polygon':
+        kwargs['rectangular'] = params.get('rectangular', False)
+        kwargs['min_textlines'] = params.get('min_textlines', 0)
+
+    elif node_type_id == 'mod_match_textlines':
+        # No special parameters
+        pass
 
     # Call the method
     for key, value in list(kwargs.items()):
@@ -2166,15 +2493,167 @@ def _method_supports_outputdir(method_name: str) -> bool:
 def _execute_gemini_node(node_type_id: str, files: list, params: dict,
                          dry_run: bool, log: list, global_output_dir: str = None) -> dict:
     """Execute a Gemini processing node."""
-    if dry_run:
-        for key, value in params.items():
-            if value:
-                log.append(f"   - {key}: {value}")
-        return {'success': True, 'message': f'Dry run - would process {len(files)} file(s) with Gemini'}
+    from pageplus.gui.cli_bridges.gemini import GeminiBridge
+    from pathlib import Path
 
-    # TODO: Implement actual Gemini integration
-    # For now, return success with a message
-    return {'success': False, 'error': 'Gemini integration not yet implemented'}
+    exec_mode = params.get('exec_mode', 'All-in-One')
+
+    if dry_run:
+        log.append(f"   - Execution Mode: {exec_mode}")
+        if exec_mode == "All-in-One":
+            stage = params.get('stage', '(Default)')
+            log.append(f"   - Stage: {stage}")
+        else:  # Pipeline
+            pipeline = params.get('pipeline', '(None)')
+            log.append(f"   - Pipeline: {pipeline}")
+
+        # Log other params
+        for key, value in params.items():
+            if key not in ['exec_mode', 'stage', 'pipeline'] and value:
+                if isinstance(value, list) and value:
+                    log.append(f"   - {key}: {', '.join(str(v) for v in value)}")
+                elif not isinstance(value, list):
+                    log.append(f"   - {key}: {value}")
+
+        return {'success': True, 'message': f'Dry run - would process {len(files)} file(s) with Gemini ({exec_mode})'}
+
+    # Create Gemini bridge instance
+    gemini_bridge = GeminiBridge()
+
+    # Log execution mode
+    log.append(f"   - Execution Mode: {exec_mode}")
+
+    try:
+        if exec_mode == "All-in-One":
+            # Execute using stage configuration
+            stage_name = params.get('stage', '')
+
+            if stage_name and stage_name != '(Default)':
+                # Parse stage name to extract collection and stage name
+                # Format: "Stage Name (Collection)"
+                if '(' in stage_name and ')' in stage_name:
+                    collection = stage_name.split('(')[-1].rstrip(')')
+                    stage_display = stage_name.split('(')[0].strip()
+                else:
+                    # Try to find matching stage from available stages
+                    from pageplus.gui.utils.pipeline_manager import PipelineManager
+                    manager = PipelineManager()
+
+                    category = "OCR" if "ocr" in node_type_id else "ReOCR"
+                    all_stages = manager.get_stages_by_category(category)
+
+                    # Find matching stage by display name
+                    stage_config = None
+                    collection = None
+                    for stage in all_stages:
+                        if stage.get('name') == stage_name:
+                            stage_config = stage
+                            # Find collection name - iterate through collections
+                            for coll_name in manager.get_collection_names():
+                                stages_in_coll = manager.get_stages_in_collection(coll_name)
+                                if any(s.get('id') == stage.get('id') for s in stages_in_coll):
+                                    collection = coll_name
+                                    break
+                            if collection:
+                                break
+                            break
+
+                    if not stage_config:
+                        return {'success': False, 'error': f'Stage not found: {stage_name}'}
+
+                log.append(f"   - Stage: {stage_name} (from {collection})")
+
+                # Execute the stage
+                result = gemini_bridge.execute_stage(
+                    stage_config=stage_config,
+                    files=[str(f) for f in files],
+                    outputdir=global_output_dir,
+                    dry_run=dry_run,
+                    overwrite=True
+                )
+
+                if result.get('success'):
+                    return {'success': True, 'message': result.get('output', 'Stage completed successfully')}
+                else:
+                    return {'success': False, 'error': result.get('output', 'Stage execution failed')}
+            else:
+                # Use default OCR/ReOCR without stage configuration
+                log.append(f"   - Using default {node_type_id} processing")
+
+                # Map files to images for OCR, XMLs for ReOCR
+                if node_type_id == "gemini_ocr":
+                    # For OCR, we need image files
+                    image_files = []
+                    for f in files:
+                        f_path = Path(f)
+                        if f_path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.tif', '.tiff', '.webp', '.bmp']:
+                            image_files.append(f)
+                        elif f_path.suffix.lower() == '.xml':
+                            # XML file - try to find corresponding image
+                            from pageplus.utils.fs import find_image
+                            from pageplus.models.page import Page
+                            try:
+                                page = Page(f_path)
+                                image_filename = page.imageFilename()
+                                image_path = find_image(image_filename, f_path.parent)
+                                if image_path:
+                                    image_files.append(str(image_path))
+                            except:
+                                pass
+
+                    if not image_files:
+                        return {'success': False, 'error': 'No image files found for OCR'}
+
+                    result = gemini_bridge.ocr_multithread(
+                        files=image_files,
+                        outputdir=global_output_dir,
+                        dry_run=dry_run,
+                        overwrite=True
+                    )
+                else:  # gemini_reocr
+                    # For ReOCR, we need XML files
+                    xml_files = [str(f) for f in files if Path(f).suffix.lower() == '.xml']
+
+                    if not xml_files:
+                        return {'success': False, 'error': 'No XML files found for ReOCR'}
+
+                    result = gemini_bridge.reocr_multithread(
+                        xml_files=xml_files,
+                        outputdir=global_output_dir,
+                        dry_run=dry_run,
+                        overwrite=True
+                    )
+
+                if result.get('success'):
+                    return {'success': True, 'message': result.get('output', 'Processing completed successfully')}
+                else:
+                    return {'success': False, 'error': result.get('output', 'Processing failed')}
+
+        else:  # Pipeline mode
+            pipeline_name = params.get('pipeline', '')
+
+            if not pipeline_name or pipeline_name == '(None)':
+                return {'success': False, 'error': 'No pipeline selected'}
+
+            log.append(f"   - Pipeline: {pipeline_name}")
+
+            # Execute the pipeline
+            result = gemini_bridge.run_pipeline(
+                pipeline_name=pipeline_name,
+                files=[str(f) for f in files],
+                outputdir=global_output_dir,
+                dry_run=dry_run,
+                overwrite=True
+            )
+
+            if result.get('success'):
+                return {'success': True, 'message': result.get('output', 'Pipeline completed successfully')}
+            else:
+                return {'success': False, 'error': result.get('output', 'Pipeline execution failed')}
+
+    except Exception as e:
+        import traceback
+        return {'success': False, 'error': f'Exception: {str(e)}\n{traceback.format_exc()}'}
 
 
 def _execute_tesseract_node(files: list, params: dict, dry_run: bool,
