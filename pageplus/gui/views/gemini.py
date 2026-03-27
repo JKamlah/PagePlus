@@ -18,6 +18,7 @@ from pageplus.gui.utils.pipeline_manager import PipelineManager
 from pageplus.utils.constants import GUI_STORAGE_DIR
 from pageplus.gui.views.load_files import get_loaded_workspace_dir
 from pageplus.gui.views.gemini_views.pipeline_editor import pipeline_editor_view
+from pageplus.utils.fs import shuffle
 
 
 def strip_ansi_codes(text_to_clean):
@@ -515,7 +516,20 @@ def show_gemini(bridge: "GeminiBridge") -> None:
 
         if 'modification_input' in st.session_state:
             # Display selected files in a dataframe
-            st.subheader("Selected Files")
+            col1, col2, col3 = st.columns([2, 1, 1])
+            with col1:
+                st.subheader("Selected Files")
+            
+            with col2:
+                if st.button("🔀 Shuffle", key="gemini_shuffle_files", use_container_width=True):
+                    st.session_state.modification_input["files"] = shuffle(st.session_state.modification_input["files"])
+                    st.rerun()
+            
+            with col3:
+                if st.button("🔁 Sort", key="gemini_sort_files_btn", use_container_width=True):
+                    st.session_state.modification_input["files"] = sorted(st.session_state.modification_input["files"], key=lambda x: Path(x).name)
+                    st.rerun()
+
             if st.session_state.modification_input["type"] == "directory":
                 # For directory input, show directory path and file count
                 st.write(

@@ -33,6 +33,7 @@ from pageplus.gui.utils.pipeline_manager import PipelineManager
 from pageplus.gui.views.gemini_views.utils import get_available_models
 from pageplus.gui.views.load_files import get_loaded_workspace_dir
 from pageplus.gui.utils.picker import pick_files, pick_directory
+from pageplus.utils.fs import shuffle
 from pageplus.utils.constants import GUI_STORAGE_DIR
 
 # Try to import streamlit-flow-component
@@ -1332,9 +1333,9 @@ def _render_node_params(node: Dict, node_type: NodeType):
                 if selected_files:
                     st.info(f"📁 {len(selected_files)} file(s) selected")
 
-                col1, col2 = st.columns([1, 1])
+                col1, col2, col3, col4 = st.columns([1, 1, 1, 1])
                 with col1:
-                    if st.button("📂 Browse Files", key=f"browse_img_files_{node_id}"):
+                    if st.button("📂 Browse", key=f"browse_img_files_{node_id}", use_container_width=True):
                         file_types = [
                             ("Image files", "*.jpg *.jpeg *.png *.tif *.tiff *.webp *.bmp"),
                             ("JPEG files", "*.jpg *.jpeg"),
@@ -1353,7 +1354,19 @@ def _render_node_params(node: Dict, node_type: NodeType):
                             st.rerun()
 
                 with col2:
-                    if st.button("🗑️ Clear", key=f"clear_img_files_{node_id}"):
+                    if st.button("🔀 Shuffle", key=f"shuffle_img_files_{node_id}", use_container_width=True):
+                        if selected_files_key in st.session_state:
+                            st.session_state[selected_files_key] = shuffle(st.session_state[selected_files_key])
+                            st.rerun()
+
+                with col3:
+                    if st.button("🔁 Sort", key=f"sort_img_files_{node_id}", use_container_width=True):
+                        if selected_files_key in st.session_state:
+                            st.session_state[selected_files_key] = sorted(st.session_state[selected_files_key], key=lambda x: Path(x).name)
+                            st.rerun()
+
+                with col4:
+                    if st.button("🗑️ Clear", key=f"clear_img_files_{node_id}", use_container_width=True):
                         if selected_files_key in st.session_state:
                             del st.session_state[selected_files_key]
                         st.rerun()

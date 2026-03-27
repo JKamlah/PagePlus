@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import os
+import random
 import subprocess
 import sys
+import uuid
 from pathlib import Path
 from typing import Any, Iterator, List, Tuple
 
@@ -531,3 +533,33 @@ def apply_mapping_to_files(xml_files: List[Path], mapping_profile: str, textnorm
         temp_files_with_originals.append((temp_file_path, xml_path))
 
     return temp_files_with_originals, temp_dir
+
+
+def shuffle(data: list) -> list:
+    """
+    Randomizes the order of the input list.
+
+    Args:
+        data: The list of items to shuffle.
+
+    Returns:
+        A new list with items in randomized order.
+    """
+    shuffled_data = data[:]
+    random.shuffle(shuffled_data)
+    return shuffled_data
+
+
+def get_random_name(prefix: str = "anon_", length: int = 8) -> str:
+    """
+    Generates a random name for use as an anonymized display name.
+
+    Args:
+        prefix: Prefix for the random name.
+        length: Length of the random suffix (using uuid character hex).
+
+    Returns:
+        A string like 'anon_a1b2c3d4'.
+    """
+    unique_id = uuid.uuid4().hex[:length]
+    return f"{prefix}{unique_id}"

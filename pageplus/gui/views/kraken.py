@@ -5,6 +5,7 @@ import threading
 from pageplus.gui.cli_bridges.kraken import KrakenBridge
 from pageplus.gui.views.load_files import get_loaded_workspace_dir
 from pageplus.gui.utils.picker import pick_directory, pick_files
+from pageplus.utils.fs import shuffle
 
 
 def show_kraken(cli_bridge: KrakenBridge):
@@ -90,7 +91,20 @@ def show_kraken(cli_bridge: KrakenBridge):
 
         if 'kraken_input' in st.session_state:
             # Display selected files in a dataframe
-            st.subheader("Selected Files")
+            col1, col2, col3 = st.columns([2, 1, 1])
+            with col1:
+                st.subheader("Selected Files")
+            
+            with col2:
+                if st.button("🔀 Shuffle", key="kraken_shuffle_files", use_container_width=True):
+                    st.session_state.kraken_input["files"] = shuffle(st.session_state.kraken_input["files"])
+                    st.rerun()
+            
+            with col3:
+                if st.button("🔁 Sort", key="kraken_sort_files_btn", use_container_width=True):
+                    st.session_state.kraken_input["files"] = sorted(st.session_state.kraken_input["files"], key=lambda x: Path(x).name)
+                    st.rerun()
+
             if st.session_state.kraken_input["type"] == "directory":
                 # For directory input, show directory path and file count
                 st.write(

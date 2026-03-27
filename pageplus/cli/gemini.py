@@ -20,6 +20,7 @@ from pageplus.utils.profile import profile, ProfileFnRet
 from pageplus.utils.io import gemini2d_to_page, segmentation_to_page
 from pageplus.utils.fs import find_image
 from pageplus.models.page import Page
+from pageplus.utils.fs import shuffle, get_random_name
 
 
 app = typer.Typer()
@@ -306,6 +307,7 @@ else:
         # Raise error if no xml files are found
         if not images_paths:
             raise FileNotFoundError('No images files found in input directory')
+            
         request_timestamps = []
         for image_path in images_paths:
             image, image_format = get_image(image_path)
@@ -324,7 +326,10 @@ else:
             # Add the current timestamp
             request_timestamps.append(time.sleep(time.time()))
             try:
-                file_upload = llm_api.client().files.upload(file=image_path)
+                file_upload = llm_api.client().files.upload(
+                    file=image_path,
+                    config=types.UploadConfig(display_name=get_random_name())
+                )
 
                 response = llm_api.client().models.generate_content(
                     model=llm_api.model,
@@ -420,7 +425,10 @@ def ocr_single_image(
 
             image, image_format = get_image(image_path)
 
-            file_upload = llm_api.client().files.upload(file=image_path)
+            file_upload = llm_api.client().files.upload(
+                file=image_path,
+                config=types.UploadConfig(display_name=get_random_name())
+            )
             response = llm_api.client().models.generate_content(
                 model=llm_api.model,
                 contents=[
@@ -640,6 +648,7 @@ def ocr_multithread(inputs: Annotated[List[str], typer.Argument(exists=True)],
 
     if not images_paths:
         raise FileNotFoundError('No image files found in input directory')
+        
     all_usage = []
     count = 0
     xml_files_for_reocr = []
@@ -761,7 +770,10 @@ def reocr_single_image(
 
             user_prompt = json.dumps(json_data, indent=4, ensure_ascii=False)
             image, image_format = get_image(image_path)
-            file_upload = llm_api.client().files.upload(file=image_path)
+            file_upload = llm_api.client().files.upload(
+                file=image_path,
+                config=types.UploadConfig(display_name=get_random_name())
+            )
 
             if "2.5" in llm_api.model:
                 response = llm_api.client().models.generate_content(

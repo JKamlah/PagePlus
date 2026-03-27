@@ -13,6 +13,7 @@ from pageplus.utils.fs import collect_xml_files
 from pageplus.utils.workspace import Workspace
 from pageplus.gui.cli_bridges.workspace import WorkspaceBridge
 from pageplus.gui.utils.undo import UndoManager
+from pageplus.utils.fs import shuffle
 
 
 def get_loaded_files_from_session_state() -> List[Path]:
@@ -52,6 +53,8 @@ class LoadFilesPage:
             st.session_state.search_filter = ""
         if "group_by_directory" not in st.session_state:
             st.session_state.group_by_directory = True
+        if "sort_files" not in st.session_state:
+            st.session_state.sort_files = True
         if "show_file_stats" not in st.session_state:
             st.session_state.show_file_stats = False
         if 'page_size' not in st.session_state:
@@ -210,7 +213,7 @@ class LoadFilesPage:
         st.divider()
 
         # Search and filter options
-        col1, col2, col3 = st.columns([3, 1, 1])
+        col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
 
         with col1:
             search_term = st.text_input(
@@ -228,8 +231,25 @@ class LoadFilesPage:
                 key="group_checkbox"
             )
             st.session_state.group_by_directory = group_by
+            sort_files = st.checkbox(
+                "Sort files",
+                value=st.session_state.sort_files,
+                key="sort_files_checkbox"
+            )
+            st.session_state.sort_files = sort_files
 
         with col3:
+            if st.button("🔀 Shuffle", key="shuffle_files", use_container_width=True):
+                st.session_state.loaded_files = shuffle(st.session_state.loaded_files)
+                loaded_files = st.session_state.loaded_files
+                st.rerun()
+            if st.button("🔁 Sort", key="sorting_files", use_container_width=True):
+                st.session_state.loaded_files = sorted(st.session_state.loaded_files, key=lambda x: x.name)
+                loaded_files = st.session_state.loaded_files
+                st.rerun()
+                
+
+        with col4:
             if st.button("🗑️ Clear All", key="clear_all", use_container_width=True):
                 st.session_state.loaded_files = []
                 st.session_state.files_to_remove = set()
@@ -246,9 +266,10 @@ class LoadFilesPage:
 
         # Show files based on grouping preference
         if st.session_state.group_by_directory:
-            self._show_files_grouped(filtered_files, show_stats)
+            self._show_files_grouped(filtered_files, show_stats, sort_files=st.session_state.sort_files)
         else:
-            self._show_files_flat(filtered_files, show_stats)
+            self._show_files_flat(filtered_files, show_stats, sort_files=st.session_state.sort_files)
+
 
         st.divider()
         # Remove selected files button
@@ -300,7 +321,7 @@ class LoadFilesPage:
             if search_lower in f.name.lower() or search_lower in str(f).lower()
         ]
 
-    def _show_files_grouped(self, files: List[Path], show_stats: bool):
+    def _show_files_grouped(self, files: List[Path], show_stats: bool, sort_files: bool):
         """Show files grouped by directory."""
         # Group files by parent directory
         grouped = defaultdict(list)
@@ -324,7 +345,10 @@ class LoadFilesPage:
         st.info(f"Showing all {len(sorted_dirs)} directories. Files inside directories with more than {page_size} items will be paginated.")
 
         for directory in sorted_dirs:
-            dir_files = sorted(grouped[directory], key=lambda x: x.name)
+            if sort_files:
+                dir_files = sorted(grouped[directory], key=lambda x: x.name)
+            else:
+                dir_files = grouped[directory]
 
             with st.expander(
                 f"📁 {directory} ({len(dir_files)} files)",
@@ -368,7 +392,7 @@ class LoadFilesPage:
                     for file_path in dir_files:
                         self._show_file_row(file_path, show_stats)
 
-    def _show_files_flat(self, files: List[Path], show_stats: bool):
+    def _show_files_flat(self, files: List[Path], show_stats: bool, sort_files: bool = True):
         """Show files in a flat list."""
         st.markdown("### Files")
 
@@ -400,7 +424,10 @@ class LoadFilesPage:
 
         start_index = (current_page - 1) * page_size
         end_index = start_index + page_size
-        paginated_files = sorted(files, key=lambda x: x.name)[start_index:end_index]
+        if sort_files:
+            paginated_files = sorted(files, key=lambda x: x.name)[start_index:end_index]
+        else:
+            paginated_files = files[start_index:end_index]
 
         st.info(f"Showing files {start_index + 1} to {min(end_index, total_files)} of {total_files}")
 
