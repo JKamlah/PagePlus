@@ -702,7 +702,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                                     value=stage.get('system_prompt', ''),
                                     height=100,
                                     disabled=True,
-                                    key=f"quick_prompt_display_{operation_mode}_{process_selection.replace(' ', '_')}"
+                                    key=f"quick_prompt_display_{operation_mode}_{process_selection.replace(' ', '_')}_{selected_stage_name}"
                                 )
                 else:  # Pipeline Mode
                     st.info("Pipeline mode selected. Currently only OCR pipelines are supported in this view.")

@@ -141,7 +141,7 @@ class GeminiBridge:
             dry_run: bool = False,
             system_prompt: str = None,
             overwrite: bool = True,
-            recognize_level: str = "TextRegions",
+            recognize_level: str = "TextRegion",
             multi_stage: bool = False,
             thinking_budget: int = 0) -> dict:
         """Run OCR on files using Gemini with different default settings."""
@@ -186,7 +186,7 @@ class GeminiBridge:
             outputdir: str = None,
             system_prompt: str = None,
             update_page: bool = True,
-            recognize_level: str = "TextRegions",
+            recognize_level: str = "TextRegion",
             update_elements: List[str] = ["Text", "Tags"],
             jobs: int = 4,
             calls_per_minute: int = 150,
@@ -337,7 +337,7 @@ class GeminiBridge:
                 )
             elif category == "ReOCR":
                 update_elements = filters.get('update_elements', ['Text', 'Tags'])
-                recognize_level = "TextRegions"  # Default
+                recognize_level = "TextRegion"  # Default
                 
                 return self.reocr_multithread(
                     xml_files=files,

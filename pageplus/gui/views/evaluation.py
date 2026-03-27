@@ -54,12 +54,14 @@ def _get_color_for_rate(rate: float) -> str:
         return "red"
 
 
-def _display_colored_metric(label: str, value: str, color: str):
+def _display_colored_metric(label: str, value: str, color: str, info: str = None):
     """Displays a metric with a specific color, mimicking st.metric."""
+    info_html = f'<div style="font-size: 1rem; color: #FAFAFA; margin-top: 0.5rem; opacity: 0.8;">{info}</div>' if info else ''
     st.markdown(f"""
     <div style="border: 1px solid rgba(250, 250, 250, 0.2); border-radius: 0.5rem; padding: 1rem; text-align: center;">
-        <div style="font-size: 0.875rem; color: #FAFAFA; margin-bottom: 0.25rem;">{label}</div>
+        <div style="font-size: 1.25rem; color: #FAFAFA; margin-bottom: 0.25rem;">{label}</div>
         <div style="font-size: 2.25rem; color: {color}; font-weight: 600;">{value}</div>
+        {info_html}
     </div>
     """, unsafe_allow_html=True)
 
@@ -262,6 +264,31 @@ def pageplus_tab():
             successful_results = [res for res in results_data if res["result"]["success"]]
             if successful_results:
                 st.subheader("Error Rate Overview")
+
+                # Calculate Total CER and WER
+                total_word_count = 0
+                total_word_errors = 0
+                total_char_count = 0
+                total_char_errors = 0
+
+                for res in successful_results:
+                    metrics = res["result"]["output"]
+                    total_word_count += metrics["count"]["word"]
+                    total_word_errors += metrics["error_count"]["word"]
+                    total_char_count += metrics["count"]["character"]
+                    total_char_errors += metrics["error_count"]["character"]
+
+                total_wer = total_word_errors / total_word_count if total_word_count > 0 else 0
+                total_cer = total_char_errors / total_char_count if total_char_count > 0 else 0
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    _display_colored_metric("Total WER", f"{total_wer:.2%}", _get_color_for_rate(total_wer), 
+                                          info=f"{total_word_count:,} words")
+                with col2:
+                    _display_colored_metric("Total CER", f"{total_cer:.2%}", _get_color_for_rate(total_cer),
+                                          info=f"{total_char_count:,} characters")
+
                 chart_data = {
                     "File": [res["gt_file"].name for res in successful_results],
                     "WER": [res["result"]["output"]["error_rate"]["global"]["word"] for res in successful_results],

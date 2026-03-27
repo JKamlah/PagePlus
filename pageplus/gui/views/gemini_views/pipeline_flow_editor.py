@@ -417,7 +417,7 @@ def pipeline_flow_editor_view():
                                     value=stage.get('system_prompt', ''),
                                     height=150,
                                     disabled=True,
-                                    key="stage_prompt_display_flow"
+                                    key=f"stage_prompt_display_flow_{selected_idx}"
                                 )
 
                 except Exception as e:

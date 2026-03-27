@@ -895,7 +895,8 @@ def reocr_multithread(
     """Perform OCR on images using existing XML files as context for improved accuracy."""
     # Convert additional_checks to a set for efficient lookups
     # checks = set(additional_checks) if additional_checks else set()
-    system_prompt = """**Role:** You are an advanced Optical Character Recognition (OCR) and Document Layout Analysis (DLA) engine. Your specific function is to meticulously correct errors in provided JSON data by comparing it against a corresponding visual document.
+    if not system_prompt:
+        system_prompt = """**Role:** You are an advanced Optical Character Recognition (OCR) and Document Layout Analysis (DLA) engine. Your specific function is to meticulously correct errors in provided JSON data by comparing it against a corresponding visual document.
     **Primary Task:**
     Given a visual input and a JSON dictionary detailing text regions and lines extracted from a previous OCR pass, your objective is to:
     1.  **Identify Incorrect/Incomplete Lines:** For each `textline` in the input JSON, compare its `text_content` with the actual text visible in the corresponding area of the visual input. Identify all input `textlines` where the `text_content` is erroneous (e.g., misread characters, missing words, extra characters) or incomplete.
@@ -929,7 +930,6 @@ def reocr_multithread(
     *   * Check every textline for correctness. *
     *   * Output modified and unmodified textlines. Not allowed to remove any textlines. *
     """
-
     # Process input paths
     xml_paths = []
     for xml_path in map(Path, xml_files):

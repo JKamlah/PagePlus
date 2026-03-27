@@ -650,22 +650,30 @@ def flow_editor_view():
     # Workflow management toolbar
     _render_workflow_toolbar()
 
-    st.markdown("---")
+    # Show Monitor or Editor based on state
+    if st.session_state.flow_active_tab == 'monitor':
+        # Monitor view
+        _render_monitor_tab()
 
-    # Main editor layout
-    col_library, col_editor = st.columns([1, 3])
+        # Auto-execute next step if execution is active
+        if st.session_state.flow_exec_active:
+            _execute_next_step()
+    else:
+        # Editor view
+        st.markdown("---")
+        col_library, col_editor = st.columns([1, 3])
 
-    with col_library:
-        _render_node_library()
+        with col_library:
+            _render_node_library()
 
-    with col_editor:
-        _render_workflow_canvas()
+        with col_editor:
+            _render_workflow_canvas()
 
-        # Show node configuration panel when a node is selected
-        if st.session_state.flow_selected_node_id:
-            _render_node_config_panel()
+            # Show node configuration panel when a node is selected
+            if st.session_state.flow_selected_node_id:
+                _render_node_config_panel()
 
-        _render_execution_section()
+            _render_execution_section()
 
 
 def _initialize_session_state():
@@ -679,6 +687,15 @@ def _initialize_session_state():
         'flow_selected_node_id': None,
         'flow_autoconnect': True,
         'flow_generation': 0,  # Generation counter to force flow component reset
+        # Execution monitor state
+        'flow_exec_active': False,
+        'flow_exec_node_states': {},  # {node_id: 'pending'|'running'|'done'|'failed'}
+        'flow_exec_current_step': 0,
+        'flow_exec_total_steps': 0,
+        'flow_exec_log_lines': [],
+        'flow_exec_plan': [],  # Flattened execution order [(node_dict, level_idx), ...]
+        'flow_exec_context': {},  # Shared context: current_files, node_output_files, bridges, etc.
+        'flow_active_tab': 'editor',
     }
 
     for key, default_value in defaults.items():
@@ -1089,7 +1106,7 @@ def _render_execution_section():
 
     with col_run4:
         if st.button("▶️ Run Workflow", type="primary", use_container_width=True):
-            _execute_workflow(dry_run, continue_on_error)
+            _start_execution(dry_run, continue_on_error)
 
     # Show input files info
     if use_loaded_files:
@@ -1261,13 +1278,24 @@ def _render_node_params(node: Dict, node_type: NodeType):
             node['params'] = {'directory': params.get('directory', directory), 'extensions': extensions, 'recursive': recursive}
 
         elif node_type.id == "input_image":
-            # Image input node: file/directory selection
-            input_source = st.selectbox(
-                "Image Source",
-                ["Input page files", "Directory", "Select files"],
-                index=["Input page files", "Directory", "Select files"].index(params.get('source', 'Input page files')),
-                key=f"img_source_{node_id}"
-            )
+            # Image input node: file/directory selection with buttons
+            current_source = params.get('source', 'Select files')
+
+            col_dir, col_files = st.columns(2)
+            with col_dir:
+                if st.button("📁 Directory", key=f"btn_img_dir_{node_id}",
+                             use_container_width=True,
+                             type="primary" if current_source == "Directory" else "secondary"):
+                    node['params']['source'] = 'Directory'
+                    st.rerun()
+            with col_files:
+                if st.button("📂 Select Files", key=f"btn_img_files_{node_id}",
+                             use_container_width=True,
+                             type="primary" if current_source == "Select files" else "secondary"):
+                    node['params']['source'] = 'Select files'
+                    st.rerun()
+
+            input_source = current_source
 
             if input_source == "Directory":
                 col1, col2 = st.columns([4, 1])
@@ -1297,7 +1325,7 @@ def _render_node_params(node: Dict, node_type: NodeType):
                 )
                 node['params'] = {'source': input_source, 'directory': params.get('directory', directory), 'extensions': extensions, 'recursive': recursive}
 
-            elif input_source == "Select files":
+            else:  # Select files
                 # Show selected files count
                 selected_files_key = f"img_selected_files_{node_id}"
                 selected_files = st.session_state.get(selected_files_key, [])
@@ -1331,10 +1359,6 @@ def _render_node_params(node: Dict, node_type: NodeType):
                         st.rerun()
 
                 node['params'] = {'source': input_source, 'files_key': selected_files_key}
-
-            else:  # Input page files
-                st.info("This node will use images loaded from the Input page.")
-                node['params'] = {'source': input_source}
 
         else:  # input_xml
             st.info("This node uses files loaded from the Input page.")
@@ -1973,6 +1997,491 @@ def _check_direct_xml_to_save_connection() -> bool:
     return False, None, None
 
 
+def _render_monitor_tab():
+    """Render the execution monitor tab with node status, progress bar, and terminal log."""
+    node_states = st.session_state.flow_exec_node_states
+    log_lines = st.session_state.flow_exec_log_lines
+    current_step = st.session_state.flow_exec_current_step
+    total_steps = st.session_state.flow_exec_total_steps
+    is_active = st.session_state.flow_exec_active
+
+    if not node_states and not log_lines:
+        st.info("Click **▶️ Run Workflow** in the Editor tab to start execution.")
+        return
+
+    # --- Header with status ---
+    if is_active:
+        # Animated pulsing header for running state
+        st.markdown("""
+        <style>
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .exec-running-header {
+            animation: pulse 1.5s ease-in-out infinite;
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+        @keyframes blink-dot {
+            0%, 100% { opacity: 0.2; }
+            50% { opacity: 1; }
+        }
+        .exec-dot { display: inline-block; animation: blink-dot 1.4s infinite; }
+        .exec-dot:nth-child(2) { animation-delay: 0.2s; }
+        .exec-dot:nth-child(3) { animation-delay: 0.4s; }
+        </style>
+        <div class="exec-running-header">
+            ⏳ Workflow Running<span class="exec-dot">.</span><span class="exec-dot">.</span><span class="exec-dot">.</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Show which node is currently being processed
+        running_nodes = [n.get('name', n.get('node_type', '?'))
+                         for n in st.session_state.flow_nodes
+                         if node_states.get(n['id']) == 'running']
+        if running_nodes:
+            st.info(f"🔄 Processing: **{running_nodes[0]}**")
+    else:
+        # Check if any node failed
+        has_failure = any(s == 'failed' for s in node_states.values())
+        if has_failure:
+            st.markdown("### ❌ Workflow Finished with Errors")
+        else:
+            st.markdown("### ✅ Workflow Complete")
+
+    # --- Progress bar ---
+    if total_steps > 0:
+        progress = current_step / total_steps
+        st.progress(progress, text=f"Step {current_step} / {total_steps}")
+    else:
+        st.progress(0.0, text="Preparing...")
+
+    # --- Node status list ---
+    st.markdown("#### Node Status")
+
+    # Build a styled list of all nodes with their status
+    for node in st.session_state.flow_nodes:
+        node_id = node['id']
+        node_name = node.get('name', node.get('node_type', 'Node'))
+        state = node_states.get(node_id, 'pending')
+
+        if state == 'done':
+            icon = "🟢"
+            color = "#4CAF50"
+            label = "Done"
+        elif state == 'failed':
+            icon = "🔴"
+            color = "#F44336"
+            label = "Failed"
+        elif state == 'running':
+            icon = "🔵"
+            color = "#2196F3"
+            label = "Running"
+        else:  # pending
+            icon = "⬜"
+            color = "#9E9E9E"
+            label = "Pending"
+
+        st.markdown(
+            f'<div style="display:flex;align-items:center;padding:0.3rem 0.6rem;margin:0.15rem 0;'
+            f'border-left:4px solid {color};background:{"rgba(33,150,243,0.12)" if state == "running" else "transparent"};'
+            f'border-radius:0 0.3rem 0.3rem 0;">'
+            f'<span style="font-size:1.1rem;margin-right:0.5rem;">{icon}</span>'
+            f'<span style="flex:1;color:{"#fff" if state == "running" else "inherit"};'
+            f'font-weight:{"700" if state == "running" else "400"};">{node_name}</span>'
+            f'<span style="font-size:0.8rem;color:{color};font-weight:600;">{label}</span>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+
+    # --- Stop button ---
+    if is_active:
+        st.markdown("")
+        if st.button("⏹️ Stop Execution", type="secondary", use_container_width=True):
+            st.session_state.flow_exec_active = False
+            st.session_state.flow_exec_log_lines.append("")
+            st.session_state.flow_exec_log_lines.append("⏹️ EXECUTION STOPPED BY USER")
+            st.session_state.flow_execution_log = "\n".join(st.session_state.flow_exec_log_lines)
+            st.session_state.flow_active_tab = 'editor'
+            st.rerun()
+    else:
+        # Execution finished - show back button
+        if st.button("🔀 Back to Editor", type="primary", use_container_width=True):
+            st.session_state.flow_active_tab = 'editor'
+            st.rerun()
+
+    # --- Terminal log ---
+    st.markdown("#### Terminal Log")
+    log_text = "\n".join(log_lines) if log_lines else "(no output yet)"
+    st.code(log_text, language="text")
+
+
+def _start_execution(dry_run: bool = False, continue_on_error: bool = False):
+    """Initialize execution state and trigger step-by-step execution."""
+    if not st.session_state.flow_nodes:
+        st.warning("No nodes in workflow!")
+        return
+
+    # Build initial log
+    log = []
+    log.append("=" * 60)
+    log.append("WORKFLOW EXECUTION")
+    log.append("=" * 60)
+    log.append(f"Nodes: {len(st.session_state.flow_nodes)}")
+    log.append(f"Edges: {len(st.session_state.flow_edges)}")
+    log.append(f"Dry Run: {dry_run}")
+    log.append(f"Continue on Error: {continue_on_error}")
+    log.append("")
+
+    # Check for direct XML Input -> Save Output connection
+    is_direct_connection, xml_node_name, save_node_name = _check_direct_xml_to_save_connection()
+
+    # Get topological sort
+    execution_levels = _topological_sort_with_grouping()
+    if execution_levels is None:
+        log.append("⚠️ Cycle detected in workflow, falling back to stage-based execution")
+        execution_order = ["input", "processing", "modification", "output"]
+        nodes_by_stage = {stage: [] for stage in execution_order}
+        for node in st.session_state.flow_nodes:
+            category = node.get('category', 'input')
+            if category in nodes_by_stage:
+                nodes_by_stage[category].append(node)
+        execution_levels = [nodes_by_stage[stage] for stage in execution_order]
+
+    # Flatten execution plan
+    exec_plan = []
+    for level_idx, level_nodes in enumerate(execution_levels):
+        for node in level_nodes:
+            exec_plan.append(node)
+
+    # Get input files
+    input_files = []
+    has_input_page_files = st.session_state.get('loaded_files') is not None
+
+    for node in st.session_state.flow_nodes:
+        if node['node_type'] == 'input_directory':
+            params = node.get('params', {})
+            directory = params.get('directory', '')
+            if directory and Path(directory).exists():
+                extensions = params.get('extensions', '.xml,.jpg,.png').split(',')
+                exts = [e.strip() if e.startswith('.') else f'.{e.strip()}' for e in extensions]
+                for ext in exts:
+                    input_files.extend([f for f in Path(directory).glob(f'*{ext}')])
+                log.append(f"📁 Directory node '{directory}': {len([f for f in input_files if f.suffix in exts])} files")
+
+        elif node['node_type'] == 'input_image':
+            params = node.get('params', {})
+            source = params.get('source', 'Select files')
+
+            if source == "Directory":
+                directory = params.get('directory', '')
+                if directory and Path(directory).exists():
+                    extensions = params.get('extensions', '.jpg,.jpeg,.png,.tif,.tiff,.webp').split(',')
+                    exts = [e.strip() if e.startswith('.') else f'.{e.strip()}' for e in extensions]
+                    recursive = params.get('recursive', False)
+                    pattern = '**/*' if recursive else '*'
+                    for ext in exts:
+                        input_files.extend([f for f in Path(directory).glob(f'{pattern}{ext}')])
+                    log.append(f"🖼️ Image Directory node '{directory}': {len([f for f in input_files if f.suffix in exts])} files")
+
+            elif source == "Select files":
+                files_key = params.get('files_key')
+                if files_key and files_key in st.session_state:
+                    selected_paths = st.session_state[files_key]
+                    input_files.extend([Path(f) for f in selected_paths])
+                    log.append(f"🖼️ Selected files: {len(selected_paths)} file(s)")
+                else:
+                    log.append(f"⚠️ Image file selection node: No files selected")
+
+    if not input_files and has_input_page_files:
+        input_files = list(st.session_state.loaded_files)
+        log.append(f"📂 Input page files: {len(input_files)}")
+
+    if not input_files:
+        log.append("⚠️ WARNING: No input files available!")
+        st.session_state.flow_execution_log = "\n".join(log)
+        st.warning("No input files available!")
+        return
+
+    # Find output directory
+    global_output_dir = None
+    for node in st.session_state.flow_nodes:
+        if node['node_type'] == 'output_save':
+            output_dir = node.get('params', {}).get('output_dir', '')
+            if output_dir:
+                global_output_dir = output_dir
+                log.append(f"📁 Output directory: {global_output_dir}")
+                break
+
+    # Handle direct XML -> Save connection
+    copied_files_for_next_node = None
+    if is_direct_connection and global_output_dir:
+        log.append("")
+        log.append("📋 Direct XML Input -> Save Output connection detected")
+        log.append(f"   Copying input files to output directory: {global_output_dir}")
+        if not dry_run:
+            copied_files_for_next_node = _copy_files_to_output_dir(input_files, global_output_dir, log)
+        else:
+            output_path = Path(global_output_dir)
+            copied_files_for_next_node = [output_path / f.name for f in input_files]
+        log.append(f"   ✓ Copied {len(copied_files_for_next_node)} file(s)")
+
+    # Build execution plan log
+    log.append("")
+    log.append("EXECUTION PLAN:")
+    log.append("")
+    for step, node in enumerate(exec_plan, 1):
+        params = node.get('params', {})
+        param_str = ", ".join(f"{k}={v}" for k, v in params.items() if v and v != "")
+        log.append(f"{step}. {node.get('name')} ({node.get('node_type')})")
+        if param_str:
+            log.append(f"   Params: {param_str}")
+
+    log.append("")
+    log.append("EXECUTION:")
+    log.append("")
+
+    # Import bridges lazily
+    try:
+        from pageplus.gui.cli_bridges import ModificationBridge, ExportBridge
+        from pageplus.gui.cli_bridges.tesseract import TesseractBridge
+    except ImportError as e:
+        log.append(f"❌ ERROR: Failed to import bridges: {e}")
+        st.session_state.flow_execution_log = "\n".join(log)
+        st.error("Failed to import required bridges.")
+        return
+
+    # Build edge lookup
+    incoming_edges = {}
+    for edge in st.session_state.flow_edges:
+        target = edge['target']
+        source = edge['source']
+        if target not in incoming_edges:
+            incoming_edges[target] = []
+        incoming_edges[target].append(source)
+
+    # Initialize node states: all pending
+    node_states = {}
+    for node in st.session_state.flow_nodes:
+        node_states[node['id']] = 'pending'
+
+    # Current files to use
+    current_files = copied_files_for_next_node if copied_files_for_next_node else input_files
+
+    # Save execution context
+    st.session_state.flow_exec_context = {
+        'dry_run': dry_run,
+        'continue_on_error': continue_on_error,
+        'current_files': current_files,
+        'node_output_files': {},
+        'incoming_edges': incoming_edges,
+        'global_output_dir': global_output_dir,
+        'copied_files_for_next_node': copied_files_for_next_node,
+        'input_files': input_files,
+    }
+
+    # Set execution state
+    st.session_state.flow_exec_active = True
+    st.session_state.flow_exec_node_states = node_states
+    st.session_state.flow_exec_current_step = 0
+    st.session_state.flow_exec_total_steps = len(exec_plan)
+    st.session_state.flow_exec_log_lines = log
+    st.session_state.flow_exec_plan = exec_plan
+    st.session_state.flow_active_tab = 'monitor'
+
+    st.rerun()
+
+
+def _execute_next_step():
+    """Execute the next node in the execution plan (one node per rerun cycle)."""
+    if not st.session_state.flow_exec_active:
+        return
+
+    plan = st.session_state.flow_exec_plan
+    step_idx = st.session_state.flow_exec_current_step
+    log = st.session_state.flow_exec_log_lines
+    ctx = st.session_state.flow_exec_context
+
+    if step_idx >= len(plan):
+        # Execution complete
+        log.append("=" * 60)
+        log.append("EXECUTION COMPLETE")
+        log.append("")
+        st.session_state.flow_exec_active = False
+        st.session_state.flow_execution_log = "\n".join(log)
+        st.rerun()
+        return
+
+    node = plan[step_idx]
+    node_type_id = node['node_type']
+    node_name = node.get('name', 'Node')
+    node_id = node['id']
+    params = node.get('params', {})
+
+    all_types = get_available_node_types()
+    node_type = all_types.get(node_type_id)
+
+    # Mark as running
+    st.session_state.flow_exec_node_states[node_id] = 'running'
+
+    log.append(f"▶️ Executing: {node_name}")
+
+    if not node_type or not node_type.enabled:
+        log.append(f"   ⚠️ Skipped (node type disabled or not found)")
+        st.session_state.flow_exec_node_states[node_id] = 'done'
+        st.session_state.flow_exec_current_step = step_idx + 1
+        log.append("")
+        if not ctx['continue_on_error']:
+            st.session_state.flow_exec_active = False
+            st.session_state.flow_execution_log = "\n".join(log)
+        st.rerun()
+        return
+
+    # Determine input files for this node
+    current_files = ctx['current_files']
+    node_output_files = ctx['node_output_files']
+    incoming_edges = ctx['incoming_edges']
+    node_input_files = current_files
+
+    if node_id in incoming_edges:
+        source_ids = incoming_edges[node_id]
+        source_files = []
+        for source_id in source_ids:
+            if source_id in node_output_files:
+                source_files.extend(node_output_files[source_id])
+
+        if source_files:
+            node_input_files = source_files
+            log.append(f"   📥 Input files from {len(source_ids)} source node(s): {len(node_input_files)} file(s)")
+        else:
+            copied = ctx.get('copied_files_for_next_node')
+            node_input_files = copied if copied else ctx['input_files']
+            log.append(f"   📥 Using base input files: {len(node_input_files)} file(s)")
+
+    dry_run = ctx['dry_run']
+    continue_on_error = ctx['continue_on_error']
+    global_output_dir = ctx['global_output_dir']
+    copied_files_for_next_node = ctx.get('copied_files_for_next_node')
+    success = True
+
+    try:
+        # Import bridges lazily for each step
+        from pageplus.gui.cli_bridges import ModificationBridge, ExportBridge
+        from pageplus.gui.cli_bridges.tesseract import TesseractBridge
+
+        modification_bridge = ModificationBridge()
+        export_bridge = ExportBridge()
+        tesseract_bridge = TesseractBridge()
+
+        if node_type_id.startswith('mod_'):
+            result = _execute_modification_node(
+                node_type_id, node_input_files, params, dry_run, log, modification_bridge, global_output_dir
+            )
+            if not result.get('success', True):
+                log.append(f"   ❌ Failed: {result.get('error', 'Unknown error')}")
+                success = False
+            else:
+                log.append(f"   ✓ {result.get('message', 'Completed')}")
+                if global_output_dir and result.get('output_files'):
+                    node_output_files[node_id] = result['output_files']
+                    log.append(f"   📤 Output files: {len(result['output_files'])} file(s)")
+
+        elif node_type_id.startswith('gemini_'):
+            result = _execute_gemini_node(
+                node_type_id, node_input_files, params, dry_run, log, global_output_dir
+            )
+            if not result.get('success', True):
+                log.append(f"   ❌ Failed: {result.get('error', 'Unknown error')}")
+                success = False
+            else:
+                log.append(f"   ✓ {result.get('message', 'Completed')}")
+                if global_output_dir and result.get('output_files'):
+                    node_output_files[node_id] = result['output_files']
+                    log.append(f"   📤 Output files: {len(result['output_files'])} file(s)")
+
+        elif node_type_id.startswith('tesseract_'):
+            result = _execute_tesseract_node(
+                node_input_files, params, dry_run, log, tesseract_bridge, global_output_dir
+            )
+            if not result.get('success', True):
+                log.append(f"   ❌ Failed: {result.get('error', 'Unknown error')}")
+                success = False
+            else:
+                log.append(f"   ✓ {result.get('message', 'Completed')}")
+                if global_output_dir and result.get('output_files'):
+                    node_output_files[node_id] = result['output_files']
+                    log.append(f"   📤 Output files: {len(result['output_files'])} file(s)")
+
+        elif node_type_id.startswith('kraken_'):
+            result = _execute_kraken_node(
+                node_input_files, params, dry_run, log, global_output_dir
+            )
+            if not result.get('success', True):
+                log.append(f"   ❌ Failed: {result.get('error', 'Unknown error')}")
+                success = False
+            else:
+                log.append(f"   ✓ {result.get('message', 'Completed')}")
+                if global_output_dir and result.get('output_files'):
+                    node_output_files[node_id] = result['output_files']
+                    log.append(f"   📤 Output files: {len(result['output_files'])} file(s)")
+
+        elif node_type_id.startswith('output_'):
+            result = _execute_output_node(
+                node_type_id, node_input_files, params, dry_run, log, export_bridge
+            )
+            if not result.get('success', True):
+                log.append(f"   ❌ Failed: {result.get('error', 'Unknown error')}")
+                success = False
+            else:
+                log.append(f"   ✓ {result.get('message', 'Completed')}")
+                if node_type_id == 'output_save' and copied_files_for_next_node:
+                    node_output_files[node_id] = copied_files_for_next_node
+                    log.append(f"   📤 Output files (from Save Output): {len(copied_files_for_next_node)} file(s)")
+
+        elif node_type_id.startswith('input_'):
+            log.append(f"   ✓ Input node (files already collected)")
+
+        else:
+            log.append(f"   ⚠️ Unknown node type: {node_type_id}")
+
+    except Exception as e:
+        import traceback
+        log.append(f"   ❌ Exception: {str(e)}")
+        log.append(f"   Traceback: {traceback.format_exc()}")
+        success = False
+
+    log.append("")
+
+    # Update node state
+    st.session_state.flow_exec_node_states[node_id] = 'done' if success else 'failed'
+
+    # Update context
+    ctx['node_output_files'] = node_output_files
+    st.session_state.flow_exec_context = ctx
+
+    # Advance step
+    st.session_state.flow_exec_current_step = step_idx + 1
+
+    # Check if should stop
+    if not success and not continue_on_error:
+        st.session_state.flow_exec_active = False
+        log.append("=" * 60)
+        log.append("EXECUTION STOPPED (error encountered)")
+        log.append("")
+        st.session_state.flow_execution_log = "\n".join(log)
+    elif step_idx + 1 >= len(plan):
+        # All done
+        st.session_state.flow_exec_active = False
+        log.append("=" * 60)
+        log.append("EXECUTION COMPLETE")
+        log.append("")
+        st.session_state.flow_execution_log = "\n".join(log)
+
+    st.rerun()
+
+
 def _execute_workflow(dry_run: bool = False, continue_on_error: bool = False):
     """Execute the workflow."""
     if not st.session_state.flow_nodes:
@@ -2250,6 +2759,9 @@ def _execute_workflow(dry_run: bool = False, continue_on_error: bool = False):
                         if node_type_id == 'output_save' and copied_files_for_next_node:
                             node_output_files[node_id] = copied_files_for_next_node
                             log.append(f"   📤 Output files (from Save Output): {len(copied_files_for_next_node)} file(s)")
+
+                elif node_type_id.startswith('input_'):
+                    log.append(f"   ✓ Input node (files already collected)")
 
                 else:
                     log.append(f"   ⚠️ Unknown node type: {node_type_id}")
@@ -2608,7 +3120,9 @@ def _execute_gemini_node(node_type_id: str, files: list, params: dict,
                         files=image_files,
                         outputdir=global_output_dir,
                         dry_run=dry_run,
-                        overwrite=True
+                        overwrite=True,
+                        recognize_level=params.get('recognize_level', 'TextRegion'),
+                        thinking_budget=params.get('thinking_budget', 0)
                     )
                 else:  # gemini_reocr
                     # For ReOCR, we need XML files
@@ -2621,7 +3135,10 @@ def _execute_gemini_node(node_type_id: str, files: list, params: dict,
                         xml_files=xml_files,
                         outputdir=global_output_dir,
                         dry_run=dry_run,
-                        overwrite=True
+                        overwrite=True,
+                        recognize_level=params.get('recognize_level', 'TextRegion'),
+                        update_elements=params.get('update_elements', ['Text', 'Tags']),
+                        thinking_budget=params.get('thinking_budget', 0)
                     )
 
                 if result.get('success'):
