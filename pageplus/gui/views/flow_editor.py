@@ -1601,8 +1601,34 @@ def _render_modification_params(node: Dict, node_type: NodeType):
         node['params'] = {'rectangular': rectangular, 'min_textlines': min_textlines, 'dry_run': dry_run}
 
     elif node_type.id == "mod_match_textlines":
+        slice_spanning = st.checkbox(
+            "Slice textlines spanning multiple regions",
+            value=params.get('slice_spanning', False),
+            help=(
+                "If enabled, textlines overlapping multiple regions are split into separate "
+                "textlines per region using the polygon intersection."
+            ),
+            key=f"slice_{node_id}"
+        )
+        slice_min_overlap = st.number_input(
+            "Slice min overlap",
+            min_value=0.0,
+            max_value=1.0,
+            value=float(params.get('slice_min_overlap', 0.1)),
+            step=0.05,
+            help=(
+                "Minimum intersection-over-line-area ratio for a region to receive a slice. "
+                "Only applies when slicing is enabled."
+            ),
+            key=f"slice_min_{node_id}",
+            disabled=not slice_spanning
+        )
         dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
-        node['params'] = {'dry_run': dry_run}
+        node['params'] = {
+            'slice_spanning': slice_spanning,
+            'slice_min_overlap': slice_min_overlap,
+            'dry_run': dry_run
+        }
 
     # New Sorting node
     elif node_type.id == "mod_sort":
@@ -2958,8 +2984,8 @@ def _execute_modification_node(node_type_id: str, files: list, params: dict,
         kwargs['min_textlines'] = params.get('min_textlines', 0)
 
     elif node_type_id == 'mod_match_textlines':
-        # No special parameters
-        pass
+        kwargs['slice_spanning'] = params.get('slice_spanning', False)
+        kwargs['slice_min_overlap'] = params.get('slice_min_overlap', 0.1)
 
     # Call the method
     for key, value in list(kwargs.items()):

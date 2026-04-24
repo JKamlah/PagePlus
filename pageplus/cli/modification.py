@@ -1922,6 +1922,50 @@ def set_metadata(inputs: Annotated[List[str], typer.Argument(exists=True,
             logging.error(f"Error processing {xml_file.name}: {str(e)}")
 
 
+def _largest_polygon_piece(geom):
+    """
+    Returns the largest Polygon component of a shapely geometry, or None.
+    Handles Polygon, MultiPolygon, and GeometryCollection inputs.
+    """
+    from shapely.geometry import (GeometryCollection, MultiPolygon, Polygon)
+
+    if geom is None or geom.is_empty:
+        return None
+    if isinstance(geom, Polygon):
+        return geom
+    if isinstance(geom, MultiPolygon):
+        polys = [g for g in geom.geoms if not g.is_empty]
+        return max(polys, key=lambda g: g.area) if polys else None
+    if isinstance(geom, GeometryCollection):
+        polys = [g for g in geom.geoms if isinstance(g, Polygon) and not g.is_empty]
+        return max(polys, key=lambda g: g.area) if polys else None
+    return None
+
+
+def _longest_linestring_coords(geom):
+    """
+    Returns the coordinates of the longest LineString component of a geometry
+    as a list of integer tuples, or [] if none is available.
+    """
+    from shapely.geometry import (GeometryCollection, LineString,
+                                  MultiLineString)
+
+    if geom is None or geom.is_empty:
+        return []
+    if isinstance(geom, LineString):
+        line = geom
+    elif isinstance(geom, MultiLineString):
+        line = max(geom.geoms, key=lambda g: g.length)
+    elif isinstance(geom, GeometryCollection):
+        lines = [g for g in geom.geoms if isinstance(g, LineString)]
+        if not lines:
+            return []
+        line = max(lines, key=lambda g: g.length)
+    else:
+        return []
+    return [(int(round(x)), int(round(y))) for x, y in line.coords]
+
+
 @app.command()
 def match_textlines_to_region(
     inputs: Annotated[List[str], typer.Argument(
@@ -1932,11 +1976,28 @@ def match_textlines_to_region(
     outputdir: Annotated[Optional[str], typer.Option(
         help="Filename of the output directory. If not specified, input files will be overwritten.",
         callback=transform_output
-    )] = None
+    )] = None,
+    slice_spanning: Annotated[bool, typer.Option(
+        "--slice/--no-slice",
+        help="If True, textlines spanning multiple regions are split ('sliced') into separate "
+             "textlines per region, using the polygon intersection with each region. The baseline "
+             "is clipped accordingly. The text is preserved on the slice with the largest overlap."
+    )] = False,
+    slice_min_overlap: Annotated[float, typer.Option(
+        help="Minimum intersection-over-line-area ratio for a region to receive a slice of a "
+             "spanning textline. Only applies when --slice is set.",
+        min=0.0, max=1.0
+    )] = 0.1
 ):
     """
     Matches textlines to the text region with the highest overlap (>50%).
     After matching, it sorts the textlines in each region.
+
+    When --slice is set, textlines that span multiple regions (each above
+    --slice-min-overlap) are split by polygon intersection, producing one
+    textline per region with clipped coordinates and baseline. The original
+    text is kept on the slice with the largest overlap; other slices are
+    created without text.
     """
     xml_files = collect_xml_files(map(Path, inputs))
     if not xml_files:
@@ -1960,22 +2021,85 @@ def match_textlines_to_region(
                 region_assignments[line.parent.get_id()].append(line)
                 continue
 
-            best_region = None
-            max_overlap = 0
-
+            # Gather intersections with all regions once so we can decide
+            # between standard assignment and slicing.
+            overlaps = []  # list of (region, ratio, intersection_geom, region_polygon)
             for region in page.regions.textregions:
                 region_polygon = region.get_coordinates("polygon")
                 if not region_polygon or region_polygon.is_empty:
                     continue
-
                 try:
                     intersection = line_polygon.intersection(region_polygon)
-                    overlap = intersection.area / line_polygon.area if line_polygon.area > 0 else 0
-                    if overlap > max_overlap:
-                        max_overlap = overlap
-                        best_region = region
                 except Exception as e:
-                    logging.warning(f"Could not calculate overlap for line {line.get_id()} and region {region.get_id()}: {e}")
+                    logging.warning(
+                        f"Could not calculate overlap for line {line.get_id()} "
+                        f"and region {region.get_id()}: {e}")
+                    continue
+                if intersection.is_empty:
+                    continue
+                ratio = (intersection.area / line_polygon.area) if line_polygon.area > 0 else 0
+                overlaps.append((region, ratio, intersection, region_polygon))
+
+            significant = [o for o in overlaps if o[1] >= slice_min_overlap]
+
+            if slice_spanning and len(significant) >= 2:
+                # Slice the textline across all regions with significant overlap.
+                significant.sort(key=lambda x: x[1], reverse=True)
+                primary_region = significant[0][0]
+                original_text = line.get_text() or ""
+                baseline_linestring = line.get_baseline_coordinates(returntype="linestring")
+
+                slice_idx = 0
+                created_any = False
+                for region, ratio, intersection, region_polygon in significant:
+                    poly_piece = _largest_polygon_piece(intersection)
+                    if poly_piece is None or poly_piece.is_empty or poly_piece.area <= 0:
+                        continue
+
+                    baseline_coords = []
+                    if baseline_linestring is not None and not baseline_linestring.is_empty:
+                        try:
+                            baseline_coords = _longest_linestring_coords(
+                                baseline_linestring.intersection(region_polygon))
+                        except Exception as e:
+                            logging.warning(
+                                f"Could not clip baseline for line {line.get_id()} "
+                                f"and region {region.get_id()}: {e}")
+                            baseline_coords = []
+
+                    new_id = f"{line.get_id()}_slice{slice_idx}"
+                    text_value = original_text if region is primary_region else ""
+
+                    coords_tuples = [(int(round(x)), int(round(y)))
+                                     for x, y in poly_piece.exterior.coords]
+                    new_line = region.add_textline(
+                        line_id=new_id,
+                        coords=coords_tuples,
+                        baseline=baseline_coords,
+                        text=text_value,
+                    )
+
+                    original_parents[new_line.get_id()] = region
+                    region_assignments[region.get_id()].append(new_line)
+                    slice_idx += 1
+                    created_any = True
+
+                if created_any:
+                    logging.info(
+                        f"Sliced textline {line.get_id()} into {slice_idx} pieces "
+                        f"across {slice_idx} region(s).")
+                    # Original line is intentionally not added to
+                    # region_assignments so it gets dropped during reassignment.
+                    continue
+
+            # Standard single-region assignment (used when slicing is off,
+            # or when fewer than two regions pass the slice threshold).
+            best_region = None
+            max_overlap = 0
+            for region, ratio, _intersection, _region_polygon in overlaps:
+                if ratio > max_overlap:
+                    max_overlap = ratio
+                    best_region = region
 
             if best_region and max_overlap > 0.5:
                 region_assignments[best_region.get_id()].append(line)

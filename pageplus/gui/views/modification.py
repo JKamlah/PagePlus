@@ -687,8 +687,36 @@ def show_modification(bridge: ModificationBridge) -> None:
                     "Matches textlines to the text region with the highest overlap (>50%) "
                     "and then sorts the textlines in each region."
                 )
+                slice_spanning = st.checkbox(
+                    "Slice textlines spanning multiple regions",
+                    value=False,
+                    help=(
+                        "If enabled, textlines that overlap multiple regions are split into "
+                        "separate textlines per region using the polygon intersection. The "
+                        "baseline is clipped accordingly. The original text is kept on the "
+                        "slice with the largest overlap; other slices are created empty."
+                    ),
+                    key="match_textlines_slice"
+                )
+                slice_min_overlap = st.number_input(
+                    "Slice min overlap (intersection / line area)",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=0.1,
+                    step=0.05,
+                    help=(
+                        "Minimum intersection-over-line-area ratio for a region to receive a "
+                        "slice of a spanning textline. Only applied when slicing is enabled."
+                    ),
+                    key="match_textlines_slice_min_overlap",
+                    disabled=not slice_spanning
+                )
                 if st.button("Match Textlines to Region"):
-                    params = {"outputdir": st.session_state.get('modification_dir')}
+                    params = {
+                        "outputdir": st.session_state.get('modification_dir'),
+                        "slice_spanning": slice_spanning,
+                        "slice_min_overlap": slice_min_overlap
+                    }
                     record_operation("match_textlines_to_region", **params)
                     with st.spinner("Matching textlines to regions...", show_time=True):
                         result = bridge.match_textlines_to_region(files=selected_files, **params)

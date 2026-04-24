@@ -673,14 +673,24 @@ class ModificationBridge(CLIBridge):
     def match_textlines_to_region(
         self,
         files: List[str],
-        outputdir: Optional[str] = None
+        outputdir: Optional[str] = None,
+        slice_spanning: bool = False,
+        slice_min_overlap: float = 0.1
     ) -> Dict[str, Any]:
-        """Match textlines to regions in files."""
+        """Match textlines to regions in files.
+
+        If ``slice_spanning`` is True, textlines that span multiple regions are
+        split into separate textlines per region using the polygon
+        intersection. ``slice_min_overlap`` controls the minimum
+        intersection-over-line-area ratio for a region to receive a slice.
+        """
         try:
             UndoManager.add_undo_state("Match Textlines to Regions")
             match_textlines_to_region(
                 inputs=files,
-                outputdir=outputdir
+                outputdir=outputdir,
+                slice_spanning=slice_spanning,
+                slice_min_overlap=slice_min_overlap
             )
             return {
                 "success": True,
