@@ -39,6 +39,8 @@ To install PagePlus, you will need Python 3.11+ and [Poetry](https://python-poet
     git clone https://github.com/your-username/pageplus.git
     cd pageplus
     ```
+    
+    *(Note: current recommended is latest `feature/*` branch, not the `main` branch) e.g. `git checkout feature/nodes`*
 
 2.  Install the required dependencies using Poetry. For GUI support, you need to install the `gui` extras:
     ```sh
@@ -49,10 +51,6 @@ To install PagePlus, you will need Python 3.11+ and [Poetry](https://python-poet
     poetry install --extras gui
     ```
 
-3.  Activate the virtual environment created by Poetry:
-    ```sh
-    poetry shell
-    ```
 4. For WSL-User: In order to use the file picker in the GUI you need to install `wslu`.
    ```sh
    sudo add-apt-repository ppa:wslutilities/wslu
@@ -69,7 +67,8 @@ PagePlus can be used via its Graphical User Interface (GUI) or Command-Line Inte
 To start the GUI, run the following command from the root directory of the project:
 
 ```sh
-pageplus-gui
+poetry run pageplus
+poetry run pageplus-gui
 ```
 
 This will open the PagePlus GUI in your web browser, where you can interactively load, process, and analyze your PAGE XML files.
