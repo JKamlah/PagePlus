@@ -238,6 +238,7 @@ def _initialize_node_types():
         ("mod_recalculate_polygon", "♻️", "Recalculate Polygon", "Recalculate TextRegion polygon"),
         ("mod_fit_into_parent", "📐", "Fit Into Parent", "Fit elements into parent boundaries"),
         ("mod_match_textlines", "🔗", "Match Textlines", "Match textlines to regions"),
+        ("mod_match_textlines_smallest", "🔗", "Match Textlines Smallest", "Match textlines to smallest region"),
     ]
     for node_id, icon, label, desc in mod_text_layout:
         register_node_type(NodeType(
@@ -1596,8 +1597,9 @@ def _render_modification_params(node: Dict, node_type: NodeType):
     elif node_type.id == "mod_sort_regions":
         based_on_baselines = st.checkbox("Use mean baseline centroid", value=params.get('based_on_baselines', False), key=f"bob_{node_id}")
         overlap_pct = st.slider("Overlap percentage", 0.0, 100.0, value=params.get('overlap_pct', 60.0), key=f"op_{node_id}")
+        nested_regions = st.checkbox("Nested Regions", value=params.get('nested_regions', False), key=f"nested_{node_id}")
         dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
-        node['params'] = {'based_on_baselines': based_on_baselines, 'overlap_pct': overlap_pct, 'dry_run': dry_run}
+        node['params'] = {'based_on_baselines': based_on_baselines, 'overlap_pct': overlap_pct, 'nested_regions': nested_regions, 'dry_run': dry_run}
 
     # New Format & Metadata nodes
     elif node_type.id == "mod_set_page_version":
@@ -1672,6 +1674,21 @@ def _render_modification_params(node: Dict, node_type: NodeType):
         node['params'] = {
             'slice_spanning': slice_spanning,
             'slice_min_overlap': slice_min_overlap,
+            'dry_run': dry_run
+        }
+
+    elif node_type.id == "mod_match_textlines_smallest":
+        min_overlap = st.number_input(
+            "Min Overlap",
+            min_value=0.0,
+            max_value=1.0,
+            value=float(params.get('min_overlap', 0.90)),
+            step=0.05,
+            key=f"mts_min_overlap_{node_id}"
+        )
+        dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
+        node['params'] = {
+            'min_overlap': min_overlap,
             'dry_run': dry_run
         }
 
@@ -2906,6 +2923,7 @@ def _execute_modification_node(node_type_id: str, files: list, params: dict,
         'mod_pseudoline_polygon': 'pseudolinepolygon',
         'mod_recalculate_polygon': 'recalculate_textregion_polygon',
         'mod_match_textlines': 'match_textlines_to_region',
+        'mod_match_textlines_smallest': 'match_textlines_to_smallest_region',
     }
 
     method_name = method_map.get(node_type_id)
@@ -2989,6 +3007,7 @@ def _execute_modification_node(node_type_id: str, files: list, params: dict,
     elif node_type_id == 'mod_sort_regions':
         kwargs['based_on_baselines'] = params.get('based_on_baselines', False)
         kwargs['overlap_pct'] = params.get('overlap_pct', 60.0)
+        kwargs['nested_regions'] = params.get('nested_regions', False)
         kwargs['dry_run'] = params.get('dry_run', dry_run)
 
     elif node_type_id == 'mod_sort':
@@ -3032,6 +3051,9 @@ def _execute_modification_node(node_type_id: str, files: list, params: dict,
     elif node_type_id == 'mod_match_textlines':
         kwargs['slice_spanning'] = params.get('slice_spanning', False)
         kwargs['slice_min_overlap'] = params.get('slice_min_overlap', 0.1)
+
+    elif node_type_id == 'mod_match_textlines_smallest':
+        kwargs['min_overlap'] = params.get('min_overlap', 0.90)
 
     # Call the method
     for key, value in list(kwargs.items()):

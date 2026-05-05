@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 
 from pageplus.cli.modification import (delete_text, delete_textlines,
                                        extend_lines, fit_into_parent,
-                                       match_textlines_to_region,
+                                       match_textlines_to_region, match_textlines_to_smallest_region,
                                        merge_columnaligned_regions,
                                        merge_overlapping_textregions,
                                        pseudolinepolygon, reassign_ids,
@@ -558,6 +558,7 @@ class ModificationBridge(CLIBridge):
         files: List[str],
         based_on_baselines: bool = False,
         overlap_pct: float = 60.0,
+        nested_regions: bool = False,
         outputdir: Optional[str] = None,
         dry_run: bool = False
     ) -> Dict[str, Any]:
@@ -569,6 +570,7 @@ class ModificationBridge(CLIBridge):
                 inputs=files,
                 based_on_baselines=based_on_baselines,
                 overlap_pct=overlap_pct,
+                nested_regions=nested_regions,
                 outputdir=outputdir,
                 dry_run=dry_run
             )
@@ -697,6 +699,30 @@ class ModificationBridge(CLIBridge):
             return {
                 "success": True,
                 "output": "Textlines matched to regions successfully"
+            }
+        except Exception as e:
+            return {"success": False, "output": str(e)}
+
+    def match_textlines_to_smallest_region(
+        self,
+        files: List[str],
+        outputdir: Optional[str] = None,
+        min_overlap: float = 0.90,
+        dry_run: bool = False
+    ) -> Dict[str, Any]:
+        """Match textlines to the smallest region."""
+        try:
+            if not dry_run:
+                UndoManager.add_undo_state("Match Textlines to Smallest Region")
+            match_textlines_to_smallest_region(
+                inputs=files,
+                outputdir=outputdir,
+                min_overlap=min_overlap,
+                dry_run=dry_run
+            )
+            return {
+                "success": True,
+                "output": "Textlines matched to smallest regions successfully"
             }
         except Exception as e:
             return {"success": False, "output": str(e)}

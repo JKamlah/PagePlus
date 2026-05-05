@@ -792,6 +792,9 @@ def sort_regions(
         min=0.0, max=100.0,
         help="Schwelle in % für Y- und X-Überlappung (bezogen auf die kleinere Breite/Höhe)."
     )] = 60.0,
+    nested_regions: Annotated[bool, typer.Option(
+        help="If true, check if a region is totally contained by another to determine parent-child relationships."
+    )] = False,
     dry_run: Annotated[bool, typer.Option(
         help="Compute and log without writing files."
     )] = False,
@@ -912,27 +915,82 @@ def sort_regions(
             logging.info("No text regions; skipping.")
             continue
 
-        # 1) HORIZONTAL Gruppen (Zeilenbänder) via Y-Überlappung ≥ Schwelle
-        def same_row(a: R, b: R) -> bool:
-            return _ioverlap_1d(a.ymin, a.ymax, b.ymin, b.ymax) >= y_thresh
+        # Build containment tree if nested_regions is True
+        parents = {}
+        children = {r.idx: [] for r in regs}
+        
+        if nested_regions:
+            from shapely.geometry import box
+            polygons = {}
+            for r in regs:
+                tr = page.regions.textregions[r.idx]
+                poly = tr.get_coordinates("polygon")
+                if poly and not poly.is_empty:
+                    polygons[r.idx] = poly
+                else:
+                    polygons[r.idx] = box(r.xmin, r.ymin, r.xmax, r.ymax)
+            
+            areas = {r.idx: polygons[r.idx].area for r in regs}
+            
+            containments = []
+            for a in regs:
+                for b in regs:
+                    if a.idx != b.idx:
+                        poly_a = polygons[a.idx]
+                        poly_b = polygons[b.idx]
+                        if areas[a.idx] >= areas[b.idx] and areas[b.idx] > 0:
+                            try:
+                                inter = poly_a.intersection(poly_b)
+                                if inter.area / areas[b.idx] > 0.90:
+                                    containments.append((a.idx, b.idx))
+                            except Exception:
+                                # Fallback to strict covers if topology intersection fails
+                                if poly_a.covers(poly_b):
+                                    containments.append((a.idx, b.idx))
+                            
+            for b_idx in {b for _, b in containments}:
+                possible_parents = [a for a, b in containments if b == b_idx]
+                direct_parent = min(possible_parents, key=lambda a: areas[a])
+                parents[b_idx] = direct_parent
+                children[direct_parent].append(b_idx)
 
-        row_groups = _connected_components(regs, same_row)
+        top_regs = [r for r in regs if r.idx not in parents]
 
-        # 2) Zeilengruppen nach Y (Median der y-Zentren)
-        row_groups.sort(key=lambda g: median([r.cy for r in g]))
-        # 3) In jeder Zeilengruppe: Spalten via X-Überlappung ≥ Schwelle,
-        #    Spalten nach X, innerhalb jeder Spalte nach Y
+        def sort_region_list(regions_to_sort: List[R]) -> List[R]:
+            if not regions_to_sort:
+                return []
+            
+            def same_row(a: R, b: R) -> bool:
+                return _ioverlap_1d(a.ymin, a.ymax, b.ymin, b.ymax) >= y_thresh
+
+            row_groups = _connected_components(regions_to_sort, same_row)
+            row_groups.sort(key=lambda g: median([r.cy for r in g]))
+            
+            sorted_list = []
+            for row in row_groups:
+                def same_col(a: R, b: R) -> bool:
+                    return _ioverlap_1d(a.xmin, a.xmax, b.xmin, b.xmax) >= x_thresh
+                cols = _connected_components(row, same_col)
+                cols.sort(key=lambda col: median([r.cx for r in col]))
+                for col in cols:
+                    col.sort(key=lambda r: r.cy)
+                    sorted_list.extend(col)
+            return sorted_list
+
         full_order: List[R] = []
-        for row in row_groups:
-            def same_col(a: R, b: R) -> bool:
-                return _ioverlap_1d(a.xmin, a.xmax, b.xmin, b.xmax) >= x_thresh
-            cols = _connected_components(row, same_col)
-            cols.sort(key=lambda col: median(
-                [r.cx for r in col]))  # links→rechts
-            for col in cols:
-                col.sort(key=lambda r: r.cx)  # oben→unten
-                full_order.extend(col)
-        # 4) XML-Reorder wie gehabt …
+        
+        def add_with_children(r: R):
+            full_order.append(r)
+            child_rs = [r_obj for r_obj in regs if r_obj.idx in children[r.idx]]
+            if child_rs:
+                sorted_children = sort_region_list(child_rs)
+                for c in sorted_children:
+                    add_with_children(c)
+
+        sorted_top_regs = sort_region_list(top_regs)
+        for root_r in sorted_top_regs:
+            add_with_children(root_r)
+        # 4) XML-Reorder wie gehabt ...
         for r in full_order:
             region_el = page.regions.textregions[r.idx].xml_element
             parent = region_el.getparent()
@@ -2194,10 +2252,118 @@ def match_textlines_to_region(
         for region in page.regions.textregions:
             region.sort_baselines(mode='single_col')
 
-        # write modified xml file
-        fout = xml_file if outputdir is None else determine_output_path(xml_file, outputdir)
-        logging.info('Wrote modified xml file to output directory: ' + str(fout))
-        page.save_xml(fout)
+        if not dry_run:
+            fout = xml_file if outputdir is None else determine_output_path(
+                xml_file, outputdir, filename)
+            logging.info(f'Wrote modified xml file to output directory: {fout}')
+            page.save_xml(fout)
+        else:
+            logging.info(f'[DRY RUN] Would write modified xml file to: {xml_file}')
+
+
+@app.command()
+def match_textlines_to_smallest_region(
+    inputs: Annotated[List[str], typer.Argument(
+        exists=True,
+        help="Paths or workspace to the PAGE XML files to be processed.",
+        callback=transform_inputs
+    )] = None,
+    outputdir: Annotated[Optional[str], typer.Option(
+        help="Filename of the output directory. If not specified, input files will be overwritten.",
+        callback=transform_output
+    )] = None,
+    min_overlap: Annotated[float, typer.Option(
+        help="Minimum intersection-over-line-area ratio for a region to receive a textline.",
+        min=0.0, max=1.0
+    )] = 0.90,
+    dry_run: Annotated[bool, typer.Option(help="Perform a dry run without writing any files.")] = False
+):
+    """
+    Matches textlines to the smallest text region that has an overlap greater than the min_overlap threshold.
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError('No xml files found in input directory')
+
+    for xml_file in track(xml_files, description="Matching textlines to smallest region..."):
+        filename = xml_file.name
+        page = Page(xml_file)
+        logging.info('Processing file: ' + filename)
+
+        all_textlines = [line for region in page.regions.textregions for line in region.textlines]
+
+        # A dictionary to hold the new assignments of textlines to regions
+        region_assignments = {region.get_id(): [] for region in page.regions.textregions}
+        original_parents = {line.get_id(): line.parent for line in all_textlines}
+
+        for line in all_textlines:
+            line_polygon = line.get_coordinates("polygon")
+            if not line_polygon or line_polygon.is_empty:
+                # Keep it in its original region if it has no geometry
+                region_assignments[line.parent.get_id()].append(line)
+                continue
+
+            overlaps = []
+            for region in page.regions.textregions:
+                region_polygon = region.get_coordinates("polygon")
+                if not region_polygon or region_polygon.is_empty:
+                    continue
+                try:
+                    intersection = line_polygon.intersection(region_polygon)
+                except Exception as e:
+                    logging.warning(
+                        f"Could not calculate overlap for line {line.get_id()} "
+                        f"and region {region.get_id()}: {e}")
+                    continue
+                if intersection.is_empty:
+                    continue
+                ratio = (intersection.area / line_polygon.area) if line_polygon.area > 0 else 0
+                if ratio >= min_overlap:
+                    overlaps.append((region, region_polygon.area, ratio))
+
+            if overlaps:
+                # Select the region with the minimum area
+                best_region = min(overlaps, key=lambda x: x[1])[0]
+                region_assignments[best_region.get_id()].append(line)
+            else:
+                # If no suitable region is found, keep it in its original region
+                region_assignments[line.parent.get_id()].append(line)
+
+        # Now, update the actual textlines in each region
+        for region in page.regions.textregions:
+            new_textlines = region_assignments[region.get_id()]
+
+            # Remove all old textlines from XML
+            for line in region.textlines:
+                try:
+                    region.xml_element.remove(line.xml_element)
+                except ValueError:
+                    # Line might have already been moved from another region's list
+                    pass
+
+            # Update the list of textlines in the object
+            region.textlines.clear()
+
+            # Add new textlines
+            for line in new_textlines:
+                original_parent_element = original_parents[line.get_id()].xml_element
+                if line.xml_element in original_parent_element:
+                    original_parent_element.remove(line.xml_element)
+                region.xml_element.append(line.xml_element)
+                line.parent = region
+                region.textlines.append(line)
+
+        # Sort the textlines in each region after re-assignment
+        for region in page.regions.textregions:
+            region.sort_baselines(mode='single_col')
+
+        if not dry_run:
+            fout = xml_file if outputdir is None else determine_output_path(
+                xml_file, outputdir, filename)
+            logging.info(f'Wrote modified xml file to output directory: {fout}')
+            page.save_xml(fout)
+        else:
+            logging.info(f'[DRY RUN] Would write modified xml file to: {xml_file}')
 
 
 @app.command()

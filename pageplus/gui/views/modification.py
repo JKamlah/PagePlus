@@ -666,12 +666,20 @@ def show_modification(bridge: ModificationBridge) -> None:
                     help="Threshold in percent for Y- and X-overlap, based on the smaller width/height of the two regions being compared.",
                     key="sort_regions_overlap_pct")
 
+                nested_regions = st.checkbox(
+                    "Nested Regions",
+                    value=False,
+                    help="If checked, the system will identify if a region totally contains another and categorize it as the parent, treating it before its children.",
+                    key="sort_regions_nested"
+                )
+
                 dry_run = st.checkbox("Dry run", key="sort_regions_dry_run")
 
                 if st.button("Sort Regions"):
                     params = {
                         "based_on_baselines": based_on_baselines,
                         "overlap_pct": overlap_pct,
+                        "nested_regions": nested_regions,
                         "dry_run": dry_run,
                         "outputdir": st.session_state.get('modification_dir')
                     }
@@ -722,6 +730,35 @@ def show_modification(bridge: ModificationBridge) -> None:
                     record_operation("match_textlines_to_region", **params)
                     with st.spinner("Matching textlines to regions...", show_time=True):
                         result = bridge.match_textlines_to_region(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
+
+            # Match Textlines to Smallest Region
+            with st.expander("Match Textlines to Smallest Region"):
+                st.write(
+                    "Matches textlines to the smallest text region that has an overlap greater than the minimum threshold."
+                )
+                min_overlap = st.number_input(
+                    "Minimum Overlap Ratio",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=0.90,
+                    step=0.05,
+                    help="Minimum intersection-over-line-area ratio for a region to receive a textline.",
+                    key="match_textlines_smallest_min_overlap"
+                )
+                dry_run = st.checkbox("Dry run", key="match_textlines_smallest_dry_run")
+                if st.button("Match Textlines to Smallest Region"):
+                    params = {
+                        "outputdir": st.session_state.get('modification_dir'),
+                        "min_overlap": min_overlap,
+                        "dry_run": dry_run
+                    }
+                    record_operation("match_textlines_to_smallest_region", **params)
+                    with st.spinner("Matching textlines to smallest region...", show_time=True):
+                        result = bridge.match_textlines_to_smallest_region(files=selected_files, **params)
                     if result["success"]:
                         st.success(result["output"])
                     else:
