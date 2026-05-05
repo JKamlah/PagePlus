@@ -1,0 +1,5 @@
+<|input|>
+Existing PAGE-XML layout (ids + coords, no text yet):
+{{ page_xml_text if page_xml_text is not none else (page_xml | tojson) }}
+
+Transcribe every listed textline from the attached image. Return the JSON keyed by id.

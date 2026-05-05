@@ -346,11 +346,30 @@ def gemini2d_preprocess(
         try:
             relative_bbox = entry.get(bbox_key)
 
+            # Some Gemini responses wrap the bbox together with the label as a
+            # 2-element list, e.g. ``"box_2d": [[y1, x1, y2, x2], "LABEL"]``
+            # instead of the canonical flat ``[y1, x1, y2, x2]``. Normalize to
+            # the flat form and, if the caller hasn't already supplied text,
+            # recover the label from the tuple.
+            inline_label: Optional[str] = None
+            if (
+                isinstance(relative_bbox, (list, tuple))
+                and len(relative_bbox) == 2
+                and isinstance(relative_bbox[0], (list, tuple))
+                and len(relative_bbox[0]) == 4
+            ):
+                inner, maybe_label = relative_bbox[0], relative_bbox[1]
+                relative_bbox = list(inner)
+                if isinstance(maybe_label, str):
+                    inline_label = maybe_label
+
             text = entry.get(
                 primary_text_key,
                 "") or entry.get(
                 secondary_text_key,
                 "")
+            if not text and inline_label:
+                text = inline_label
             if not text:
                 for key, value in entry.items():
                     if "text" in key.lower() and value:

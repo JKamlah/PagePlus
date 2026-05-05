@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from PIL import Image
-from pageplus.utils.llm.api import GEMINIAPI
+from pageplus.utils.llm.settings import LLMSettings
 from pageplus.utils.constants import Environments
 from pageplus.utils.io import table_json_to_page
 import json_repair
@@ -13,7 +13,7 @@ from google.genai import types
 class TableRecognitionStage:
     def __init__(self, prompt_path: Optional[str] = None, api_key: Optional[str] = None):
         self.prompt_path = prompt_path
-        self.llm_api = GEMINIAPI(Environments.GEMINI)
+        self.llm_api = LLMSettings(Environments.GEMINI)
         if api_key:
             self.llm_api.api_key = api_key
             

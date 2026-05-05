@@ -1,10 +1,15 @@
 from pageplus.utils.io import gemini2d_to_page, load_gemini2d_json
 from pathlib import Path
+from typing import Optional
 
 import typer
 from typing_extensions import Annotated
 
 from pageplus.utils.fs import (transform_input)
+from pageplus.utils.io_churro import (
+    churro_page_to_page_xml,
+    load_churro_json,
+)
 
 app = typer.Typer()
 
@@ -59,6 +64,88 @@ def gemini2d(
         except Exception as e:
             print(
                 f"Error writing PAGE XML file '{json_file.with_suffix('.xml')}': {e}")
+
+
+@app.command()
+def churro(
+    json_path: Annotated[str, typer.Argument(
+        exists=True,
+        help="Path to a Churro document JSON (DocumentOCRResult, DocumentPage, or a list of pages).",
+        callback=transform_input,
+    )],
+    image_dir: Annotated[Optional[Path], typer.Option(
+        exists=True, file_okay=False,
+        help="Directory to resolve image filenames against. If omitted, images are looked up next to the JSON file.",
+    )] = None,
+    output_dir: Annotated[Optional[Path], typer.Option(
+        file_okay=False,
+        help="Directory where PAGE-XML files will be written. Defaults to the JSON's parent directory.",
+    )] = None,
+    text_delimiter: Annotated[str, typer.Option(
+        help="Line delimiter used to split the Churro page text into PAGE TextLines.",
+    )] = "\n",
+    dry_run: Annotated[bool, typer.Option(
+        help="If True, do not write any files.",
+    )] = False,
+):
+    """
+    Ingest a Churro JSON document and emit one PAGE-XML per Churro page.
+
+    Accepts any of the Churro output shapes:
+      - ``DocumentOCRResult`` (``{source_type, metadata, pages: [...]}``)
+      - a bare list of ``DocumentPage`` objects
+      - a single ``DocumentPage`` object
+
+    Per-line coordinates are approximated (Churro only emits page-level text).
+    Run a layout tool on the generated PAGE-XML if you need exact geometry.
+    """
+    json_file = Path(json_path)
+    if not json_file.is_file() or json_file.suffix.lower() != ".json":
+        raise FileExistsError(f"Expected a .json file, got: {json_file}")
+
+    document = load_churro_json(json_file)
+    if not document.pages:
+        print(f"No pages found in {json_file.name}, nothing to do.")
+        return
+
+    out_root = output_dir if output_dir is not None else json_file.parent
+    img_root = image_dir if image_dir is not None else json_file.parent
+
+    if not dry_run:
+        out_root.mkdir(parents=True, exist_ok=True)
+
+    for page in document.pages:
+        image_hint = None
+        for key in ("image_filename", "image_path", "source_path", "path"):
+            value = (page.metadata or {}).get(key)
+            if value:
+                image_hint = Path(str(value)).name
+                break
+        image_path = None
+        if image_hint:
+            candidate = img_root / image_hint
+            if candidate.exists():
+                image_path = candidate
+
+        base_name = json_file.stem
+        if len(document.pages) > 1:
+            base_name = f"{json_file.stem}_p{page.page_index:04d}"
+        xml_path = out_root / f"{base_name}.xml"
+
+        xml_content = churro_page_to_page_xml(
+            page,
+            image_path=image_path,
+            text_delimiter=text_delimiter,
+        )
+
+        if dry_run:
+            print(f"[dry-run] Would write {xml_path}")
+            continue
+        try:
+            xml_path.write_text(xml_content, encoding="utf-8")
+            print(f"Wrote PAGE XML: {xml_path}")
+        except Exception as exc:
+            print(f"Error writing PAGE XML '{xml_path}': {exc}")
 
 
 if __name__ == "__main__":

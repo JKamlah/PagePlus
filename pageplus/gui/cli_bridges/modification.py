@@ -527,6 +527,7 @@ class ModificationBridge(CLIBridge):
         convex_hull_method: str = 'region',
         max_height_distance: float = 0.75,
         mid_tolerance: float = 0.0,
+        only_sort: bool = False,
         outputdir: Optional[str] = None,
         dry_run: bool = False
     ) -> Dict[str, Any]:
@@ -541,6 +542,7 @@ class ModificationBridge(CLIBridge):
                 convex_hull_method=convex_hull_method,
                 max_height_distance=max_height_distance,
                 mid_tolerance=mid_tolerance,
+                only_sort=only_sort,
                 outputdir=outputdir,
                 dry_run=dry_run
             )

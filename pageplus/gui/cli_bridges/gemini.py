@@ -1,13 +1,15 @@
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 
-from pageplus.cli.gemini import (RecognizeLevel, check_model, check_valid_key, ocr,
+from pageplus.cli.gemini import (check_model, check_valid_key, ocr,
                                  ocr_multithread, reocr_multithread,
                                  set_api_key, set_model, show_model,
                                  show_modeldetails, show_models, show_settings)
 from pageplus.gui.utils.undo import UndoManager
 from pageplus.gui.utils.pipeline_manager import PipelineManager
 from pageplus.stages.table_recognition import TableRecognitionStage
+from pageplus.utils.constants import RecognizeLevel
+from pageplus.utils.llm.core import TaskMode
 
 
 class GeminiBridge:
@@ -105,15 +107,14 @@ class GeminiBridge:
             image_extension: str = '.jpg',
             jobs: int = 1,
             calls_per_minute: int = 150,
-            dry_run: bool = False) -> dict:
-        """Run OCR on files using Gemini."""
+            dry_run: bool = False,
+            task_mode: str = "layout_and_text") -> dict:
+        """Run OCR on files using Gemini (defaults to layout_and_text)."""
         try:
             if not dry_run:
-                # Assuming overwrite is implicit, backup potential XML files
                 xml_files_to_backup = []
                 for img_path_str in files:
                     img_path = Path(img_path_str)
-                    # This logic assumes XMLs are generated next to images or in outputdir
                     xml_name = img_path.with_suffix('.xml').name
                     potential_xml_path = Path(outputdir) / xml_name if outputdir else img_path.with_suffix('.xml')
                     if potential_xml_path.exists():
@@ -123,8 +124,7 @@ class GeminiBridge:
                     UndoManager.add_undo_state("OCR", file_paths=xml_files_to_backup)
             ocr(inputs=files,
                 outputdir=outputdir,
-                image_extension=image_extension,
-                jobs=jobs,
+                task_mode=TaskMode(task_mode),
                 calls_per_minute=calls_per_minute,
                 dry_run=dry_run)
             return {"success": True, "output": "OCR completed successfully."}
@@ -139,12 +139,13 @@ class GeminiBridge:
             jobs: int = 4,
             calls_per_minute: int = 150,
             dry_run: bool = False,
-            system_prompt: str = None,
+            system_prompt: str = None,  # kept for API compatibility; ignored (templates own the prompt)
             overwrite: bool = True,
             recognize_level: str = "TextRegion",
             multi_stage: bool = False,
-            thinking_budget: int = 0) -> dict:
-        """Run OCR on files using Gemini with different default settings."""
+            thinking_budget: int = 0,
+            task_mode: str = "layout_and_text") -> dict:
+        """Run concurrent OCR using Gemini (defaults to layout_and_text)."""
         try:
             if not dry_run and overwrite:
                 xml_files_to_backup = []
@@ -164,11 +165,11 @@ class GeminiBridge:
                 jobs=jobs,
                 calls_per_minute=calls_per_minute,
                 dry_run=dry_run,
-                system_prompt=system_prompt,
                 overwrite=overwrite,
                 recognize_level=RecognizeLevel(recognize_level),
                 multi_stage=multi_stage,
-                thinking_budget=thinking_budget)
+                thinking_budget=thinking_budget,
+                task_mode=TaskMode(task_mode))
             return {
                 "success": True,
                 "output": "OCR completed successfully.",
@@ -182,9 +183,9 @@ class GeminiBridge:
             image_files: List[str] = None,
             image_folder: str = None,
             same_names: bool = False,
-            additional_checks: List[str] = None,
+            additional_checks: List[str] = None,  # kept for API compatibility; ignored
             outputdir: str = None,
-            system_prompt: str = None,
+            system_prompt: str = None,  # kept for API compatibility; ignored
             update_page: bool = True,
             recognize_level: str = "TextRegion",
             update_elements: List[str] = ["Text", "Tags"],
@@ -192,8 +193,9 @@ class GeminiBridge:
             calls_per_minute: int = 150,
             thinking_budget: int = 0,
             dry_run: bool = False,
-            overwrite: bool = True) -> dict:
-        """Run ReOCR on XML files using Gemini with different default settings."""
+            overwrite: bool = True,
+            task_mode: str = "text_correction") -> dict:
+        """Re-OCR or correction on pre-segmented XMLs (default: text_correction)."""
         try:
             if not dry_run:
                 paths_to_backup = [Path(p) for p in xml_files]
@@ -203,9 +205,8 @@ class GeminiBridge:
                 image_files=image_files,
                 image_folder=image_folder,
                 same_names=same_names,
-                additional_checks=additional_checks,
                 outputdir=outputdir,
-                system_prompt=system_prompt,
+                task_mode=TaskMode(task_mode),
                 update_page=update_page,
                 recognize_level=RecognizeLevel(recognize_level),
                 update_elements=update_elements,
@@ -245,12 +246,21 @@ class GeminiBridge:
                 if "usage" in result:
                     usage_list.append(result["usage"])
             
-            # Aggregate usage
+            # Aggregate usage. ``usage`` may be either a google-genai
+            # ``usage_metadata`` object (legacy table-recognition stage) or a
+            # plain dict (OCRResult.usage from the unified OCR pipeline).
+            def _usage_field(meta, name: str) -> int:
+                if meta is None:
+                    return 0
+                if isinstance(meta, dict):
+                    return int(meta.get(name, 0) or 0)
+                return int(getattr(meta, name, 0) or 0)
+
             aggregated_usage = {"prompt_tokens": 0, "candidates_tokens": 0, "total_tokens": 0}
             for usage in usage_list:
-                aggregated_usage["prompt_tokens"] += getattr(usage, 'prompt_token_count', 0)
-                aggregated_usage["candidates_tokens"] += getattr(usage, 'candidates_token_count', 0)
-                aggregated_usage["total_tokens"] += getattr(usage, 'total_token_count', 0)
+                aggregated_usage["prompt_tokens"] += _usage_field(usage, 'prompt_token_count')
+                aggregated_usage["candidates_tokens"] += _usage_field(usage, 'candidates_token_count')
+                aggregated_usage["total_tokens"] += _usage_field(usage, 'total_token_count')
                 
             return {
                 "success": True,

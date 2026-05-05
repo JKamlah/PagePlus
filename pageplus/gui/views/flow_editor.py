@@ -125,6 +125,25 @@ def _check_gemini_available() -> bool:
         return False
 
 
+def _check_litellm_available() -> bool:
+    """Check if at least one LiteLLM provider preset is usable.
+
+    Delegates to :func:`pageplus.utils.llm.provider_registry.available_providers`
+    which inspects environment/Settings for the credentials required by each
+    registered LiteLLM preset (OpenAI, Azure, Anthropic, Mistral, ...).
+    """
+    try:
+        from pageplus.utils.llm.provider_registry import available_providers
+        return bool(available_providers())
+    except Exception:
+        return False
+
+
+def _check_any_vlm_available() -> bool:
+    """The VLM task-mode nodes are available as long as at least one VLM backend is usable."""
+    return _check_gemini_available() or _check_litellm_available()
+
+
 # Initialize default node types
 def _initialize_node_types():
     """Initialize all default node types."""
@@ -330,6 +349,32 @@ def _initialize_node_types():
             category="processing",
             description=desc,
             enabled_check=_check_kraken_available
+        ))
+
+    # Provider-agnostic VLM task mode nodes. Each node exposes one of the five
+    # PAGE-XML-aware task modes; a provider dropdown on the node selects the
+    # concrete backend (Gemini, LiteLLM, ...).
+    vlm_mode_nodes = [
+        ("vlm_layout_only", "🗺️", "VLM Layout Only",
+         "image -> regions + coords (no text)"),
+        ("vlm_layout_and_text", "🧭", "VLM Layout + Text",
+         "image -> regions + coords + text"),
+        ("vlm_layout_correction", "🧰", "VLM Layout Correction",
+         "image + PAGE-XML -> refined coords"),
+        ("vlm_text_only", "📝", "VLM Text Only",
+         "image + PAGE-XML -> text per id"),
+        ("vlm_text_correction", "✍️", "VLM Text Correction",
+         "image + PAGE-XML + text -> refined text"),
+    ]
+    for node_id, icon, label, desc in vlm_mode_nodes:
+        register_node_type(NodeType(
+            id=node_id,
+            label=label,
+            icon=icon,
+            color="#E91E63",
+            category="processing",
+            description=desc,
+            enabled_check=_check_any_vlm_available,
         ))
 
     # Future LLM nodes (extensible)
@@ -2939,6 +2984,7 @@ def _execute_modification_node(node_type_id: str, files: list, params: dict,
         kwargs['max_height_distance'] = params.get('max_height_distance', 0.75)
         kwargs['mid_tolerance'] = params.get('mid_tolerance', 0.0)
         kwargs['tolerance'] = params.get('tolerance', 0.1)
+        kwargs['only_sort'] = params.get('only_sort', False)
 
     elif node_type_id == 'mod_sort_regions':
         kwargs['based_on_baselines'] = params.get('based_on_baselines', False)

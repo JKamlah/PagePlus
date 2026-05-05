@@ -519,6 +519,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                     key="merge_columnaligned_tolerance"
                 )
 
+                only_sort = st.checkbox("Only Sort", value=False, help="Only sort the column-aligned regions without merging them.", key="merge_columnaligned_only_sort")
                 dry_run = st.checkbox("Dry run", key="merge_columnaligned_dry_run")
 
                 if st.button("Merge Column-Aligned Regions"):
@@ -528,6 +529,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                         "convex_hull_method": convex_hull_method,
                         "max_height_distance": max_height_distance,
                         "mid_tolerance": mid_tolerance,
+                        "only_sort": only_sort,
                         "dry_run": dry_run,
                         "outputdir": st.session_state.get('modification_dir')
                     }

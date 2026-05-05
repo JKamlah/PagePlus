@@ -1017,6 +1017,9 @@ def merge_columnaligned_regions(
             min=0.0,
             max=1.0
         )] = 0.0,
+        only_sort: Annotated[bool, typer.Option(
+            help="Only sort the column-aligned regions without merging them."
+        )] = False,
         dry_run: Annotated[bool, typer.Option(
             help="Perform a dry run without writing any files."
         )] = False):
@@ -1099,6 +1102,62 @@ def merge_columnaligned_regions(
         # Process each group: merge regions and create convex hull
         # Process groups in reverse order to avoid index issues when deleting
         # regions
+        if only_sort:
+            if not region_groups:
+                logging.info('No column-aligned regions to sort.')
+            else:
+                logging.info(f'Sorting {len(region_groups)} column-aligned groups')
+                try:
+                    group_data = []
+                    for group_indices in region_groups:
+                        if len(group_indices) < 2:
+                            continue
+                        group_regions = [page.regions.textregions[i] for i in group_indices]
+                        
+                        if based_on_baselines:
+                            group_regions.sort(key=lambda r: r.get_mean_textline_centroid().y)
+                            mean_x = sum(r.get_mean_textline_centroid().x for r in group_regions) / len(group_regions)
+                        else:
+                            group_regions.sort(key=lambda r: r.get_coordinates("polygon").centroid.y)
+                            mean_x = sum(r.get_coordinates("polygon").centroid.x for r in group_regions) / len(group_regions)
+                            
+                        group_data.append({
+                            'mean_x': mean_x,
+                            'regions': group_regions
+                        })
+                    
+                    # Sort groups left to right
+                    group_data.sort(key=lambda g: g['mean_x'])
+                    
+                    sorted_regions_flat = []
+                    for g in group_data:
+                        sorted_regions_flat.extend(g['regions'])
+                        
+                    if sorted_regions_flat:
+                        original_elements = [r.xml_element for r in sorted_regions_flat]
+                        parent = original_elements[0].getparent()
+                        
+                        indices = sorted([parent.index(el) for el in original_elements])
+                        
+                        for el in original_elements:
+                            parent.remove(el)
+                            
+                        for idx, el in zip(indices, original_elements):
+                            parent.insert(idx, el)
+                            
+                        logging.info(f'Successfully sorted {len(group_data)} groups of regions')
+                except Exception as e:
+                    logging.error(f'Error sorting regions: {str(e)}')
+            
+            if not dry_run:
+                fout = xml_file if outputdir is None else determine_output_path(
+                    xml_file, outputdir, filename)
+                logging.info(f'Wrote modified xml file to output directory: {fout}')
+                page.save_xml(fout)
+            else:
+                logging.info(f'[DRY RUN] Would write modified xml file to: {xml_file}')
+            continue
+
         for group_indices in sorted(
                 region_groups,
                 key=lambda x: max(x),

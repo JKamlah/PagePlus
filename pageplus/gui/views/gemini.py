@@ -749,6 +749,22 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                     calls_per_minute_multi = st.number_input("Calls per Minute", min_value=1, value=150, key="processing_calls_per_minute")
                     dry_run_multi = st.checkbox("Dry run", key="processing_dry_run")
                     overwrite_multi = st.checkbox("Overwrite", key="processing_overwrite", value=True)
+                    # Expose the PAGE-XML-aware task modes served by the unified OCR pipeline.
+                    _task_mode_labels = {
+                        "layout_only": "Layout only (regions + coords)",
+                        "layout_and_text": "Layout + text (current default)",
+                        "layout_correction": "Layout correction (refine coords)",
+                        "text_only": "Text only (coords preserved)",
+                        "text_correction": "Text correction (refine existing text)",
+                    }
+                    _default_mode = "text_correction" if operation_mode == "ReOCR" else "layout_and_text"
+                    task_mode_multi = st.selectbox(
+                        "Task Mode",
+                        options=list(_task_mode_labels.keys()),
+                        index=list(_task_mode_labels.keys()).index(_default_mode),
+                        format_func=lambda k: _task_mode_labels[k],
+                        key="processing_task_mode",
+                    )
 
                     if config_mode == "🎯 Quick Mode (Single Stage)":
                         # Use our new variables
@@ -799,7 +815,6 @@ def show_gemini(bridge: "GeminiBridge") -> None:
 
                                     try:
                                         if current_mode == "OCR":
-                                            # We use OCR engine for All-in-One OCR, TableRec OCR, etc.
                                             result_data = bridge.ocr_multithread(
                                                 files=selected_files_for_ocr,
                                                 outputdir=st.session_state.get('modification_dir'),
@@ -810,7 +825,8 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                                                 overwrite=overwrite_multi,
                                                 recognize_level=recognize_level,
                                                 multi_stage=(config_mode != "🎯 Quick Mode (Single Stage)"),
-                                                thinking_budget=thinking_budget
+                                                thinking_budget=thinking_budget,
+                                                task_mode=task_mode_multi,
                                             )
                                         elif current_mode == "ReOCR":
                                             stage_filters = {**first_stage.get('filters', {}), **first_stage.get('override_filters', {})}
@@ -830,7 +846,8 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                                                 calls_per_minute=calls_per_minute_multi,
                                                 thinking_budget=thinking_budget,
                                                 dry_run=dry_run_multi,
-                                                overwrite=overwrite_multi
+                                                overwrite=overwrite_multi,
+                                                task_mode=task_mode_multi,
                                             )
                                         # Eliminated independent TableRecognition block essentially, 
                                         # as we are now treating it as OCR/ReOCR with a specific prompt
@@ -846,10 +863,20 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                                             main_output_message = result_data.get("output", "Multithreaded process completed.")
                                             usage_data_list = result_data.get('usage')
                                             if usage_data_list and isinstance(usage_data_list, list):
+                                                def _usage_field(meta, name):
+                                                    # Support both raw google-genai usage_metadata objects
+                                                    # (attribute access) and the normalized dicts emitted
+                                                    # by the unified OCR pipeline (OCRResult.usage).
+                                                    if meta is None:
+                                                        return 0
+                                                    if isinstance(meta, dict):
+                                                        return meta.get(name, 0) or 0
+                                                    return getattr(meta, name, 0) or 0
+
                                                 for usage_meta in usage_data_list:
-                                                    aggregated_usage["prompt_tokens"] += usage_meta.prompt_token_count
-                                                    aggregated_usage["candidates_tokens"] += usage_meta.candidates_token_count
-                                                    aggregated_usage["total_tokens"] += usage_meta.total_token_count
+                                                    aggregated_usage["prompt_tokens"] += _usage_field(usage_meta, "prompt_token_count")
+                                                    aggregated_usage["candidates_tokens"] += _usage_field(usage_meta, "candidates_token_count")
+                                                    aggregated_usage["total_tokens"] += _usage_field(usage_meta, "total_token_count")
                                         else:
                                             main_output_message = f"Multithreaded {process_type} process returned an unexpected data type."
                                             overall_success = False

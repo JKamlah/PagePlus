@@ -1,0 +1,5 @@
+<|input|>
+Current PAGE-XML transcription (ids, coords, and existing text_content):
+{{ page_xml_text if page_xml_text is not none else (page_xml | tojson) }}
+
+For each textline, correct the `text_content` using the attached image. Preserve every id. Return the full JSON, not just the modified lines.

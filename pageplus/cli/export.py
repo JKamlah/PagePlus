@@ -32,6 +32,12 @@ from pageplus.utils.io import (setxml, set_alto_id_from_page_id,
                                set_alto_xywh_from_coords,
                                set_alto_shape_from_coords,
                                set_alto_lang_from_page_lang)
+from pageplus.utils.io_churro import (
+    page_xml_to_churro_page,
+    page_xmls_to_churro_document,
+    write_churro_document,
+    write_churro_page,
+)
 
 app = typer.Typer()
 
@@ -543,6 +549,83 @@ def alto(
     finally:
         if temp_dir:
             temp_dir.cleanup()
+
+
+@app.command()
+def churro(
+    inputs: Annotated[List[str], typer.Argument(
+        exists=True,
+        help="Paths to PAGE-XML files or workspaces to export.",
+        callback=transform_inputs,
+    )] = None,
+    output: Annotated[Optional[str], typer.Option(
+        help="Output JSON path. Use '-' to write one JSON per input XML next to the source; "
+             "omit for a default 'Churro/<input>.json' layout.",
+    )] = None,
+    bundle: Annotated[bool, typer.Option(
+        help="If True, emit a single DocumentOCRResult JSON grouping every input page. "
+             "If False (default), write one DocumentPage JSON per input XML.",
+    )] = False,
+    provider_name: Annotated[Optional[str], typer.Option(
+        help="Optional provider label to attach to the Churro document (e.g. 'pageplus').",
+    )] = None,
+    model_name: Annotated[Optional[str], typer.Option(
+        help="Optional model label to attach to the Churro document (e.g. an OCR engine id).",
+    )] = None,
+    reading_order: Annotated[bool, typer.Option(
+        help="Use PAGE reading-order information when extracting line text (default: True).",
+    )] = True,
+    dehyphenate: Annotated[bool, typer.Option(
+        help="Dehyphenate across line breaks before serialising.",
+    )] = False,
+    text_delimiter: Annotated[str, typer.Option(
+        help="Delimiter used between lines in the Churro 'text' field.",
+    )] = "\n",
+) -> None:
+    """
+    Export PAGE-XML files to Churro JSON format.
+
+    By default, each XML file becomes a standalone Churro ``DocumentPage``
+    JSON. Use ``--bundle`` to emit a single Churro ``DocumentOCRResult`` JSON
+    gathering every input page (useful for round-tripping into Churro tools).
+    """
+    xml_files = collect_xml_files(map(Path, inputs or []))
+    if not xml_files:
+        raise FileNotFoundError("No xml files found in input directory")
+
+    if bundle:
+        document = page_xmls_to_churro_document(
+            xml_files,
+            provider_name=provider_name,
+            model_name=model_name,
+            reading_order=reading_order,
+            dehyphenate=dehyphenate,
+            text_delimiter=text_delimiter,
+        )
+        out_path = Path(output) if output else xml_files[0].parent / "Churro" / "document.churro.json"
+        write_churro_document(document, out_path)
+        print(f"Wrote Churro document ({len(document.pages)} pages) to {out_path}")
+        return
+
+    for idx, xml_file in enumerate(track(xml_files, description="Exporting to Churro JSON..")):
+        churro_page = page_xml_to_churro_page(
+            xml_file,
+            page_index=idx,
+            source_index=idx,
+            provider_name=provider_name,
+            model_name=model_name,
+            reading_order=reading_order,
+            dehyphenate=dehyphenate,
+            text_delimiter=text_delimiter,
+        )
+        if output == "-":
+            out_path = xml_file.with_suffix(".churro.json")
+        elif output:
+            out_path = Path(output) / f"{xml_file.stem}.churro.json"
+        else:
+            out_path = xml_file.parent / "Churro" / f"{xml_file.stem}.churro.json"
+        write_churro_page(churro_page, out_path)
+    print(f"Wrote {len(xml_files)} Churro DocumentPage JSON file(s).")
 
 
 if (spec := util.find_spec('pikepdf')) is None:

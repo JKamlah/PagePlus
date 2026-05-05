@@ -12,7 +12,7 @@ from pageplus.models.page import Page
 from pageplus.models.table_elements import TableRegion, TableCell
 from pageplus.models.text_elements import Textline, TextEquiv
 from pageplus.utils.image import get_image, crop_image_by_polygon
-from pageplus.utils.llm.api import GEMINIAPI
+from pageplus.utils.llm.settings import LLMSettings
 from pageplus.utils.constants import Environments
 from shapely.geometry import Polygon
 
@@ -20,7 +20,7 @@ from shapely.geometry import Polygon
 logger = logging.getLogger(__name__)
 
 class TableRecognitionStage:
-    def __init__(self, api: GEMINIAPI):
+    def __init__(self, api: LLMSettings):
         self.api = api
         self.system_prompt = self._load_prompt()
 
