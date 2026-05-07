@@ -721,11 +721,13 @@ def show_modification(bridge: ModificationBridge) -> None:
                     key="match_textlines_slice_min_overlap",
                     disabled=not slice_spanning
                 )
+                dry_run = st.checkbox("Dry run", key="match_textlines_dry_run")
                 if st.button("Match Textlines to Region"):
                     params = {
                         "outputdir": st.session_state.get('modification_dir'),
                         "slice_spanning": slice_spanning,
-                        "slice_min_overlap": slice_min_overlap
+                        "slice_min_overlap": slice_min_overlap,
+                        "dry_run": dry_run
                     }
                     record_operation("match_textlines_to_region", **params)
                     with st.spinner("Matching textlines to regions...", show_time=True):

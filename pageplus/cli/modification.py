@@ -2104,7 +2104,10 @@ def match_textlines_to_region(
         help="Minimum intersection-over-line-area ratio for a region to receive a slice of a "
              "spanning textline. Only applies when --slice is set.",
         min=0.0, max=1.0
-    )] = 0.1
+    )] = 0.1,
+    dry_run: Annotated[bool, typer.Option(
+        help="Perform a dry run without writing any files."
+    )] = False
 ):
     """
     Matches textlines to the text region with the highest overlap (>50%).

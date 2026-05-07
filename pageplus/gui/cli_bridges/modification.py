@@ -679,7 +679,8 @@ class ModificationBridge(CLIBridge):
         files: List[str],
         outputdir: Optional[str] = None,
         slice_spanning: bool = False,
-        slice_min_overlap: float = 0.1
+        slice_min_overlap: float = 0.1,
+        dry_run: bool = False
     ) -> Dict[str, Any]:
         """Match textlines to regions in files.
 
@@ -689,12 +690,14 @@ class ModificationBridge(CLIBridge):
         intersection-over-line-area ratio for a region to receive a slice.
         """
         try:
-            UndoManager.add_undo_state("Match Textlines to Regions")
+            if not dry_run:
+                UndoManager.add_undo_state("Match Textlines to Regions")
             match_textlines_to_region(
                 inputs=files,
                 outputdir=outputdir,
                 slice_spanning=slice_spanning,
-                slice_min_overlap=slice_min_overlap
+                slice_min_overlap=slice_min_overlap,
+                dry_run=dry_run
             )
             return {
                 "success": True,
