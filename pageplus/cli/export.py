@@ -733,5 +733,56 @@ else:
                 temp_dir.cleanup()
 
 
+@app.command()
+def tei_fsl(
+        inputs: Annotated[List[str], typer.Argument(exists=True,
+                                                    help="Iterable of paths to the PAGE XML files or workspaces.",
+                                                    callback=transform_inputs)] = None,
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Path to the output directory where the TEI files will be saved. "
+                 "If not specified, an output directory named TEI_FSL will be created "
+                 "in each input file's parent directory.")] = None,
+        werkteil: Annotated[str, typer.Option(help="Type of the milestone (e.g. Grammatik)")] = "Grammatik",
+        editor: Annotated[str, typer.Option(help="Name of the editor/transcriber")] = "",
+        who: Annotated[str, typer.Option(help="Abbreviation/ID of the editor/transcriber (for who attribute)")] = "",
+        status: Annotated[str, typer.Option(help="Status of the transcription (e.g. work_in_progress, done)")] = "work_in_progress",
+        open_folder: Annotated[bool, typer.Option(help="Opens the folder with the results after processing.")] = open_folder_default()) -> List[Path]:
+    """
+    Converts PAGE XML files to TEI XML layout region format.
+    """
+    from pageplus.utils.tei_fsl import convert_pagexml_to_tei_fsl
+
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError('No XML files found in the input directory.')
+
+    exported_paths = []
+    for xml_file in track(xml_files, description="Converting to TEI FSL.."):
+        filename = xml_file.stem
+        logging.info(f'Processing file: {filename}')
+
+        # Determine the output file path
+        output_path = Path(f"{xml_file.parent}/TEI_FSL/{xml_file.with_suffix('.xml').name}") if outputdir is None \
+            else Path(outputdir).joinpath(filename).with_suffix('.xml')
+        
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        logging.info(f'Writing TEI XML file to: {output_path}')
+
+        tree = convert_pagexml_to_tei_fsl(xml_file, werkteil=werkteil, editor=editor, who=who, status=status)
+        tree.write(
+            str(output_path),
+            pretty_print=True,
+            xml_declaration=True,
+            encoding="UTF-8"
+        )
+        exported_paths.append(output_path)
+
+    if exported_paths and open_folder:
+        fs.open_folder(exported_paths[0].parent)
+
+    return exported_paths
+
+
 if __name__ == "__main__":
     app()
+
