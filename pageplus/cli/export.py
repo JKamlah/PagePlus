@@ -750,7 +750,7 @@ def tei_fsl(
     """
     Converts PAGE XML files to TEI XML layout region format.
     """
-    from pageplus.utils.tei_fsl import convert_pagexml_to_tei_fsl
+    from pageplus.utils.export.tei.fsl import convert_pagexml_to_tei_fsl
 
     xml_files = collect_xml_files(map(Path, inputs))
     if not xml_files:

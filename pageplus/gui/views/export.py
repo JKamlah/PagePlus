@@ -93,40 +93,49 @@ def show_export(bridge):
         index=0
     )
 
-    tab_dsv, tab_alto, tab_fulltext, tab_pdf, tab_tei_fsl = st.tabs(["💾 DSV", "💾 ALTO", "📝 Fulltext", "📕 PDF", "💾 TEI_FSL"])
+    tab_dsv, tab_alto, tab_fulltext, tab_pdf, tab_tei = st.tabs(["💾 DSV", "💾 ALTO", "📝 Fulltext", "📕 PDF", "💾 TEI"])
 
-    with tab_tei_fsl:
-        st.header("TEI FSL Export")
-        st.info("Converts PAGE XML files to TEI XML files structured for FSL.")
-        werkteil = st.text_input("Werkteil", value="Grammatik", key="tab_tei_werkteil")
-        editor = st.text_input("Editorname", value="", key="tab_tei_editor", help="Johann Kirchmaier (empty default)")
-        who = st.text_input("Bearbeiter-Abkürzung (who)", value="", key="tab_tei_who", help="e.g. lisa")
-        status = st.selectbox(
-            "Status",
-            options=["Work in Progress", "Done"],
-            index=0,
-            key="tab_tei_status"
+    with tab_tei:
+        st.header("TEI Export")
+        st.info("Converts PAGE XML files to TEI XML files.")
+        
+        tei_format = st.selectbox(
+            "TEI Format",
+            options=["fsl"],
+            key="tab_tei_format"
         )
-        open_folder = st.checkbox("Open Folder After Export", value=True, key="tab_tei_open_folder")
-        if st.button("Export to TEI_FSL"):
-            if 'export_dir' not in st.session_state:
-                st.session_state.export_dir = None
-            try:
-                status_val = "work_in_progress" if status == "Work in Progress" else "done"
-                kwargs = {
-                    "werkteil": werkteil,
-                    "editor": editor,
-                    "who": who,
-                    "status": status_val,
-                    "open_folder": open_folder,
-                    "mapping_profile": selected_profile if selected_profile != "None" else None,
-                }
-                bridge.export_files(
-                    files=st.session_state.loaded_files, format="TEI_FSL", output_dir=Path(
-                        st.session_state.export_dir) if st.session_state.export_dir else None, **kwargs)
-                st.success("Files exported successfully!")
-            except Exception as e:
-                st.error(f"Error during export: {str(e)}")
+        
+        if tei_format == "fsl":
+            werkteil = st.text_input("Werkteil", value="Grammatik", key="tab_tei_werkteil")
+            editor = st.text_input("Editorname", value="", key="tab_tei_editor", help="Johann Kirchmaier (empty default)")
+            who = st.text_input("Bearbeiter-Abkürzung (who)", value="", key="tab_tei_who", help="e.g. lisa")
+            status = st.selectbox(
+                "Status",
+                options=["Work in Progress", "Done"],
+                index=0,
+                key="tab_tei_status"
+            )
+            open_folder = st.checkbox("Open Folder After Export", value=True, key="tab_tei_open_folder")
+            if st.button("Export to TEI"):
+                if 'export_dir' not in st.session_state:
+                    st.session_state.export_dir = None
+                try:
+                    status_val = "work_in_progress" if status == "Work in Progress" else "done"
+                    kwargs = {
+                        "werkteil": werkteil,
+                        "editor": editor,
+                        "who": who,
+                        "status": status_val,
+                        "open_folder": open_folder,
+                        "mapping_profile": selected_profile if selected_profile != "None" else None,
+                        "tei_format": "fsl"
+                    }
+                    bridge.export_files(
+                        files=st.session_state.loaded_files, format="TEI", output_dir=Path(
+                            st.session_state.export_dir) if st.session_state.export_dir else None, **kwargs)
+                    st.success("Files exported successfully!")
+                except Exception as e:
+                    st.error(f"Error during export: {str(e)}")
 
     with tab_dsv:
         st.header("DSV Export")
@@ -403,36 +412,45 @@ def show_pdf_export(cli_bridge):
                 st.error(f"Error during export: {str(e)}")
 
 
-def show_tei_fsl_export(cli_bridge):
-    """Display TEI FSL export options and results."""
-    st.subheader("TEI FSL Export")
-    werkteil = st.text_input("Werkteil", value="Grammatik", key="tei_fsl_werkteil")
-    editor = st.text_input("Editorname", value="", key="tei_fsl_editor", help="Johann Kirchmaier (empty default)")
-    who = st.text_input("Bearbeiter-Abkürzung (who)", value="", key="tei_fsl_who", help="e.g. lisa")
-    status = st.selectbox(
-        "Status",
-        options=["Work in Progress", "Done"],
-        index=0,
-        key="tei_fsl_status"
+def show_tei_export(cli_bridge):
+    """Display TEI export options and results."""
+    st.subheader("TEI Export")
+    
+    tei_format = st.selectbox(
+        "TEI Format",
+        options=["fsl"],
+        key="tei_format"
     )
-    open_folder = st.checkbox("Open Folder After Export", value=True, key="tei_fsl_open_folder")
+    
+    if tei_format == "fsl":
+        werkteil = st.text_input("Werkteil", value="Grammatik", key="tei_fsl_werkteil")
+        editor = st.text_input("Editorname", value="", key="tei_fsl_editor", help="Johann Kirchmaier (empty default)")
+        who = st.text_input("Bearbeiter-Abkürzung (who)", value="", key="tei_fsl_who", help="e.g. lisa")
+        status = st.selectbox(
+            "Status",
+            options=["Work in Progress", "Done"],
+            index=0,
+            key="tei_fsl_status"
+        )
+        open_folder = st.checkbox("Open Folder After Export", value=True, key="tei_fsl_open_folder")
 
-    if st.button("Export to TEI FSL"):
-        with st.spinner("Exporting to TEI FSL...", show_time=True):
-            try:
-                status_val = "work_in_progress" if status == "Work in Progress" else "done"
-                results = cli_bridge.export_files(
-                    files=st.session_state.loaded_files,
-                    format="TEI_FSL",
-                    werkteil=werkteil,
-                    editor=editor,
-                    who=who,
-                    status=status_val,
-                    open_folder=open_folder,
-                    output_dir=st.session_state.export_dir if st.session_state.export_dir else None
-                )
-                st.success("Export completed!")
-                st.write(f"Exported files: {results}")
-            except Exception as e:
-                st.error(f"Error during export: {str(e)}")
+        if st.button("Export to TEI (FSL)"):
+            with st.spinner("Exporting to TEI...", show_time=True):
+                try:
+                    status_val = "work_in_progress" if status == "Work in Progress" else "done"
+                    results = cli_bridge.export_files(
+                        files=st.session_state.loaded_files,
+                        format="TEI",
+                        tei_format="fsl",
+                        werkteil=werkteil,
+                        editor=editor,
+                        who=who,
+                        status=status_val,
+                        open_folder=open_folder,
+                        output_dir=st.session_state.export_dir if st.session_state.export_dir else None
+                    )
+                    st.success("Export completed!")
+                    st.write(f"Exported files: {results}")
+                except Exception as e:
+                    st.error(f"Error during export: {str(e)}")
 

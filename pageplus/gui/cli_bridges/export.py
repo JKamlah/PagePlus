@@ -120,6 +120,13 @@ class ExportBridge(CLIBridge):
             return self.export_pdf(files, output_dir, **kwargs)
         elif format == "TEI_FSL":
             return self.export_tei_fsl(files, output_dir, **kwargs)
+        elif format == "TEI":
+            tei_format = kwargs.pop("tei_format", "fsl")
+            if tei_format == "fsl":
+                return self.export_tei_fsl(files, output_dir, **kwargs)
+            else:
+                logger.error(f"Unknown TEI format: {tei_format}")
+                return []
         else:
             logger.error(f"Unknown export format: {format}")
             return []
