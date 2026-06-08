@@ -98,11 +98,11 @@ from pageplus.gui.views import (
     mets,
     settings as settings_view,
     iiif,
-    litellm as litellm_view,
+    llm_ocr as llm_ocr_view,
 )
 from pageplus.gui.views import flow_editor
 from pageplus.gui.cli_bridges.gemini import GeminiBridge
-from pageplus.gui.cli_bridges.litellm import LiteLLMBridge
+from pageplus.gui.cli_bridges.llm_ocr import LLMOcrBridge
 from pageplus.gui.cli_bridges.escriptorium import EscriptoriumBridge
 from pageplus.gui.cli_bridges.transkribus import TranskribusBridge
 from pageplus.gui.cli_bridges.mets import MetsBridge
@@ -220,7 +220,7 @@ def main():
             'workspace': WorkspaceBridge(),
             'modification': ModificationBridge(),
             'gemini': GeminiBridge(),
-            'litellm': LiteLLMBridge(),
+            'llm_ocr': LLMOcrBridge(),
             'escriptorium': EscriptoriumBridge(),
             'transkribus': TranskribusBridge(),
             'mets': MetsBridge(),
@@ -266,7 +266,7 @@ def main():
     kraken_configured = get_kraken_python_path() is not None
 
     main_pages = ["✨ Home", "🗂️ Workspace", "📂 Input", "🖼️ Viewer", "🔍 Analytics", "📝 Guidelines", "✅ Validation",
-                  "📊 Evaluation", "🛠️ Modification", "🌟 Gemini", "🧩 LiteLLM", "🔀 Flow Editor", "📤 Export",
+                  "📊 Evaluation", "🛠️ Modification", "🌟 Gemini", "🤖 LLM-OCR", "🔀 Flow Editor", "📤 Export",
                   "⚙️ Settings"]
 
     # Add OCR pages if configured/activated
@@ -341,8 +341,8 @@ def main():
         kraken.show_kraken(st.session_state.bridges['kraken'])
     elif page == "🌟 Gemini":
         gemini.show_gemini(st.session_state.bridges['gemini'])
-    elif page == "🧩 LiteLLM":
-        litellm_view.show_litellm(st.session_state.bridges['litellm'])
+    elif page == "🤖 LLM-OCR":
+        llm_ocr_view.show_llm_ocr(st.session_state.bridges['llm_ocr'])
     elif page == "🔀 Flow Editor":
         flow_editor.flow_editor_view()
     elif page == "📤 Export":
@@ -433,7 +433,7 @@ def show_home():
     🛠️ Modification: Modify processed documents  
     🤖 LLM: Perform different tasks on PAGE-XML files with LLMs  
     🌟 Gemini: Use Gemini to process images and validate PAGE-XML output  
-    🧩 LiteLLM: Run OCR via any LiteLLM-routable provider (OpenAI, Anthropic, Mistral, Ollama, ...)  
+    🤖 LLM-OCR: Unified OCR via local/SSH, OpenAI-compatible, Gemini-compatible & (scaffolded) transformer models, driven by rich presets  
     🔀 Flow Editor: Build complex workflows with visual node editor  
     🔤 Tesseract OCR: Do OCR on PAGE-XML files with Tesseract (if activated)  
     🐙 Kraken OCR: Do OCR on PAGE-XML files with Kraken (if activated)  

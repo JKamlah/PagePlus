@@ -101,8 +101,19 @@ class LiteLLMProviderPreset:
         chosen = model or self.default_model
         if not chosen:
             raise ValueError(f"Preset '{self.id}' has no default model; pass model=...")
+        
+        # Check if chosen is already prefixed by one of the known provider prefixes
+        known_prefixes = {
+            "openai", "azure", "anthropic", "mistral", "gemini", "vertex_ai",
+            "groq", "deepseek", "cohere", "ollama", "huggingface", "bedrock", "sagemaker"
+        }
+        has_prefix = False
         if "/" in chosen:
-            # Caller already prefixed it; trust them.
+            first_part = chosen.split("/", 1)[0]
+            if first_part in known_prefixes:
+                has_prefix = True
+
+        if has_prefix:
             return chosen
         return f"{self.litellm_prefix}/{chosen}"
 
@@ -115,12 +126,14 @@ class LiteLLMProviderPreset:
         try:
             from pageplus.gui.utils.settings import Settings  # local import to avoid GUI dep at import time
             value = Settings().get(name)
-            if value:
-                return value
+            if value and value.strip():
+                return value.strip()
         except Exception:
             pass
         value = os.environ.get(name)
-        return value or None
+        if value:
+            return value.strip()
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +267,15 @@ _BUILTINS: Tuple[LiteLLMProviderPreset, ...] = (
         env_api_key="AWS_ACCESS_KEY_ID",
         default_model=None,
     ),
+    LiteLLMProviderPreset(
+        id="transformers",
+        display_name="Local transformers (direct, scaffold)",
+        litellm_prefix="transformers",
+        env_api_key=None,
+        default_model=None,
+        api_base_hint="(in-process HuggingFace model id)",
+        supports_json_schema=False,
+    ),
 )
 
 
@@ -290,6 +312,60 @@ def available_providers() -> List[LiteLLMProviderPreset]:
     return [p for p in _REGISTRY.values() if p.is_configured()]
 
 
+def register_custom_endpoints() -> List[str]:
+    """Load saved custom endpoints and register each as a provider preset.
+
+    Returns the list of registered preset IDs (``custom_<name>``).  Already-
+    registered custom presets are updated in place.
+
+    Custom endpoints inject their credentials directly into ``os.environ``
+    so that :meth:`LiteLLMProviderPreset.resolve_credentials` picks them up
+    without needing ``.env`` entries.
+    """
+    from pageplus.utils.llm.endpoint_store import load_endpoints, normalize_base_url  # local to avoid circular
+
+    registered: List[str] = []
+    for ep in load_endpoints():
+        preset_id = f"custom_{ep.name}"
+        env_key_var = f"CUSTOM_{ep.name.upper()}_API_KEY"
+        env_base_var = f"CUSTOM_{ep.name.upper()}_API_BASE"
+
+        # Normalize the base URL per provider so legacy configs (e.g. a trailing
+        # slash on an Ollama root that causes a 405) work without re-saving.
+        base_url = normalize_base_url(ep.base_url, getattr(ep, "provider", "openai"))
+
+        # Inject credentials into the process environment so the preset's
+        # resolve_credentials() works without .env changes.
+        os.environ[env_key_var] = ep.api_key or "EMPTY"
+        os.environ[env_base_var] = base_url
+
+        preset = LiteLLMProviderPreset(
+            id=preset_id,
+            display_name=f"Custom: {ep.name}",
+            litellm_prefix=getattr(ep, "provider", "openai"),
+            env_api_key=env_key_var,
+            env_api_base=env_base_var,
+            default_model=ep.default_model or None,
+            alt_models=tuple(ep.alt_models) if ep.alt_models else (),
+            requires_base_url=True,
+            api_base_hint=base_url,
+            supports_json_schema=False,
+        )
+        register_preset(preset)
+        registered.append(preset_id)
+    return registered
+
+
+def unregister_custom_endpoint(name: str) -> None:
+    """Remove a custom endpoint preset from the registry and clean up env vars."""
+    preset_id = f"custom_{name}"
+    _REGISTRY.pop(preset_id, None)
+    env_key_var = f"CUSTOM_{name.upper()}_API_KEY"
+    env_base_var = f"CUSTOM_{name.upper()}_API_BASE"
+    os.environ.pop(env_key_var, None)
+    os.environ.pop(env_base_var, None)
+
+
 def spec_from_preset(
     preset_id: str,
     *,
@@ -298,6 +374,7 @@ def spec_from_preset(
     timeout: Optional[float] = None,
     json_object_mode: Optional[bool] = None,
     calls_per_minute: int = 120,
+    max_image_size: Optional[int] = 1000,
 ) -> OCRBackendSpec:
     """Build an :class:`OCRBackendSpec` for the given preset.
 
@@ -305,6 +382,10 @@ def spec_from_preset(
     (overridable via ``model``). If ``task_mode`` is provided, we validate it
     against the preset's ``task_modes`` so the CLI fails fast when a user asks,
     e.g., a text-only provider for ``layout_and_text``.
+
+    Custom endpoints (preset IDs starting with ``custom_``) use the direct
+    OpenAI backend instead of LiteLLM for maximum compatibility with vLLM,
+    TGI, and other OpenAI-protocol servers.
     """
     preset = get_preset(preset_id)
 
@@ -316,6 +397,91 @@ def spec_from_preset(
         )
 
     api_key, api_base = preset.resolve_credentials()
+    import logging
+    # Never log resolved credentials; only note that resolution happened.
+    logging.debug(
+        "[registry] spec_from_preset resolved for %s (api_key set=%s, api_base set=%s)",
+        preset_id, bool(api_key), bool(api_base),
+    )
+
+    # --- Local transformers (direct, in-process) --------------------------
+    if preset.litellm_prefix == "transformers" or preset_id == "transformers":
+        from pageplus.utils.llm.core.specs import HuggingFaceOptions
+
+        chosen_model = model or preset.default_model
+        if not chosen_model:
+            raise ValueError(
+                f"Preset '{preset.id}' has no default model; pass a HuggingFace "
+                f"model id via model=..."
+            )
+        return OCRBackendSpec(
+            provider="transformers",
+            model=chosen_model,
+            options=HuggingFaceOptions(model_id=chosen_model),
+            metadata={
+                "preset_id": preset.id,
+                "preset_display_name": preset.display_name,
+                "preset_vision_capable": preset.vision_capable,
+            },
+        )
+
+    # --- Custom endpoints → direct OpenAI library or LiteLLM --------------
+    if preset_id.startswith("custom_"):
+        if preset.litellm_prefix == "openai":
+            from pageplus.utils.llm.core.specs import OpenAICompatibleOptions
+
+            # For the direct OpenAI backend, the model name is sent as-is to the
+            # server (no litellm prefix).  Use the caller's override, the preset
+            # default, or raise if neither is set.
+            chosen_model = model or preset.default_model
+            if not chosen_model:
+                raise ValueError(
+                    f"Preset '{preset.id}' has no default model; pass model=..."
+                )
+
+            options = OpenAICompatibleOptions(
+                api_base_url=api_base or preset.api_base_hint or "http://localhost:8000/v1",
+                api_key=api_key,
+                timeout=timeout if timeout is not None else 60.0,
+                max_image_size=max_image_size,
+            )
+            return OCRBackendSpec(
+                provider="openai_direct",
+                model=chosen_model,
+                options=options,
+                metadata={
+                    "preset_id": preset.id,
+                    "preset_display_name": preset.display_name,
+                    "preset_vision_capable": preset.vision_capable,
+                },
+            )
+        else:
+            resolved_json_object_mode = (
+                json_object_mode if json_object_mode is not None else not preset.supports_json_schema
+            )
+
+            transport = LiteLLMTransportConfig(
+                api_base_url=api_base,
+                api_key=api_key,
+                timeout=timeout if timeout is not None else 60.0,
+                provider_prefix=preset.litellm_prefix,
+                calls_per_minute=calls_per_minute,
+                json_object_mode=resolved_json_object_mode,
+                max_image_size=max_image_size,
+            )
+
+            return OCRBackendSpec(
+                provider="litellm",
+                model=preset.model_string(model),
+                options=transport,
+                metadata={
+                    "preset_id": preset.id,
+                    "preset_display_name": preset.display_name,
+                    "preset_vision_capable": preset.vision_capable,
+                },
+            )
+
+    # --- Built-in presets → LiteLLM ---------------------------------------
     resolved_json_object_mode = (
         json_object_mode if json_object_mode is not None else not preset.supports_json_schema
     )
@@ -327,6 +493,7 @@ def spec_from_preset(
         provider_prefix=preset.litellm_prefix,
         calls_per_minute=calls_per_minute,
         json_object_mode=resolved_json_object_mode,
+        max_image_size=max_image_size,
     )
 
     return OCRBackendSpec(
@@ -339,3 +506,4 @@ def spec_from_preset(
             "preset_vision_capable": preset.vision_capable,
         },
     )
+

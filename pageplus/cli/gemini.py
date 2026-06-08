@@ -79,7 +79,7 @@ else:
         return llm_api.check_valid_key()
 
     @app.command()
-    def show_models() -> None:
+    def show_models():
         return llm_api.show_models()
 
     @app.command()

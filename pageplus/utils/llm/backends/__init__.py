@@ -20,3 +20,12 @@ if _util.find_spec("google") is not None and _util.find_spec("google.genai") is 
 
 if _util.find_spec("litellm") is not None:
     from pageplus.utils.llm.backends import litellm_backend  # noqa: F401
+
+if _util.find_spec("openai") is not None:
+    from pageplus.utils.llm.backends import openai_direct_backend  # noqa: F401
+
+# The direct HuggingFace ``transformers`` backend is a lightweight scaffold and
+# is always registered (it raises a clear error on use until inference lands),
+# so the LLM-OCR tab can always offer it as a provider kind.
+from pageplus.utils.llm.backends import transformers_backend  # noqa: F401
+

@@ -72,6 +72,21 @@ def _table_json_to_xml(structured: Any, image_path: Path,
     return table_json_to_page(structured, image_path)
 
 
+def _markdown_to_xml(structured: Any, image_path: Path,
+                     page=None, **opts) -> str:
+    """Markdown (plain text) output -> fresh PAGE XML string.
+
+    For markdown profiles the backend returns text (``expected_format=text``),
+    so the markdown lives in ``opts['text']``; we fall back to ``structured``
+    when it is itself a string.
+    """
+    from pageplus.utils.io import markdown2pagexml
+    markdown_text = opts.get("text")
+    if not markdown_text and isinstance(structured, str):
+        markdown_text = structured
+    return markdown2pagexml(markdown_text or "", image_path)
+
+
 def _text_only_apply(structured: Any, image_path: Path,
                       page=None, **opts) -> Optional[str]:
     """Apply ``{region: {textline_id: text}}`` updates to an existing Page.
@@ -105,6 +120,71 @@ def _layout_correction_apply(structured: Any, image_path: Path,
         logging.warning("layout_correction postprocessor received no page; skipping merge")
         return None
     _apply_layout_updates(structured, page)
+    return None
+
+
+def _field_tagging_apply(structured: Any, image_path: Path,
+                         page=None, **opts) -> Optional[str]:
+    """Apply Field-Tagging output to an existing Page in place.
+
+    Expects ``{regions: [{id, type?, structure?, box_2d?}], ro?: [...]}``
+    (the schema produced by ``Prompt/Field-Tagging-Prompt.txt``). For each
+    region matched by id we update its tag (``structure`` preferred, else
+    ``type``) and, when a ``box_2d`` is given, refine its coordinates. Finally
+    the reading order is rebuilt from ``ro`` when present.
+
+    New regions invented by the model (ids like ``new_r0``) are ignored here;
+    creating fresh XML elements from a tag-only pass is out of scope.
+    """
+    if page is None:
+        logging.warning("field_tagging postprocessor received no page; skipping merge")
+        return None
+    regions = _extract_region_list(structured)
+    img_dims = _image_dims(image_path)
+    for updated in regions:
+        region_id = updated.get("id")
+        if not region_id or str(region_id).startswith("new_"):
+            continue
+        region = page.get_region_by_id(region_id) if hasattr(page, "get_region_by_id") else None
+        if region is None:
+            continue
+        tag = updated.get("structure") or updated.get("type")
+        if tag and hasattr(region, "set_tag"):
+            try:
+                region.set_tag(tag=tag)
+            except Exception:  # pragma: no cover - defensive
+                pass
+        coords = _coords_from_box_2d(updated.get("box_2d"), img_dims)
+        if coords and hasattr(region, "update_coordinates"):
+            try:
+                region.update_coordinates(coords)
+            except Exception:  # pragma: no cover - defensive
+                pass
+    ro = structured.get("ro") if isinstance(structured, dict) else None
+    if ro:
+        _apply_reading_order(page, ro)
+    return None
+
+
+def _reading_order_apply(structured: Any, image_path: Path,
+                         page=None, **opts) -> Optional[str]:
+    """Rebuild the Page ``<ReadingOrder>`` from the model output.
+
+    Accepts either ``{ro: [...]}`` (possibly nested) or ``{regions: [{id}, ...]}``
+    interpreted as a flat top-to-bottom order. Nothing else on the page is
+    touched.
+    """
+    if page is None:
+        logging.warning("reading_order postprocessor received no page; skipping merge")
+        return None
+    ro = None
+    if isinstance(structured, dict):
+        ro = structured.get("ro")
+        if not ro:
+            regions = _extract_region_list(structured)
+            ro = [r.get("id") for r in regions if r.get("id")]
+    if ro:
+        _apply_reading_order(page, ro)
     return None
 
 
@@ -208,6 +288,93 @@ def _extract_text_field(entry: dict) -> Optional[str]:
     return None
 
 
+def _image_dims(image_path: Path) -> Optional[tuple]:
+    try:
+        from PIL import Image
+        with Image.open(image_path) as img:
+            return img.size  # (width, height)
+    except Exception:  # pragma: no cover - defensive
+        return None
+
+
+def _coords_from_box_2d(box, img_dims: Optional[tuple]) -> Optional[list]:
+    """Convert a ``[ymin, xmin, ymax, xmax]`` 0-1000 box to a pixel polygon."""
+    if not box or not img_dims or len(box) != 4:
+        return None
+    try:
+        ymin, xmin, ymax, xmax = (float(v) for v in box)
+    except (TypeError, ValueError):
+        return None
+    w, h = img_dims
+    ax1 = int(max(0, min(1000, xmin)) / 1000 * w)
+    ay1 = int(max(0, min(1000, ymin)) / 1000 * h)
+    ax2 = int(max(0, min(1000, xmax)) / 1000 * w)
+    ay2 = int(max(0, min(1000, ymax)) / 1000 * h)
+    if ax2 <= ax1 or ay2 <= ay1:
+        return None
+    return [(ax1, ay1), (ax2, ay1), (ax2, ay2), (ax1, ay2)]
+
+
+def _apply_reading_order(page, ro: list) -> None:
+    """Rebuild ``<ReadingOrder>`` on the Page element from ``ro``.
+
+    ``ro`` may contain bare region-ref ids and nested lists (logical groups),
+    mirroring the structure used by ``segmentation_to_page``. Any existing
+    ``<ReadingOrder>`` is replaced. Inserted before the first region element so
+    the result stays schema-valid.
+    """
+    from lxml import etree as ET
+
+    ns = getattr(page, "ns", None)
+    root = getattr(page, "root", None)
+    if not ns or root is None:
+        logging.warning("Cannot apply reading order: page has no root/ns")
+        return
+    page_el = root.find(f"{{{ns}}}Page")
+    if page_el is None:
+        return
+
+    for existing in page_el.findall(f"{{{ns}}}ReadingOrder"):
+        page_el.remove(existing)
+
+    ro_el = ET.Element(f"{{{ns}}}ReadingOrder")
+    root_group = ET.SubElement(ro_el, f"{{{ns}}}OrderedGroup")
+    root_group.set("id", "ro_root")
+    root_group.set("caption", "Regions reading order")
+
+    counter = {"n": 0}
+
+    def _add(parent, item, index):
+        if isinstance(item, (list, tuple)):
+            counter["n"] += 1
+            group = ET.SubElement(parent, f"{{{ns}}}OrderedGroup")
+            group.set("id", f"ro_group_{counter['n']}")
+            group.set("index", str(index))
+            for sub_idx, sub in enumerate(item):
+                _add(group, sub, sub_idx)
+        elif item:
+            ref = ET.SubElement(parent, f"{{{ns}}}RegionRefIndexed")
+            ref.set("index", str(index))
+            ref.set("regionRef", str(item))
+
+    for idx, item in enumerate(ro):
+        _add(root_group, item, idx)
+
+    region_tags = {
+        f"{{{ns}}}TextRegion", f"{{{ns}}}TableRegion", f"{{{ns}}}ImageRegion",
+        f"{{{ns}}}GraphicRegion", f"{{{ns}}}SeparatorRegion", f"{{{ns}}}ChartRegion",
+        f"{{{ns}}}MathsRegion", f"{{{ns}}}LineDrawingRegion", f"{{{ns}}}NoiseRegion",
+        f"{{{ns}}}AdvertRegion", f"{{{ns}}}MusicRegion", f"{{{ns}}}ChemRegion",
+        f"{{{ns}}}MapRegion", f"{{{ns}}}UnknownRegion", f"{{{ns}}}CustomRegion",
+    }
+    insert_at = len(page_el)
+    for i, child in enumerate(page_el):
+        if child.tag in region_tags:
+            insert_at = i
+            break
+    page_el.insert(insert_at, ro_el)
+
+
 def _extract_coord_points(entry: dict, *, key: str = "coords") -> Optional[list]:
     value = entry.get(key) or entry.get(key + "_points") or entry.get("points")
     if value is None and key == "coords":
@@ -244,6 +411,9 @@ register_postprocessor("gemini2d_to_page", _layout_and_text_to_xml)  # legacy al
 register_postprocessor("layout_only_to_xml", _layout_only_to_xml)
 register_postprocessor("segmentation_to_page", _layout_only_to_xml)  # legacy alias
 register_postprocessor("table_json_to_page", _table_json_to_xml)
+register_postprocessor("markdown_to_page", _markdown_to_xml)
 register_postprocessor("text_only_apply", _text_only_apply)
 register_postprocessor("text_correction_apply", _text_correction_apply)
 register_postprocessor("layout_correction_apply", _layout_correction_apply)
+register_postprocessor("field_tagging_apply", _field_tagging_apply)
+register_postprocessor("reading_order_apply", _reading_order_apply)

@@ -124,13 +124,12 @@ class LLMSettings(API):
         print(f"[ModelCheck] {'[green]' + modelname + ' exists.[/green]' if ok else '[red]' + modelname + ' not in provider model list.[/red]'}")
         return ok
 
-    def show_models(self) -> None:
+    def show_models(self) -> Optional[Table]:
         if self.environment == Environments.GEMINI:
-            self._gemini_show_models()
-            return
+            return self._gemini_show_models()
         if not self.api_base_url:
             print("[red]No API base URL set; cannot list models.[/red]")
-            return
+            return None
         try:
             response = requests.get(
                 f"{self.api_base_url}/models",
@@ -140,17 +139,18 @@ class LLMSettings(API):
             data = response.json()
         except Exception as exc:
             print(f"[red]Could not list models: {exc}[/red]")
-            return
+            return None
         modellist = data.get('data', [])
         if not modellist:
             print("[orange]Provider returned no models.[/orange]")
-            return
+            return None
         table = Table(title="[green]Models overview[/green]")
         table.add_column("Provider", justify="right", style="cyan", no_wrap=True)
         table.add_column("Model")
         table.add_row(self.provider.replace('__', ' - '),
                       '\n'.join([m.get('id', '') for m in modellist]))
         print(table)
+        return table
 
     # ---- Gemini specifics (thin convenience wrappers) -------------------
 
@@ -192,20 +192,21 @@ class LLMSettings(API):
             print(f"[ModelCheck] [red]{model} does not exist.[/red]")
             return False
 
-    def _gemini_show_models(self) -> None:
+    def _gemini_show_models(self) -> Optional[Table]:
         try:
             modellist = list(self._gemini_client().models.list())
         except Exception as exc:
             print(f"[red]Could not list Gemini models: {exc}[/red]")
-            return
+            return None
         if not modellist:
             print("[orange]No Gemini models returned.[/orange]")
-            return
+            return None
         table = Table(title="[green]Models overview[/green]")
         table.add_column("Model")
         for model in modellist:
             table.add_row(getattr(model, "name", str(model)))
         print(table)
+        return table
 
     def show_modeldetails(self, model: str):
         if self.environment != Environments.GEMINI:

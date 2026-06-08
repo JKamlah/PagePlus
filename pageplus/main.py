@@ -1,5 +1,6 @@
 from pageplus.cli import (
     litellm,
+    llm_ocr,
     system,
     analytics,
     validation,
@@ -32,6 +33,7 @@ app.add_typer(escriptorium.app, name="escriptorium", rich_help_panel="Transcript
 app.add_typer(transkribus.app, name="transkribus", rich_help_panel="Transcription-Platform")
 app.add_typer(dinglehopper.app, name="dinglehopper", rich_help_panel="PagePlus - external tools")
 app.add_typer(litellm.app, name="litellm", rich_help_panel="PagePlus - external tools")
+app.add_typer(llm_ocr.app, name="llm-ocr", rich_help_panel="PagePlus - external tools")
 app.add_typer(gemini.app, name="gemini", rich_help_panel="PagePlus - external tools")
 app.add_typer(guidelines.app, name="guidelines", rich_help_panel="PagePlus - external tools")
 app.add_typer(ocr_kraken.app, name="kraken", rich_help_panel="Kraken - external tools")

@@ -94,7 +94,12 @@ def render_prompt(
     else:
         user_text = registry.render(f"{profile.template}.user", **context)
 
-    expected_format = "json" if profile.schema else extra.get("expected_format", "json")
+    if profile.expected_format:
+        expected_format = profile.expected_format
+    elif profile.schema:
+        expected_format = "json"
+    else:
+        expected_format = extra.get("expected_format", "json")
     if extra.get("json_object_mode") and expected_format == "json":
         expected_format = "json_object"
     return RenderedPrompt(
@@ -107,7 +112,14 @@ def render_prompt(
     )
 
 
-def render_page_xml_payload(page, *, include_text: bool, mode: TaskMode) -> str:
+def render_page_xml_payload(
+    page,
+    *,
+    include_text: bool,
+    mode: TaskMode,
+    region_filter=None,
+    line_filter=None,
+) -> str:
     """Serialize a ``Page`` into a compact JSON blob for correction prompts.
 
     Format:
@@ -132,6 +144,8 @@ def render_page_xml_payload(page, *, include_text: bool, mode: TaskMode) -> str:
     """
     regions_out: List[Dict[str, Any]] = []
     for region in _iter_regions(page):
+        if region_filter is not None and not _safe_filter(region_filter, region):
+            continue
         region_entry: Dict[str, Any] = {
             "id": _safe_get_id(region),
             "type": _safe_get_tag(region),
@@ -139,6 +153,8 @@ def render_page_xml_payload(page, *, include_text: bool, mode: TaskMode) -> str:
             "textlines": [],
         }
         for line in getattr(region, "textlines", []) or []:
+            if line_filter is not None and not _safe_filter(line_filter, line):
+                continue
             line_entry: Dict[str, Any] = {
                 "id": _safe_get_id(line),
                 "type": _safe_get_tag(line),
@@ -153,6 +169,14 @@ def render_page_xml_payload(page, *, include_text: bool, mode: TaskMode) -> str:
             region_entry["textlines"].append(line_entry)
         regions_out.append(region_entry)
     return json.dumps({"regions": regions_out}, ensure_ascii=False)
+
+
+def _safe_filter(predicate, element) -> bool:
+    """Apply a filter predicate, defaulting to ``True`` if it raises."""
+    try:
+        return bool(predicate(element))
+    except Exception:  # pragma: no cover - defensive
+        return True
 
 
 def _iter_regions(page):

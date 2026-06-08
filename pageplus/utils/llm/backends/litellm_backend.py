@@ -9,6 +9,9 @@ decorator can be universal across backends.
 from __future__ import annotations
 
 import json
+import logging
+import os
+import re
 from typing import Any, Dict
 
 from pageplus.utils.image import image_to_base64, get_image
@@ -46,6 +49,90 @@ try:
 except ImportError:  # pragma: no cover
     json_repair = None  # type: ignore[assignment]
 
+_DEBUG_ENABLED = False
+
+# Strip base64 image payloads so verbose logging does not flood the terminal.
+_DATA_URI_RE = re.compile(r"(data:image/[A-Za-z0-9.+-]+;base64,)[A-Za-z0-9+/=\s]+")
+_LONG_B64_RE = re.compile(r"[A-Za-z0-9+/]{200,}={0,2}")
+
+
+def redact_base64(text: str) -> str:
+    """Replace base64 image data (data URIs and long blobs) with a short marker."""
+    if not text:
+        return text
+    text = _DATA_URI_RE.sub(lambda m: m.group(1) + "<base64 image omitted>", text)
+    text = _LONG_B64_RE.sub("<base64 omitted>", text)
+    return text
+
+
+class _RedactBase64Filter(logging.Filter):
+    """Logging filter that scrubs base64 image blobs from log records."""
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+        try:
+            if isinstance(record.msg, str):
+                record.msg = redact_base64(record.msg)
+            if record.args:
+                if isinstance(record.args, dict):
+                    record.args = {k: (redact_base64(v) if isinstance(v, str) else v)
+                                   for k, v in record.args.items()}
+                else:
+                    record.args = tuple(redact_base64(a) if isinstance(a, str) else a
+                                        for a in record.args)
+        except Exception:  # pragma: no cover - never let logging break the run
+            pass
+        return True
+
+
+_REDACT_FILTER = _RedactBase64Filter()
+
+
+def _install_redaction() -> None:
+    """Attach the base64 redaction filter to the loggers LiteLLM debug uses."""
+    for logger_name in ("", "LiteLLM", "litellm"):
+        logger = logging.getLogger(logger_name)
+        if _REDACT_FILTER not in logger.filters:
+            logger.addFilter(_REDACT_FILTER)
+        for handler in logger.handlers:
+            if _REDACT_FILTER not in handler.filters:
+                handler.addFilter(_REDACT_FILTER)
+
+
+def _maybe_enable_litellm_debug() -> None:
+    """Turn on LiteLLM's verbose request logging when PAGEPLUS_LLM_DEBUG is set.
+
+    With this on, LiteLLM logs the exact upstream request (URL + JSON), which is
+    the quickest way to see what is actually being called. Base64 image payloads
+    are redacted so the terminal is not flooded.
+    """
+    global _DEBUG_ENABLED
+    if _DEBUG_ENABLED or litellm is None:
+        return
+    if os.environ.get("PAGEPLUS_LLM_DEBUG", "").strip().lower() not in ("1", "true", "yes", "on"):
+        return
+    try:
+        litellm._turn_on_debug()
+    except Exception:  # pragma: no cover - older litellm
+        try:
+            litellm.set_verbose = True  # type: ignore[attr-defined]
+        except Exception:
+            pass
+    _install_redaction()
+    _DEBUG_ENABLED = True
+
+
+def _endpoint_for(provider_prefix: str, api_base: str | None) -> str:
+    """Best-effort full URL LiteLLM will POST to, for logging only."""
+    base = (api_base or "").rstrip("/")
+    prefix = (provider_prefix or "").lower()
+    if prefix == "ollama":
+        return f"{base}/api/generate"
+    if prefix == "ollama_chat":
+        return f"{base}/api/chat"
+    if base:
+        return f"{base}/chat/completions"
+    return f"(provider default for '{provider_prefix}')"
+
 
 class LiteLLMBackend(OCRBackend):
     """OCRBackend over LiteLLM. Works for any OpenAI-compatible endpoint."""
@@ -62,6 +149,19 @@ class LiteLLMBackend(OCRBackend):
                 f"LiteLLMBackend requires LiteLLMTransportConfig, got {type(opts).__name__}",
                 provider=spec.provider, model=spec.model)
         self._transport: LiteLLMTransportConfig = opts
+        _maybe_enable_litellm_debug()
+        logging.info(
+            "[litellm] call target: model=%s provider=%s api_base=%s -> %s "
+            "(response_format=%s)",
+            spec.model, self._transport.provider_prefix or "litellm",
+            self._transport.api_base_url,
+            _endpoint_for(self._transport.provider_prefix, self._transport.api_base_url),
+            "json_object" if self._transport.json_object_mode else "json_schema/auto",
+        )
+
+    @property
+    def provider_name(self) -> str:
+        return self._transport.provider_prefix or "litellm"
 
     # ---- OCRBackend API -------------------------------------------------
 
@@ -75,6 +175,7 @@ class LiteLLMBackend(OCRBackend):
             response = _completion(
                 model=self.model_name,
                 api_key=self._transport.api_key,
+                api_base=self._transport.api_base_url,
                 timeout=self._transport.timeout,
                 stream=False,
                 temperature=1e-7,
@@ -93,6 +194,20 @@ class LiteLLMBackend(OCRBackend):
 
     def _build_messages(self, prompt: RenderedPrompt, ctx: BackendCallContext) -> list:
         image, image_format = get_image(ctx.image_path)
+        if self._transport.max_image_size:
+            from PIL import Image
+            w, h = image.size
+            max_size = self._transport.max_image_size
+            if w > max_size or h > max_size:
+                if w >= h:
+                    new_w = max_size
+                    new_h = int(h * (max_size / w))
+                else:
+                    new_h = max_size
+                    new_w = int(w * (max_size / h))
+                new_w = max(1, new_w)
+                new_h = max(1, new_h)
+                image = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
         image_b64 = image_to_base64(image)
         user_content: list = [
             {"type": "text", "text": prompt.user},

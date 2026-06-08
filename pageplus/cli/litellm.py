@@ -99,8 +99,8 @@ else:
         llm_api.check_valid_key()
 
     @app.command()
-    def show_models() -> None:
-        llm_api.show_models()
+    def show_models():
+        return llm_api.show_models()
 
     @app.command()
     def check_model(model: Annotated[str, typer.Argument(help="Model name")]) -> None:

@@ -50,6 +50,7 @@ class LiteLLMTransportConfig:
     extra_headers: Dict[str, str] = field(default_factory=dict)
     json_object_mode: bool = False  # use response_format={"type":"json_object"} instead of json_schema
     calls_per_minute: int = 120       # soft throttle applied by the LiteLLM backend
+    max_image_size: Optional[int] = 1000
 
 
 @dataclass
@@ -81,6 +82,7 @@ class OpenAICompatibleOptions:
     api_base_url: str = "http://localhost:8000/v1"
     api_key: Optional[str] = None
     timeout: float = 60.0
+    max_image_size: Optional[int] = 1000
 
 
 @dataclass
@@ -127,6 +129,9 @@ class OCRModelProfile:
     schema: Optional[Dict[str, Any]] = None   # JSON schema (when backend supports json_schema)
     system_prompt: Optional[str] = None       # override for the system prompt
     user_prompt: Optional[str] = None         # override for the user prompt template
+    # Force the response shape ("json" | "json_object" | "text"). When None the
+    # format is inferred from ``schema`` (json when set, else json_object/text).
+    expected_format: Optional[str] = None
     # Callable overrides -- if set, take precedence over the registered name lookups.
     postprocess_fn: Optional[Callable[..., Any]] = None
 

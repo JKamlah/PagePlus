@@ -15,6 +15,8 @@ def strip_rich_text(text: str) -> str:
 
 def rich_table_to_dataframe(rich_table: Table) -> pd.DataFrame:
     """Convert a rich table to a pandas DataFrame."""
+    if rich_table is None:
+        return pd.DataFrame()
     headers = [strip_rich_text(col.header) for col in rich_table.columns]
     column_cells = []
     for col in rich_table.columns:
