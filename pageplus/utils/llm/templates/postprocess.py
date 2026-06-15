@@ -43,10 +43,27 @@ def list_postprocessors() -> list[str]:
 # so the pipeline can dispatch uniformly.
 # ---------------------------------------------------------------------------
 
+def _is_pp_layout_json(structured: Any) -> bool:
+    if isinstance(structured, list) and len(structured) > 0 and isinstance(structured[0], dict):
+        if "cls_id" in structured[0] or "polygon_points" in structured[0]:
+            return True
+    elif isinstance(structured, dict):
+        for key in ("regions", "items", "results", "elements", "layout"):
+            if key in structured and isinstance(structured[key], list) and len(structured[key]) > 0:
+                first = structured[key][0]
+                if isinstance(first, dict) and ("cls_id" in first or "polygon_points" in first):
+                    return True
+    return False
+
+
 def _layout_and_text_to_xml(structured: Any, image_path: Path,
                              page=None, **opts) -> str:
     """Gemini 2D JSON with bboxes + text -> fresh PAGE XML string."""
-    from pageplus.utils.io import gemini2d_to_page  # local import: heavy deps
+    if _is_pp_layout_json(structured):
+        from pageplus.utils.mappings import pp_layout_json_to_page
+        return pp_layout_json_to_page(structured, image_path, settings=opts)
+
+    from pageplus.utils.mappings import gemini2d_to_page  # local import
     use_fallback = opts.get("use_bbox_fallback")
     return gemini2d_to_page(structured, image_path,
                             settings=opts, use_bbox_fallback=use_fallback)
@@ -59,7 +76,11 @@ def _layout_only_to_xml(structured: Any, image_path: Path,
     If the backend returns a 'regions' key we use the segmentation helper;
     otherwise we reuse ``gemini2d_to_page`` with empty text fields.
     """
-    from pageplus.utils.io import gemini2d_to_page, segmentation_to_page
+    if _is_pp_layout_json(structured):
+        from pageplus.utils.mappings import pp_layout_json_to_page
+        return pp_layout_json_to_page(structured, image_path, settings=opts)
+
+    from pageplus.utils.mappings import gemini2d_to_page, segmentation_to_page
     if isinstance(structured, dict) and "regions" in structured:
         return segmentation_to_page(structured, image_path)
     return gemini2d_to_page(structured, image_path,
@@ -68,7 +89,7 @@ def _layout_only_to_xml(structured: Any, image_path: Path,
 
 def _table_json_to_xml(structured: Any, image_path: Path,
                        page=None, **opts) -> str:
-    from pageplus.utils.io import table_json_to_page
+    from pageplus.utils.mappings import table_json_to_page
     return table_json_to_page(structured, image_path)
 
 
@@ -80,7 +101,7 @@ def _markdown_to_xml(structured: Any, image_path: Path,
     so the markdown lives in ``opts['text']``; we fall back to ``structured``
     when it is itself a string.
     """
-    from pageplus.utils.io import markdown2pagexml
+    from pageplus.utils.mappings import markdown2pagexml
     markdown_text = opts.get("text")
     if not markdown_text and isinstance(structured, str):
         markdown_text = structured
@@ -417,3 +438,36 @@ register_postprocessor("text_correction_apply", _text_correction_apply)
 register_postprocessor("layout_correction_apply", _layout_correction_apply)
 register_postprocessor("field_tagging_apply", _field_tagging_apply)
 register_postprocessor("reading_order_apply", _reading_order_apply)
+
+
+def _pp_layout_json_to_xml(structured: Any, image_path: Path,
+                           page=None, **opts) -> str:
+    """PP-Layout JSON (PaddleOCR layout detection) -> fresh PAGE XML string."""
+    from pageplus.utils.mappings import pp_layout_json_to_page  # local import
+    return pp_layout_json_to_page(structured, image_path,
+                                  settings=opts)
+
+
+register_postprocessor("pp_layout_json_to_page", _pp_layout_json_to_xml)
+
+
+def _pp_layout_extend_json_to_xml(structured: Any, image_path: Path,
+                                  page=None, **opts) -> str:
+    """PP-Layout Extend JSON -> fresh PAGE XML string."""
+    from pageplus.utils.mappings import pp_layout_extend_json_to_page  # local import
+    return pp_layout_extend_json_to_page(structured, image_path, settings=opts)
+
+
+register_postprocessor("pp_layout_extend_json_to_page", _pp_layout_extend_json_to_xml)
+
+
+def _pp_layout_extend_table_json_to_xml(structured: Any, image_path: Path,
+                                        page=None, **opts) -> str:
+    """PP-Layout Extend Table JSON -> fresh PAGE XML string."""
+    from pageplus.utils.mappings import pp_layout_extend_table_json_to_page  # local import
+    return pp_layout_extend_table_json_to_page(structured, image_path, settings=opts)
+
+
+register_postprocessor("pp_layout_extend_table_json_to_page", _pp_layout_extend_table_json_to_xml)
+
+

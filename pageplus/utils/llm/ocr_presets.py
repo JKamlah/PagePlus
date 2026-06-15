@@ -87,6 +87,9 @@ MAPPING_CHOICES: List[str] = [
     "gemini2d_to_page",      # JSON bbox+text -> fresh PAGE XML
     "segmentation_to_page",  # JSON regions -> fresh PAGE XML
     "table_json_to_page",    # JSON tables -> fresh PAGE XML
+    "pp_layout_json_to_page",# PP-Layout JSON (PaddleOCR) -> fresh PAGE XML
+    "pp_layout_extend_json_to_page",# PP-Layout Extend JSON (regions + lines) -> fresh PAGE XML
+    "pp_layout_extend_table_json_to_page",# PP-Layout Extend Table JSON -> fresh PAGE XML
     "markdown_to_page",      # markdown text -> fresh PAGE XML
     "text_only_apply",       # JSON text -> mutate existing Page
     "text_correction_apply",

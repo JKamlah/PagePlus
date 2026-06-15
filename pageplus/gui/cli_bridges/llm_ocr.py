@@ -763,6 +763,8 @@ class LLMOcrBridge:
                         "default_model": ep.default_model, "alt_models": ep.alt_models,
                         "ssh_enabled": ep.ssh_enabled, "ssh_command": ep.ssh_command,
                         "provider": getattr(ep, "provider", "openai"),
+                        "image_key": getattr(ep, "image_key", "image") or "image",
+                        "prompt_key": getattr(ep, "prompt_key", "prompt") or "prompt",
                     }
                     for ep in endpoints
                 ],
@@ -774,6 +776,7 @@ class LLMOcrBridge:
         self, name: str, base_url: str, api_key: str = "EMPTY",
         default_model: str = "", alt_models: list | None = None,
         ssh_enabled: bool = False, ssh_command: str = "", provider: str = "openai",
+        image_key: str = "image", prompt_key: str = "prompt",
     ) -> dict:
         try:
             from pageplus.utils.llm.endpoint_store import SavedEndpoint, save_endpoint
@@ -781,7 +784,7 @@ class LLMOcrBridge:
             save_endpoint(SavedEndpoint(
                 name=name, base_url=base_url, api_key=api_key, default_model=default_model,
                 alt_models=alt_models or [], ssh_enabled=ssh_enabled, ssh_command=ssh_command,
-                provider=provider,
+                provider=provider, image_key=image_key, prompt_key=prompt_key,
             ))
             register_custom_endpoints()
             return {"success": True, "output": f"Saved endpoint '{name}' (preset 'custom_{name}')."}

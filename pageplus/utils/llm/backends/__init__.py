@@ -29,3 +29,7 @@ if _util.find_spec("openai") is not None:
 # so the LLM-OCR tab can always offer it as a provider kind.
 from pageplus.utils.llm.backends import transformers_backend  # noqa: F401
 
+# The direct Curl HTTP POST backend is always registered.
+from pageplus.utils.llm.backends import curl_backend  # noqa: F401
+
+

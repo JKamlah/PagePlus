@@ -1,4 +1,4 @@
-from pageplus.utils.io import gemini2d_to_page, load_gemini2d_json
+from pageplus.utils.mappings import gemini2d_to_page, load_gemini2d_json
 from pathlib import Path
 from typing import Optional
 

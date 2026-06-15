@@ -100,6 +100,17 @@ class MistralOptions:
     endpoint: Optional[str] = None
 
 
+@dataclass
+class CurlHTTPOptions:
+    """Options for a direct HTTP POST REST endpoint (curl-style)."""
+    url: str
+    api_key: Optional[str] = None
+    timeout: float = 60.0
+    image_key: str = "image"
+    prompt_key: str = "prompt"
+    max_image_size: Optional[int] = 1000
+
+
 ProviderOptions = Union[
     LiteLLMTransportConfig,
     GeminiOptions,
@@ -107,6 +118,7 @@ ProviderOptions = Union[
     OpenAICompatibleOptions,
     AzureDocumentIntelligenceOptions,
     MistralOptions,
+    CurlHTTPOptions,
 ]
 
 

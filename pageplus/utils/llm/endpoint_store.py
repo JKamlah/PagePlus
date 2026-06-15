@@ -51,7 +51,13 @@ class SavedEndpoint:
     ``ssh -N -L 8082:localhost:8082 root@spark01.bib.uni-mannheim.de``)."""
 
     provider: str = "openai"
-    """Upstream provider protocol/prefix for LiteLLM (e.g. ``openai``, ``gemini``, ``ollama``)."""
+    """Upstream provider protocol/prefix for LiteLLM (e.g. ``openai``, ``gemini``, ``ollama``, ``curl``)."""
+
+    image_key: str = "image"
+    """The JSON payload key for the base64-encoded image (used when provider='curl')."""
+
+    prompt_key: str = "prompt"
+    """The JSON payload key for the prompt string (used when provider='curl')."""
 
 
 # ---------------------------------------------------------------------------

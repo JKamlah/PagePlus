@@ -72,6 +72,8 @@ class LiteLLMProviderPreset:
     vision_capable: bool = True
     supports_json_schema: bool = True
     task_modes: Tuple[TaskMode, ...] = field(default_factory=lambda: tuple(TaskMode))
+    image_key: str = "image"
+    prompt_key: str = "prompt"
 
     # ------------------------------------------------------------------
 
@@ -102,10 +104,9 @@ class LiteLLMProviderPreset:
         if not chosen:
             raise ValueError(f"Preset '{self.id}' has no default model; pass model=...")
         
-        # Check if chosen is already prefixed by one of the known provider prefixes
         known_prefixes = {
             "openai", "azure", "anthropic", "mistral", "gemini", "vertex_ai",
-            "groq", "deepseek", "cohere", "ollama", "huggingface", "bedrock", "sagemaker"
+            "groq", "deepseek", "cohere", "ollama", "huggingface", "bedrock", "sagemaker", "curl"
         }
         has_prefix = False
         if "/" in chosen:
@@ -350,6 +351,8 @@ def register_custom_endpoints() -> List[str]:
             requires_base_url=True,
             api_base_hint=base_url,
             supports_json_schema=False,
+            image_key=getattr(ep, "image_key", "image") or "image",
+            prompt_key=getattr(ep, "prompt_key", "prompt") or "prompt",
         )
         register_preset(preset)
         registered.append(preset_id)
@@ -418,6 +421,35 @@ def spec_from_preset(
             provider="transformers",
             model=chosen_model,
             options=HuggingFaceOptions(model_id=chosen_model),
+            metadata={
+                "preset_id": preset.id,
+                "preset_display_name": preset.display_name,
+                "preset_vision_capable": preset.vision_capable,
+            },
+        )
+
+    # --- Curl REST backend (direct REST POST) -----------------------------
+    if preset.litellm_prefix == "curl" or preset_id == "curl":
+        from pageplus.utils.llm.core.specs import CurlHTTPOptions
+
+        chosen_model = model or preset.default_model or "curl-default"
+        url = api_base or preset.api_base_hint
+        if not url:
+            raise ValueError(
+                f"Preset '{preset.id}' has no target URL; please configure a base URL."
+            )
+        options = CurlHTTPOptions(
+            url=url,
+            api_key=api_key,
+            timeout=timeout if timeout is not None else 60.0,
+            image_key=preset.image_key,
+            prompt_key=preset.prompt_key,
+            max_image_size=max_image_size,
+        )
+        return OCRBackendSpec(
+            provider="curl",
+            model=chosen_model,
+            options=options,
             metadata={
                 "preset_id": preset.id,
                 "preset_display_name": preset.display_name,

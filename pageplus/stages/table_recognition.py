@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from PIL import Image
 from pageplus.utils.llm.settings import LLMSettings
 from pageplus.utils.constants import Environments
-from pageplus.utils.io import table_json_to_page
+from pageplus.utils.mappings import table_json_to_page
 import json_repair
 from google.genai import types
 

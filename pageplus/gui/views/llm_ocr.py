@@ -180,7 +180,7 @@ def _custom_endpoints_block(bridge: LLMOcrBridge) -> None:
             }
             for ep in endpoints
         ]), width="stretch", hide_index=True)
-        provider_opts = ["openai", "gemini", "ollama", "ollama_chat"]
+        provider_opts = ["openai", "gemini", "ollama", "ollama_chat", "curl"]
         for ep in endpoints:
             with st.expander(f"⚙️ {ep['name']}", expanded=False):
                 # --- Discover models from the server (exact installed names) ---
@@ -213,6 +213,8 @@ def _custom_endpoints_block(bridge: LLMOcrBridge) -> None:
                                 alt_models=pick_alts, ssh_enabled=ep.get("ssh_enabled", False),
                                 ssh_command=ep.get("ssh_command", ""),
                                 provider=ep.get("provider", "openai"),
+                                image_key=ep.get("image_key", "image") or "image",
+                                prompt_key=ep.get("prompt_key", "prompt") or "prompt",
                             )
                             (st.success if res["success"] else st.error)(res["output"])
                             if res["success"]:
@@ -232,8 +234,10 @@ def _custom_endpoints_block(bridge: LLMOcrBridge) -> None:
                             key=f"llmocr_ed_prov_{ep['name']}")
                         e_model = st.text_input("Default model", value=ep.get("default_model", "") or "",
                                                 key=f"llmocr_ed_model_{ep['name']}")
+                        e_image_key = st.text_input("Image JSON Key (Curl only)", value=ep.get("image_key", "image") or "image",
+                                                    key=f"llmocr_ed_imgkey_{ep['name']}")
                     with ec2:
-                        e_url = st.text_input("Base URL", value=ep.get("base_url", ""),
+                        e_url = st.text_input("Base URL (or full POST URL for Curl)", value=ep.get("base_url", ""),
                                               key=f"llmocr_ed_url_{ep['name']}")
                         e_alt = st.text_input("Alt models (comma-separated)",
                                               value=", ".join(ep.get("alt_models", []) or []),
@@ -241,6 +245,8 @@ def _custom_endpoints_block(bridge: LLMOcrBridge) -> None:
                         e_ssh = st.text_input("SSH command (optional)",
                                               value=ep.get("ssh_command", "") or "",
                                               key=f"llmocr_ed_ssh_{ep['name']}")
+                        e_prompt_key = st.text_input("Prompt JSON Key (Curl only)", value=ep.get("prompt_key", "prompt") or "prompt",
+                                                     key=f"llmocr_ed_prkey_{ep['name']}")
                     e_save = st.form_submit_button("💾 Update endpoint", use_container_width=True)
                 if e_save:
                     if not e_url.strip():
@@ -257,6 +263,8 @@ def _custom_endpoints_block(bridge: LLMOcrBridge) -> None:
                             alt_models=[m.strip() for m in e_alt.split(",") if m.strip()],
                             ssh_enabled=bool(e_ssh.strip()), ssh_command=e_ssh.strip(),
                             provider=e_provider,
+                            image_key=e_image_key.strip() or "image",
+                            prompt_key=e_prompt_key.strip() or "prompt",
                         )
                         (st.success if res["success"] else st.error)(res["output"])
                         if res["success"]:
@@ -289,14 +297,16 @@ def _custom_endpoints_block(bridge: LLMOcrBridge) -> None:
             with c1:
                 name = st.text_input("Name", placeholder="e.g. spark")
                 key = st.text_input("API Key", value="EMPTY")
-                provider = st.selectbox("Provider", ["openai", "gemini", "ollama", "ollama_chat"], index=0,
+                provider = st.selectbox("Provider", ["openai", "gemini", "ollama", "ollama_chat", "curl"], index=0,
                                         help="openai = OpenAI-compatible (needs /v1). ollama_chat uses "
-                                             "Ollama's /api/chat (recommended for vision/OCR).")
+                                             "Ollama's /api/chat. curl = Custom HTTP POST REST.")
+                image_key = st.text_input("Image JSON Key (Curl only)", value="image")
             with c2:
-                url = st.text_input("Base URL", placeholder="localhost:8000")
+                url = st.text_input("Base URL (or full POST URL for Curl)", placeholder="localhost:8000")
                 model = st.text_input("Default model", value="")
                 ssh_cmd = st.text_input("SSH command (optional)",
                                         placeholder="ssh -N -L 8000:localhost:8000 host")
+                prompt_key = st.text_input("Prompt JSON Key (Curl only)", value="prompt")
             submitted = st.form_submit_button("💾 Save endpoint", use_container_width=True)
         if submitted:
             if not name.strip() or not url.strip():
@@ -311,6 +321,8 @@ def _custom_endpoints_block(bridge: LLMOcrBridge) -> None:
                     name=name.strip(), base_url=u, api_key=key.strip() or "EMPTY",
                     default_model=model.strip(), ssh_enabled=bool(ssh_cmd.strip()),
                     ssh_command=ssh_cmd.strip(), provider=provider,
+                    image_key=image_key.strip() or "image",
+                    prompt_key=prompt_key.strip() or "prompt",
                 )
                 (st.success if res["success"] else st.error)(res["output"])
                 if res["success"]:
