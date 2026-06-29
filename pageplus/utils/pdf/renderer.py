@@ -61,7 +61,7 @@ def _optimize_image(
     image: Image.Image,
     page_width_pt: float,
     page_height_pt: float,
-    target_dpi: int = 300,
+    target_dpi: Optional[int] = 300,
     jpeg_quality: int = 85,
 ) -> tuple[io.BytesIO, str]:
     """
@@ -77,6 +77,10 @@ def _optimize_image(
     Returns:
         A tuple containing the io.BytesIO buffer and the final image mode ('L' or 'RGB').
     """
+    if target_dpi is None:
+        image_dpi = _get_image_dpi(image)[0]
+        target_dpi = image_dpi
+
     # 1. Resize image if its resolution is higher than target_dpi on the page
     target_width_px = int(page_width_pt * target_dpi / POINTS_PER_INCH)
     target_height_px = int(page_height_pt * target_dpi / POINTS_PER_INCH)
@@ -130,9 +134,10 @@ def _add_page_to_pdf(
     font: GlyphlessFont = GlyphlessFont(),
     invisible_text: bool = True,
     draw: Optional[List[str]] = None,
-    target_dpi: int = 300,
+    target_dpi: Optional[int] = 300,
     jpeg_quality: int = 85,
     substitutions: Optional[List[Tuple[str, str]]] = None,
+    line_thickness: float = 1.5,
 ) -> None:
     """
     Constructs a single PDF page on the given canvas with an image and text overlays.
@@ -185,14 +190,15 @@ def _add_page_to_pdf(
     with cs_accessor.save_state(cm=page_matrix):
         for region in page_obj.get_ordered_regions():
             if region.get_localname() in ['TextRegion', 'TableRegion']:
-                _draw_text_region(cs_accessor, region, SCALING, font, fontname, invisible_text, draw, substitutions)
+                _draw_text_region(cs_accessor, region, SCALING, font, fontname, invisible_text, draw, substitutions, line_thickness)
 
 
-def _draw_text_region(cs_accessor: _CanvasAccessor, region: TextRegion, scaling: float, font, fontname, invisible_text, draw, substitutions):
+def _draw_text_region(cs_accessor: _CanvasAccessor, region: TextRegion, scaling: float, font, fontname, invisible_text, draw, substitutions, line_thickness: float = 1.5):
     """Helper to draw a single text region."""
-    if 'TextRegion' in draw:
+    draw_lower = [d.lower() for d in draw] if draw else []
+    if 'textregion' in draw_lower or 'region' in draw_lower:
         with cs_accessor.save_state():
-            cs_accessor.stroke_color(GREEN).line_width(0.2)
+            cs_accessor.stroke_color(GREEN).line_width(line_thickness * 1.33)
             bbx = region.get_coordinates(returntype='mrr').bounds
             cs_accessor.rect(
                 bbx[0] * scaling, bbx[1] * scaling,
@@ -200,10 +206,10 @@ def _draw_text_region(cs_accessor: _CanvasAccessor, region: TextRegion, scaling:
                 fill=False
             )
     for line in region.textlines:
-        _draw_text_line(cs_accessor, line, scaling, font, fontname, invisible_text, draw, substitutions)
+        _draw_text_line(cs_accessor, line, scaling, font, fontname, invisible_text, draw, substitutions, line_thickness)
 
 
-def _draw_text_line(cs_accessor: _CanvasAccessor, line, scaling, font, fontname, invisible_text, draw, substitutions):
+def _draw_text_line(cs_accessor: _CanvasAccessor, line, scaling, font, fontname, invisible_text, draw, substitutions, line_thickness: float = 1.5):
     """Helper to draw a single text line."""
     line_mrr = line.get_coordinates(returntype='mrr')
     if not line_mrr or not line_mrr.bounds:
@@ -213,32 +219,38 @@ def _draw_text_line(cs_accessor: _CanvasAccessor, line, scaling, font, fontname,
     height_pt = abs(line_bbox_pt[3] - line_bbox_pt[1])
     width_pt = abs(line_bbox_pt[2] - line_bbox_pt[0])
 
+    draw_lower = [d.lower() for d in draw] if draw else []
+
+    # Draw the Textline bounding box
+    if 'textline' in draw_lower or 'line' in draw_lower:
+        with cs_accessor.save_state():
+            cs_accessor.stroke_color(BLUE).line_width(line_thickness).rect(
+                line_bbox_pt[0], line_bbox_pt[1], width_pt, height_pt, fill=False
+            )
+
+    # Draw the Baseline if coordinates are available
+    if 'baseline' in draw_lower:
+        baseline_tuple = line.get_baseline_coordinates(returntype='tuple')
+        if baseline_tuple and len(baseline_tuple) > 0:
+            baseline_points = [int(baseline_tuple[0][0]*scaling),
+                               int(baseline_tuple[0][1]*scaling),
+                               int(baseline_tuple[-1][0]*scaling),
+                               int(baseline_tuple[-1][1]*scaling)]
+            with cs_accessor.save_state():
+                cs_accessor.stroke_color(BLUE).line_width(line_thickness).line(
+                    baseline_points[0], baseline_points[1], baseline_points[2], baseline_points[3]
+                )
+
     line_text = line.get_text()
     if substitutions:
         for pattern, replacement in substitutions:
             line_text = re.sub(pattern, replacement, line_text)
 
-    if not line_text.strip():
+    if not line_text or not line_text.strip():
         return
 
     # Set text rendering mode: 3 for invisible, 0 for fill.
-    render_mode = 3 if invisible_text and 'line' not in draw else 0
-
-    if 'Textline' in draw:
-        with cs_accessor.save_state():
-            cs_accessor.stroke_color(BLUE).line_width(0.15).rect(
-                line_bbox_pt[0], line_bbox_pt[1], width_pt, height_pt, fill=False
-            )
-    if 'Baseline' in draw:
-        baseline_tuple = line.get_baseline_coordinates(returntype='tuple')
-        baseline_points = [int(baseline_tuple[0][0]*scaling),
-                           int(baseline_tuple[0][1]*scaling),
-                           int(baseline_tuple[-1][0]*scaling),
-                           int(baseline_tuple[-1][1]*scaling)]
-        with cs_accessor.save_state():
-            cs_accessor.stroke_color(BLUE).line_width(0.15).line(
-                baseline_points[0], baseline_points[1], baseline_points[2], baseline_points[3]
-            )
+    render_mode = 3 if invisible_text and 'line' not in draw_lower and 'textline' not in draw_lower else 0
 
     # Re-instating the correct matrix calculation from the previous implementation.
     angle = 0  # line.angle() is not implemented
@@ -264,9 +276,10 @@ def create_pdf(
     font: Optional[GlyphlessFont] = None,
     invisible_text: bool = True,
     draw: Optional[List[str]] = None,
-    target_dpi: int = 300,
+    target_dpi: Optional[int] = 300,
     jpeg_quality: int = 85,
     substitutions: Optional[List[Tuple[str, str]]] = None,
+    line_thickness: float = 1.5,
 ) -> None:
     """
     Creates an optimized, multi-page PDF from Page objects and images.
@@ -327,6 +340,7 @@ def create_pdf(
                 target_dpi=target_dpi,
                 jpeg_quality=jpeg_quality,
                 substitutions=substitutions,
+                line_thickness=line_thickness,
             )
 
             # Finalize the page content

@@ -129,6 +129,11 @@ class OpenAIDirectBackend(OCRBackend):
 
     def _build_messages(self, prompt: RenderedPrompt, ctx: BackendCallContext) -> list:
         image, image_format = get_image(ctx.image_path)
+        w, h = image.size
+        ctx.metadata["original_width"] = w
+        ctx.metadata["original_height"] = h
+        ctx.metadata["rescaled_width"] = w
+        ctx.metadata["rescaled_height"] = h
         if self._opts.max_image_size:
             from PIL import Image
             w, h = image.size
@@ -143,6 +148,8 @@ class OpenAIDirectBackend(OCRBackend):
                 new_w = max(1, new_w)
                 new_h = max(1, new_h)
                 image = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                ctx.metadata["rescaled_width"] = new_w
+                ctx.metadata["rescaled_height"] = new_h
         image_b64 = image_to_base64(image)
 
         user_content: list = [

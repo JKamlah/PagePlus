@@ -471,3 +471,71 @@ def _pp_layout_extend_table_json_to_xml(structured: Any, image_path: Path,
 register_postprocessor("pp_layout_extend_table_json_to_page", _pp_layout_extend_table_json_to_xml)
 
 
+def scale_structured_coordinates(data: Any, scale_x: float, scale_y: float) -> Any:
+    """Recursively traverses a JSON-like data structure and scales coordinates.
+    
+    Only applies to keys that represent absolute pixel coordinates.
+    """
+    if scale_x == 1.0 and scale_y == 1.0:
+        return data
+
+    if isinstance(data, dict):
+        new_dict = {}
+        for k, v in data.items():
+            if k in ("polygon_points", "polygon", "polygon_pts") and isinstance(v, list):
+                # Format: [[x, y], [x, y], ...]
+                new_dict[k] = [
+                    [int(float(pt[0]) * scale_x), int(float(pt[1]) * scale_y)]
+                    if isinstance(pt, (list, tuple)) and len(pt) == 2 else pt
+                    for pt in v
+                ]
+            elif k in ("coordinate", "bbox") and isinstance(v, list) and len(v) >= 4:
+                # Format: [x1, y1, x2, y2]
+                try:
+                    scaled = [
+                        int(float(v[0]) * scale_x),
+                        int(float(v[1]) * scale_y),
+                        int(float(v[2]) * scale_x),
+                        int(float(v[3]) * scale_y),
+                    ]
+                    # Preserve any additional elements (e.g. score, class_id)
+                    if len(v) > 4:
+                        scaled.extend(v[4:])
+                    new_dict[k] = scaled
+                except (ValueError, TypeError):
+                    new_dict[k] = v
+            elif k in ("coords", "baseline", "coords_points", "points", "coordinates", "baseline_points") and isinstance(v, str):
+                # Format: "x,y x,y ..."
+                pts = []
+                for tok in v.split():
+                    try:
+                        x, y = tok.split(",")
+                        scaled_x = int(float(x) * scale_x)
+                        scaled_y = int(float(y) * scale_y)
+                        pts.append(f"{scaled_x},{scaled_y}")
+                    except ValueError:
+                        pts.append(tok)
+                new_dict[k] = " ".join(pts)
+            elif k in ("coords", "baseline", "coords_points", "points", "coordinates", "baseline_points") and isinstance(v, list):
+                # Format: [[x, y], [x, y], ...] or list of floats/ints
+                new_list = []
+                for item in v:
+                    if isinstance(item, (list, tuple)) and len(item) == 2:
+                        try:
+                            new_list.append([int(float(item[0]) * scale_x), int(float(item[1]) * scale_y)])
+                        except (ValueError, TypeError):
+                            new_list.append(item)
+                    else:
+                        new_list.append(item)
+                new_dict[k] = new_list
+            else:
+                new_dict[k] = scale_structured_coordinates(v, scale_x, scale_y)
+        return new_dict
+
+    elif isinstance(data, list):
+        return [scale_structured_coordinates(item, scale_x, scale_y) for item in data]
+
+    return data
+
+
+

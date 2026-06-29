@@ -281,13 +281,15 @@ def show_export(bridge):
                     f"{len(pdf_input['files'])} files")
 
         dpi = st.number_input(
-            "DPI", min_value=72, max_value=1200, value=None)
+            "DPI", min_value=18, max_value=1200, value=None)
         draw_options = ["Baseline", "Textline", "TextRegion"]
         draw = st.multiselect(
             "Draw Elements",
             options=draw_options,
             default=[]
         )
+        line_thickness = st.slider(
+            "Line Thickness (pt)", min_value=0.5, max_value=10.0, value=1.5, step=0.5)
         output_filename = st.text_input(
             "Output Filfilename",
             value="PagePlus"
@@ -304,6 +306,7 @@ def show_export(bridge):
                         "images": pdf_input['files'],
                         "max_resolution": None if dpi == 0 else dpi,
                         "draw": draw,
+                        "line_thickness": line_thickness,
                         "output_filename": output_filename,
                         "mapping_profile": selected_profile if selected_profile != "None" else None,
                     }

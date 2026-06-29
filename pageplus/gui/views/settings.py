@@ -50,6 +50,12 @@ def show_settings(cli_bridge):
             "User Agent",
             value=settings.get("PAGEPLUS_USER_AGENT", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         )
+        file_picker_type = st.selectbox(
+            "File Picker Type",
+            options=["Native (PyQt6)", "Web (Server-side)"],
+            index=1 if settings.get("FILE_PICKER_TYPE", "Native (PyQt6)") == "Web (Server-side)" else 0,
+            help="Choose 'Native (PyQt6)' if running locally, or 'Web (Server-side)' if running PagePlus on a remote server."
+        )
         # Save settings
         if st.button("Save Settings"):
             try:
@@ -60,6 +66,7 @@ def show_settings(cli_bridge):
                     "OUTPUT_DIRECTORY": output_dir,
                     "PAGEPLUS_REDIRECT_URL": redirect_url,
                     "PAGEPLUS_USER_AGENT": user_agent,
+                    "FILE_PICKER_TYPE": file_picker_type,
                 })
                 st.rerun()
             except Exception as e:
@@ -127,10 +134,11 @@ def show_settings(cli_bridge):
         # Directory picker
         if st.session_state.get("show_directory_picker", False):
             from pageplus.gui.utils.picker import pick_directory
-            selected_path = pick_directory(current_model_path)
-            if selected_path:
-                st.session_state.tesseract_new_path = selected_path
+            selected_path = pick_directory(current_model_path, key="tesseract_dir")
+            if selected_path is not None:
                 st.session_state.show_directory_picker = False
+                if selected_path:
+                    st.session_state.tesseract_new_path = selected_path
                 st.rerun()
 
         # Update model_path if a new path was selected
@@ -309,11 +317,13 @@ def show_settings(cli_bridge):
             from pageplus.gui.utils.picker import pick_files
             selected_files = pick_files(
                 initial_dir=str(Path.home()),
-                filetypes=[("Python Executable", "python*"), ("All files", "*")]
+                filetypes=[("Python Executable", "python*"), ("All files", "*")],
+                key="kraken_python"
             )
-            if selected_files:
-                st.session_state.kraken_new_python_path = selected_files[0]
+            if selected_files is not None:
                 st.session_state.show_kraken_python_picker = False
+                if selected_files:
+                    st.session_state.kraken_new_python_path = selected_files[0]
                 st.rerun()
 
         # Update python_path if a new path was selected
@@ -378,10 +388,14 @@ def show_settings(cli_bridge):
         # Directory picker
         if st.session_state.get("show_kraken_model_dir_picker", False):
             from pageplus.gui.utils.picker import pick_directory
-            selected_path = pick_directory(current_model_path if current_model_path else str(Path.home()))
-            if selected_path:
-                st.session_state.kraken_new_model_path = selected_path
+            selected_path = pick_directory(
+                current_model_path if current_model_path else str(Path.home()),
+                key="kraken_model_dir"
+            )
+            if selected_path is not None:
                 st.session_state.show_kraken_model_dir_picker = False
+                if selected_path:
+                    st.session_state.kraken_new_model_path = selected_path
                 st.rerun()
 
         # Update model_path if a new path was selected

@@ -8,7 +8,7 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +85,53 @@ def load_gemini2d_json(json_path: [str | Path]) -> List[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Coordinate buffering helper
+# ---------------------------------------------------------------------------
+
+def buffer_coords_inward(coords: List[Tuple[int, int]], amount: float = 1.0) -> List[Tuple[int, int]]:
+    """Buffers the coordinates inward by a specified amount (pixels)."""
+    if not coords:
+        return []
+    # If the points form an axis-aligned rectangle, contract the bounds directly.
+    xs = [pt[0] for pt in coords]
+    ys = [pt[1] for pt in coords]
+    unique_xs = sorted(list(set(xs)))
+    unique_ys = sorted(list(set(ys)))
+    if len(coords) == 4 and len(unique_xs) == 2 and len(unique_ys) == 2:
+        min_x, max_x = unique_xs
+        min_y, max_y = unique_ys
+        if (max_x - min_x) > 2 * amount and (max_y - min_y) > 2 * amount:
+            new_min_x = min_x + amount
+            new_max_x = max_x - amount
+            new_min_y = min_y + amount
+            new_max_y = max_y - amount
+            new_coords = []
+            for x, y in coords:
+                nx = new_min_x if x == min_x else new_max_x
+                ny = new_min_y if y == min_y else new_max_y
+                new_coords.append((int(nx), int(ny)))
+            return new_coords
+
+    # Fallback for arbitrary polygons: shift towards centroid
+    import math
+    cx = sum(pt[0] for pt in coords) / len(coords)
+    cy = sum(pt[1] for pt in coords) / len(coords)
+    
+    new_coords = []
+    for x, y in coords:
+        dx = cx - x
+        dy = cy - y
+        dist = math.sqrt(dx * dx + dy * dy)
+        if dist > 0:
+            nx = x + (dx / dist) * amount
+            ny = y + (dy / dist) * amount
+            new_coords.append((round(nx), round(ny)))
+        else:
+            new_coords.append((x, y))
+    return new_coords
+
+
+# ---------------------------------------------------------------------------
 # Label → PAGE XML region-type mapping for PP-Layout JSON
 # ---------------------------------------------------------------------------
 
@@ -111,7 +158,7 @@ PP_LAYOUT_LABEL_TO_TAG: Dict[str, str] = {
     "aside_text": "TextRegion",
     "chart": "ChartRegion",
     "content": "TextRegion",
-    "display_formula": "MathsRegion",
+    "display_formula": "TextRegion",
     "doc_title": "TextRegion",
     "figure_title": "TextRegion",
     "footer_image": "ImageRegion",

@@ -17,6 +17,7 @@ from pageplus.utils.mappings.mapping_utils import (
     page_xml_footer,
     PP_LAYOUT_LABEL_TO_TAG,
     PP_LAYOUT_LABEL_TO_STRUCTURE,
+    buffer_coords_inward,
 )
 
 
@@ -217,6 +218,23 @@ def pp_layout_extend_table_json_to_page(
                     page_xml_lines.append("                    </TextEquiv>")
                     page_xml_lines.append("                </TextLine>")
                 page_xml_lines.append("            </TableCell>")
+        else:
+            if label == "display_formula" and region_tag == "TextRegion":
+                buffered_coords = buffer_coords_inward(coords_tuples, amount=1.0)
+                if buffered_coords:
+                    line_coords_str = " ".join(f"{x},{y}" for x, y in buffered_coords)
+                    line_xml_id = f"{xml_region_id}_l1"
+                    ys = [pt[1] for pt in buffered_coords]
+                    xs = [pt[0] for pt in buffered_coords]
+                    baseline_y = int(max(ys) - (max(ys) - min(ys)) * 0.2)
+                    baseline_str = f"{min(xs)},{baseline_y} {max(xs)},{baseline_y}"
+                    page_xml_lines.append(f'            <TextLine id="{line_xml_id}">')
+                    page_xml_lines.append(f'                <Coords points="{line_coords_str}"/>')
+                    page_xml_lines.append(f'                <Baseline points="{baseline_str}"/>')
+                    page_xml_lines.append("                <TextEquiv>")
+                    page_xml_lines.append("                    <Unicode></Unicode>")
+                    page_xml_lines.append("                </TextEquiv>")
+                    page_xml_lines.append("            </TextLine>")
 
         page_xml_lines.append(f"        </{region_tag}>")
 

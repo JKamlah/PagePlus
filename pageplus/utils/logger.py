@@ -56,6 +56,8 @@ def configure_external_logging() -> None:
     logging.getLogger("pytesseract").setLevel(logging.WARNING)
     logging.getLogger("PIL").setLevel(logging.WARNING)
     logging.getLogger("pikepdf").setLevel(logging.WARNING)
+    logging.getLogger("aiohttp").setLevel(logging.WARNING)
+    logging.getLogger("LiteLLM").setLevel(logging.WARNING)
     logging.getLogger(
         'watchdog.observers.inotify_buffer').setLevel(logging.INFO)
     logging.getLogger('watchdog.').setLevel(logging.WARNING)

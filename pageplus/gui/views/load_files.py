@@ -105,6 +105,45 @@ class LoadFilesPage:
 
     def _show_add_files_tab(self):
         """Show the tab for adding files."""
+        # Stateful Picker Processing
+        if st.session_state.get("show_add_ws_dir", False):
+            ws = Workspace(Environments.PAGEPLUS)
+            sel_ws = st.session_state.get("workspace_selector")
+            init_dir = Path(ws.path(sel_ws)) if sel_ws else None
+            selected = pick_directory(initial_dir=init_dir, key="add_ws_dir")
+            if selected is not None:
+                st.session_state.show_add_ws_dir = False
+                if selected:
+                    self.load_xml_files([Path(selected)], from_directory=True)
+                st.rerun()
+
+        if st.session_state.get("show_add_ws_files", False):
+            ws = Workspace(Environments.PAGEPLUS)
+            sel_ws = st.session_state.get("workspace_selector")
+            init_dir = Path(ws.path(sel_ws)) if sel_ws else None
+            selected = pick_files(initial_dir=init_dir, key="add_ws_files")
+            if selected is not None:
+                st.session_state.show_add_ws_files = False
+                if selected:
+                    self.load_xml_files([Path(p) for p in selected], from_directory=False)
+                st.rerun()
+
+        if st.session_state.get("show_add_dir", False):
+            selected = pick_directory(key="add_dir")
+            if selected is not None:
+                st.session_state.show_add_dir = False
+                if selected:
+                    self.load_xml_files([Path(selected)], from_directory=True)
+                st.rerun()
+
+        if st.session_state.get("show_add_files", False):
+            selected = pick_files(key="add_files")
+            if selected is not None:
+                st.session_state.show_add_files = False
+                if selected:
+                    self.load_xml_files([Path(p) for p in selected], from_directory=False)
+                st.rerun()
+
         # Workspace file loading
         with st.expander("🗂️ Workspace Files", expanded=True):
             st.markdown("Load files from your PagePlus workspaces")
@@ -150,25 +189,13 @@ class LoadFilesPage:
 
                 with col2:
                     if st.button("📁 Add Directory", key="add_ws_dir", use_container_width=True):
-                        selected_paths = pick_directory(
-                            initial_dir=Path(workspace.path(selected_workspace)))
-                        if selected_paths:
-                            self.load_xml_files(
-                                [Path(selected_paths)],
-                                from_directory=True
-                            )
-                        elif selected_paths is not None:
-                            st.info("Directory selection cancelled.")
+                        st.session_state.show_add_ws_dir = True
+                        st.rerun()
 
                 with col3:
                     if st.button("📄 Add Files", key="add_ws_files", use_container_width=True):
-                        selected_paths = pick_files(
-                            initial_dir=Path(workspace.path(selected_workspace)))
-                        if selected_paths:
-                            self.load_xml_files(
-                                [Path(p) for p in selected_paths],
-                                from_directory=False
-                            )
+                        st.session_state.show_add_ws_files = True
+                        st.rerun()
         # System file loading
         with st.expander("🖥️ System Files", expanded=True):
             st.markdown("Load files from anywhere on your system")
@@ -176,25 +203,13 @@ class LoadFilesPage:
 
             with col1:
                 if st.button("📁 Add Directory", key="add_dir", use_container_width=True):
-                    selected_paths = pick_directory()
-                    if selected_paths:
-                        self.load_xml_files(
-                            [Path(selected_paths)],
-                            from_directory=True
-                        )
-                    elif selected_paths is not None:
-                        st.info("Directory selection cancelled.")
+                    st.session_state.show_add_dir = True
+                    st.rerun()
 
             with col2:
                 if st.button("📄 Add Files", key="add_files", use_container_width=True):
-                    selected_paths = pick_files()
-                    if selected_paths:
-                        self.load_xml_files(
-                            [Path(p) for p in selected_paths],
-                            from_directory=False
-                        )
-                    elif selected_paths is not None:
-                        st.info("File selection cancelled.")
+                    st.session_state.show_add_files = True
+                    st.rerun()
 
 
 

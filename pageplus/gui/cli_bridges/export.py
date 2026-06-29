@@ -59,9 +59,10 @@ class ExportBridge(CLIBridge):
                    files: List[Path],
                    output_dir: Optional[Path] = None,
                    images: Optional[List[str]] = None,
-                   dpi: int = 300,
+                   dpi: Optional[int] = 300,
                    jpeg_quality: int = 85,
                    draw: List[str] = None,
+                   line_thickness: float = 1.5,
                    substitutions: Optional[dict] = None,
                    output_filename: str = "PagePlus", **kwargs) -> List[Path]:
         """Export files to PDF format."""
@@ -73,6 +74,7 @@ class ExportBridge(CLIBridge):
                 dpi=dpi,
                 jpeg_quality=jpeg_quality,
                 draw=draw or [],
+                line_thickness=line_thickness,
                 substitutions=substitutions,
                 output_filename=output_filename,
                 **kwargs)  # Pass any other GUI options
@@ -116,7 +118,7 @@ class ExportBridge(CLIBridge):
             if 'img_dir' in kwargs:
                 kwargs['image_folder'] = kwargs.pop('img_dir')
             if 'max_resolution' in kwargs:
-                del kwargs['max_resolution']
+                kwargs['dpi'] = kwargs.pop('max_resolution')
             return self.export_pdf(files, output_dir, **kwargs)
         elif format == "TEI_FSL":
             return self.export_tei_fsl(files, output_dir, **kwargs)

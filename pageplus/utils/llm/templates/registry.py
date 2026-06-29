@@ -119,6 +119,8 @@ def render_page_xml_payload(
     mode: TaskMode,
     region_filter=None,
     line_filter=None,
+    scale_x: float = 1.0,
+    scale_y: float = 1.0,
 ) -> str:
     """Serialize a ``Page`` into a compact JSON blob for correction prompts.
 
@@ -142,6 +144,20 @@ def render_page_xml_payload(
     keep the prompt compact; for ``text_correction`` it passes ``True`` so
     the model has the existing transcription to fix.
     """
+    def _scale_coords_str(coords_str: str, sx: float, sy: float) -> str:
+        if not coords_str or (sx == 1.0 and sy == 1.0):
+            return coords_str
+        scaled_pts = []
+        for tok in coords_str.split():
+            try:
+                x, y = tok.split(",")
+                scaled_x = int(float(x) * sx)
+                scaled_y = int(float(y) * sy)
+                scaled_pts.append(f"{scaled_x},{scaled_y}")
+            except ValueError:
+                scaled_pts.append(tok)
+        return " ".join(scaled_pts)
+
     regions_out: List[Dict[str, Any]] = []
     for region in _iter_regions(page):
         if region_filter is not None and not _safe_filter(region_filter, region):
@@ -149,7 +165,7 @@ def render_page_xml_payload(
         region_entry: Dict[str, Any] = {
             "id": _safe_get_id(region),
             "type": _safe_get_tag(region),
-            "coords": _safe_get_coords(region),
+            "coords": _scale_coords_str(_safe_get_coords(region), scale_x, scale_y),
             "textlines": [],
         }
         for line in getattr(region, "textlines", []) or []:
@@ -158,8 +174,8 @@ def render_page_xml_payload(
             line_entry: Dict[str, Any] = {
                 "id": _safe_get_id(line),
                 "type": _safe_get_tag(line),
-                "coords": _safe_get_coords(line),
-                "baseline": _safe_get_baseline(line),
+                "coords": _scale_coords_str(_safe_get_coords(line), scale_x, scale_y),
+                "baseline": _scale_coords_str(_safe_get_baseline(line), scale_x, scale_y),
             }
             if include_text:
                 try:

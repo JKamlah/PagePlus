@@ -1078,6 +1078,9 @@ def merge_columnaligned_regions(
         only_sort: Annotated[bool, typer.Option(
             help="Only sort the column-aligned regions without merging them."
         )] = False,
+        tag_filter: Annotated[Optional[List[str]], typer.Option(
+            help="Only merge regions that have one of these tags."
+        )] = None,
         dry_run: Annotated[bool, typer.Option(
             help="Perform a dry run without writing any files."
         )] = False):
@@ -1114,6 +1117,10 @@ def merge_columnaligned_regions(
             if i in processed_regions:
                 continue
 
+            if tag_filter and textregion.get_tag() not in tag_filter:
+                processed_regions.add(i)
+                continue
+
             if based_on_baselines:
                 textregion_centroid = textregion.get_mean_textline_centroid()
             else:
@@ -1134,6 +1141,10 @@ def merge_columnaligned_regions(
 
             for j, other_region in enumerate(page.regions.textregions):
                 if j in processed_regions:
+                    continue
+
+                if tag_filter and other_region.get_tag() not in tag_filter:
+                    processed_regions.add(j)
                     continue
 
                 if based_on_baselines:
@@ -2390,7 +2401,10 @@ def merge_overlapping_textregions(
     )] = False,
     recalculate_convex_hull: Annotated[bool, typer.Option(
         help="Recalculate convex hull from textlines after merging."
-    )] = False
+    )] = False,
+    tag_filter: Annotated[Optional[List[str]], typer.Option(
+        help="Only merge regions that have one of these tags."
+    )] = None
 ):
     """
     Merges overlapping TextRegions based on a minimum overlap percentage.
@@ -2416,6 +2430,10 @@ def merge_overlapping_textregions(
                 break
 
             for region1, region2 in itertools.combinations(text_regions, 2):
+                if tag_filter:
+                    if region1.get_tag() not in tag_filter or region2.get_tag() not in tag_filter:
+                        continue
+
                 poly1 = region1.get_coordinates(returntype="polygon")
                 poly2 = region2.get_coordinates(returntype="polygon")
 

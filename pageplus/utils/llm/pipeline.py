@@ -241,6 +241,28 @@ class PagePlusOCRPipeline:
             )
         page_xml_text: Optional[str] = None
         page_xml_dict: Optional[Dict[str, Any]] = None
+        # Calculate rescaling scale factors
+        scale_x, scale_y = 1.0, 1.0
+        max_image_size = getattr(self.backend.spec.options, "max_image_size", None)
+        if max_image_size:
+            try:
+                from PIL import Image
+                with Image.open(document.image_path) as img:
+                    w, h = img.size
+                if w > max_image_size or h > max_image_size:
+                    if w >= h:
+                        new_w = max_image_size
+                        new_h = int(h * (max_image_size / w))
+                    else:
+                        new_h = max_image_size
+                        new_w = int(w * (max_image_size / h))
+                    new_w = max(1, new_w)
+                    new_h = max(1, new_h)
+                    scale_x = new_w / w
+                    scale_y = new_h / h
+            except Exception as exc:
+                logging.warning("Could not pre-calculate rescaling scale factor: %s", exc)
+
         if self.task_mode in _CORRECTION_MODES:
             if document.page is None:
                 raise ConfigurationError(
@@ -253,6 +275,8 @@ class PagePlusOCRPipeline:
                 document.page, include_text=include_text, mode=self.task_mode,
                 region_filter=document.region_filter,
                 line_filter=document.line_filter,
+                scale_x=scale_x,
+                scale_y=scale_y,
             )
 
         prompt = render_prompt(
@@ -335,6 +359,19 @@ class PagePlusOCRPipeline:
                                      model=self.backend.model_name)
         # Persist the raw answer first, so it survives a conversion failure.
         self._save_raw(document, text=result.text, structured=result.structured)
+
+        # Scale coordinates back to original size if rescaling occurred
+        orig_w = result.ocr_metadata.get("original_width")
+        orig_h = result.ocr_metadata.get("original_height")
+        scaled_w = result.ocr_metadata.get("rescaled_width")
+        scaled_h = result.ocr_metadata.get("rescaled_height")
+        if orig_w and orig_h and scaled_w and scaled_h:
+            if orig_w != scaled_w or orig_h != scaled_h:
+                scale_x = orig_w / scaled_w
+                scale_y = orig_h / scaled_h
+                from pageplus.utils.llm.templates.postprocess import scale_structured_coordinates
+                result.structured = scale_structured_coordinates(result.structured, scale_x, scale_y)
+
         if self.profile.postprocess_fn is not None:
             fn = self.profile.postprocess_fn
         else:

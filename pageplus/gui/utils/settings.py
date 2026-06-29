@@ -22,7 +22,8 @@ class Settings:
                 "DEFAULT_LANGUAGE": "English",
                 "LLM_API_KEY": "",
                 "GEMINI_API_KEY": "",
-                "USE_BBOX_FALLBACK": "True"  # Use previous bbox with offset for entries without bbox
+                "USE_BBOX_FALLBACK": "True",  # Use previous bbox with offset for entries without bbox
+                "FILE_PICKER_TYPE": "Native (PyQt6)"
             }
             for key, value in default_settings.items():
                 self.set(key, value)

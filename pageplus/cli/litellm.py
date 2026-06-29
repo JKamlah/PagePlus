@@ -42,7 +42,6 @@ if util.find_spec('litellm') is None:
 
 else:
 
-    from litellm import completion
     from pydantic import BaseModel
 
     from pageplus.models.page import Page
@@ -373,6 +372,7 @@ else:
                 "JSON <|output|>\n"
                 "{'lines': [{'id': id, 'corrected': corrected_text},..]}\n")
             try:
+                from litellm import completion
                 response = completion(
                     model=llm_api.model_with_prefix,
                     api_base=llm_api.api_base_url,
@@ -468,6 +468,7 @@ else:
             fulltext = page.extract_fulltext()
             prompt = {'text': [{'original': ln} for ln in fulltext.split('\n')]}
             try:
+                from litellm import completion
                 response = completion(
                     model=llm_api.model_with_prefix,
                     api_base=llm_api.api_base_url,

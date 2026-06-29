@@ -528,6 +528,7 @@ class ModificationBridge(CLIBridge):
         max_height_distance: float = 0.75,
         mid_tolerance: float = 0.0,
         only_sort: bool = False,
+        tag_filter: Optional[List[str]] = None,
         outputdir: Optional[str] = None,
         dry_run: bool = False
     ) -> Dict[str, Any]:
@@ -543,6 +544,7 @@ class ModificationBridge(CLIBridge):
                 max_height_distance=max_height_distance,
                 mid_tolerance=mid_tolerance,
                 only_sort=only_sort,
+                tag_filter=tag_filter,
                 outputdir=outputdir,
                 dry_run=dry_run
             )
@@ -761,6 +763,7 @@ class ModificationBridge(CLIBridge):
         files: List[str],
         min_overlap_percentage: float = 50.0,
         recalculate_convex_hull: bool = False,
+        tag_filter: Optional[List[str]] = None,
         outputdir: Optional[str] = None,
         dry_run: bool = False
     ) -> Dict[str, Any]:
@@ -772,6 +775,7 @@ class ModificationBridge(CLIBridge):
                 inputs=files,
                 min_overlap_percentage=min_overlap_percentage,
                 recalculate_convex_hull=recalculate_convex_hull,
+                tag_filter=tag_filter,
                 outputdir=outputdir,
                 dry_run=dry_run
             )

@@ -652,12 +652,14 @@ else:
             image_extensions: Annotated[List[ImageExtension], typer.Option(
                 help="Image file extensions to try (only active with 'same_names')", case_sensitive=False
             )] = ['.png', '.jpg', '.jpeg', '.tif', '.tiff'],
-            dpi: Annotated[int, typer.Option(
+            dpi: Annotated[Optional[int], typer.Option(
                 help="Resolution of the image (use None for auto-detection)")] = 300,
             jpeg_quality: Annotated[int, typer.Option(
                 help="JPEG quality for embedded images (1-95)")] = 85,
             draw: Annotated[Optional[list[DrawingsPDF]], typer.Option(
                 help="Activate drawing for region, line, baseline and words. (Debug Option)")] = None,
+            line_thickness: Annotated[float, typer.Option(
+                help="Line thickness (in points) for drawing layout elements.")] = 1.5,
             substitutions: Annotated[List[str], typer.Option(
                 help="Regex substitutions with pattern==>replacement,...]", callback=transform_substitutions)] = None,
             mapping_profile: Annotated[Optional[str], typer.Option(help="Mapping profile to apply to the text before exporting.")] = None,
@@ -726,6 +728,7 @@ else:
                     target_dpi=dpi,
                     jpeg_quality=jpeg_quality,
                     draw=draw,
+                    line_thickness=line_thickness,
                     substitutions=substitutions
                 )
         finally:

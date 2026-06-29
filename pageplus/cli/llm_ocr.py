@@ -62,9 +62,11 @@ else:
         available_providers,
         list_providers,
         spec_from_preset,
+        register_custom_endpoints,
     )
 
     _presets = LLMOCRPresetManager()
+    register_custom_endpoints()
 
     # ------------------------------------------------------------------
     # Package

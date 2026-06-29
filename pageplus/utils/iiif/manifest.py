@@ -74,6 +74,7 @@ class IIIFManifest:
         min_dim: Optional[int] = None,
         batch_size: int = 25,
         progress_callback=None,
+        overwrite: bool = False,
         **kwargs,
     ):
         self.url = unquote(url)
@@ -92,6 +93,7 @@ class IIIFManifest:
         self.min_dim = min_dim
         self.batch_size = batch_size
         self.progress_callback = progress_callback
+        self.overwrite = overwrite
 
     @property
     def save_dir(self) -> Path:
@@ -299,7 +301,11 @@ class IIIFManifest:
 
             async def download_with_semaphore(image):
                 async with semaphore:
-                    result = await image.save()
+                    if not self.overwrite and image.img_path.exists():
+                        logger.info(f"Skipping existing image: {image.img_name}")
+                        tracker.report_success()
+                        return True
+                    result = await image.save(re_download=self.overwrite)
                     if result:
                         tracker.report_success()
                     else:

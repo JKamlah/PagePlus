@@ -519,6 +519,23 @@ def show_modification(bridge: ModificationBridge) -> None:
                     key="merge_columnaligned_tolerance"
                 )
 
+                # Tag filtering
+                if "merge_columnaligned_tag_options" not in st.session_state:
+                    st.session_state.merge_columnaligned_tag_options = []
+                if "merge_columnaligned_tags" not in st.session_state:
+                    st.session_state.merge_columnaligned_tags = []
+
+                if st.button("Update tags", key="merge_columnaligned_update_tags_btn"):
+                    st.session_state.merge_columnaligned_tag_options = sorted(set(tag for tags in [Page(Path(f)).get_tags([TextLevel.TextRegion]) for f in selected_files] for tag in tags))
+                    st.session_state.merge_columnaligned_tags = []
+
+                selected_tags = st.multiselect(
+                    "Filter by tags",
+                    st.session_state.merge_columnaligned_tag_options,
+                    key="merge_columnaligned_tags",
+                    help="Only merge regions that have one of the selected tags. If empty, all regions are processed."
+                )
+
                 only_sort = st.checkbox("Only Sort", value=False, help="Only sort the column-aligned regions without merging them.", key="merge_columnaligned_only_sort")
                 dry_run = st.checkbox("Dry run", key="merge_columnaligned_dry_run")
 
@@ -530,12 +547,13 @@ def show_modification(bridge: ModificationBridge) -> None:
                         "max_height_distance": max_height_distance,
                         "mid_tolerance": mid_tolerance,
                         "only_sort": only_sort,
+                        "tag_filter": selected_tags if selected_tags else None,
                         "dry_run": dry_run,
                         "outputdir": st.session_state.get('modification_dir')
                     }
                     record_operation("merge_columnaligned_regions", **params)
                     with st.spinner("Merging column-aligned regions...", show_time=True):
-                        result = bridge.merge_columnaligned_regions(files=selected_files, **params)
+                         result = bridge.merge_columnaligned_regions(files=selected_files, **params)
                     if result["success"]:
                         st.success(result["output"])
                     else:
@@ -588,11 +606,30 @@ def show_modification(bridge: ModificationBridge) -> None:
                     "Recalculate convex hull from textlines",
                     key="merge_recalculate_hull"
                 )
+
+                # Tag filtering
+                if "merge_overlapping_tag_options" not in st.session_state:
+                    st.session_state.merge_overlapping_tag_options = []
+                if "merge_overlapping_tags" not in st.session_state:
+                    st.session_state.merge_overlapping_tags = []
+
+                if st.button("Update tags", key="merge_overlapping_update_tags_btn"):
+                    st.session_state.merge_overlapping_tag_options = sorted(set(tag for tags in [Page(Path(f)).get_tags([TextLevel.TextRegion]) for f in selected_files] for tag in tags))
+                    st.session_state.merge_overlapping_tags = []
+
+                selected_tags = st.multiselect(
+                    "Filter by tags",
+                    st.session_state.merge_overlapping_tag_options,
+                    key="merge_overlapping_tags",
+                    help="Only merge regions that have one of the selected tags. If empty, all regions are processed."
+                )
+
                 dry_run = st.checkbox("Dry run", key="merge_overlap_dry_run")
                 if st.button("Merge Overlapping TextRegions"):
                     params = {
                         "min_overlap_percentage": min_overlap_percentage,
                         "recalculate_convex_hull": recalculate_convex_hull,
+                        "tag_filter": selected_tags if selected_tags else None,
                         "dry_run": dry_run,
                         "outputdir": st.session_state.get('modification_dir')
                     }
