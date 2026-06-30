@@ -428,7 +428,6 @@ def extend_lines(
         logging.info(f'Processing file: {filename}')
 
         page = Page(xml_file)
-        width, height = page.page_size()
         for textregion in page.regions.textregions:
             for idx, line in enumerate(textregion.textlines):
                 try:
@@ -437,31 +436,12 @@ def extend_lines(
                         direction=dim,
                         rectangle=rectangularize)
                     line.fit_into_parent(
-                        parent_coords=page.page_coords(
-                            returntype='linearring'))
+                        parent_coords=page.page_coords(returntype='linearring', buffer=-1))
                     if cut_overlaps and idx > 0:
                         process_overlapping_lines(textregion, idx, line)
                 except Exception as e:
                     logging.error(
                         f"Error processing line {line.get_id()}: {e}")
-            
-            # Post-processing pass to ensure all lines and baselines stay within canvas bounds
-            for line in textregion.textlines:
-                try:
-                    # 1. Clamp line coordinates to page bounds
-                    coords = line.get_coordinates(returntype="tuple")
-                    if coords:
-                        clamped_coords = [(max(0, min(x, width)), max(0, min(y, height))) for x, y in coords]
-                        line.update_coordinates(clamped_coords, inputtype="tuple")
-                    
-                    # 2. Clamp baseline coordinates if present
-                    baseline_coords = line.get_baseline_coordinates(returntype="tuple")
-                    if baseline_coords:
-                        clamped_baseline = [(max(0, min(x, width)), max(0, min(y, height))) for x, y in baseline_coords]
-                        line.update_baseline_coordinates(clamped_baseline)
-                except Exception as e:
-                    logging.error(
-                        f"Error clamping line/baseline {line.get_id()}: {e}")
         if not dry_run:
             fout = xml_file if outputdir is None else determine_output_path(
                 xml_file, outputdir, filename)

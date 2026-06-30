@@ -425,7 +425,7 @@ class Page:
 
         return tag_counts.keys() if not details else dict(tag_counts)
 
-    def page_coords(self, returntype: str = "string"):
+    def page_coords(self, returntype: str = "string", buffer: int = 0):
         """
         Returns the coordinates of the page in various formats.
         """
@@ -438,9 +438,13 @@ class Page:
         if returntype not in valid_returntypes:
             return None
 
-        coord_tuples = [(0, 0), (self.page_size()[0], 0),
-                        self.page_size(), (0, self.page_size()[1])]
-
+        coord_tuples = [
+            (0-buffer, 0-buffer), 
+            (self.page_size()[0]-buffer, 0-buffer),
+            (self.page_size()[0]-buffer, self.page_size()[1]-buffer),
+            (0-buffer, self.page_size()[1]-buffer)
+        ]
+        
         if returntype == "string":
             return " ".join(f"{x},{y}" for x, y in coord_tuples)
         if returntype == "tuples":
