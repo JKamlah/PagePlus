@@ -428,6 +428,7 @@ def extend_lines(
         logging.info(f'Processing file: {filename}')
 
         page = Page(xml_file)
+        width, height = page.page_size()
         for textregion in page.regions.textregions:
             for idx, line in enumerate(textregion.textlines):
                 try:
@@ -443,6 +444,24 @@ def extend_lines(
                 except Exception as e:
                     logging.error(
                         f"Error processing line {line.get_id()}: {e}")
+            
+            # Post-processing pass to ensure all lines and baselines stay within canvas bounds
+            for line in textregion.textlines:
+                try:
+                    # 1. Clamp line coordinates to page bounds
+                    coords = line.get_coordinates(returntype="tuple")
+                    if coords:
+                        clamped_coords = [(max(0, min(x, width)), max(0, min(y, height))) for x, y in coords]
+                        line.update_coordinates(clamped_coords, inputtype="tuple")
+                    
+                    # 2. Clamp baseline coordinates if present
+                    baseline_coords = line.get_baseline_coordinates(returntype="tuple")
+                    if baseline_coords:
+                        clamped_baseline = [(max(0, min(x, width)), max(0, min(y, height))) for x, y in baseline_coords]
+                        line.update_baseline_coordinates(clamped_baseline)
+                except Exception as e:
+                    logging.error(
+                        f"Error clamping line/baseline {line.get_id()}: {e}")
         if not dry_run:
             fout = xml_file if outputdir is None else determine_output_path(
                 xml_file, outputdir, filename)
@@ -1272,6 +1291,7 @@ def merge_columnaligned_regions(
                 if hull:
                     base_region.update_coordinates(hull, 'polygon')
                     base_region.buffer(distance=5, direction='all')
+                    base_region.fit_into_parent(page.get_coordinates('linearring'))
 
                 # base_region.sort_baselines(mode='single_col')
                 logging.info(
@@ -1734,6 +1754,7 @@ def recalculate_textregion_polygon(
                         region.buffer(distance=0, direction='all', rectangle=True)
                     else:
                         region.simplify_polygon(tolerance=2)
+                    region.fit_into_parent(page.get_coordinates('linearring'))
 
         if not dry_run:
             fout = xml_file if outputdir is None else determine_output_path(
@@ -1788,6 +1809,7 @@ def repair_dummy_region(
                         hull = MultiPoint(textline_coords).convex_hull
                         region.update_coordinates(hull, 'polygon')
                         region.buffer(distance=5, direction='all')
+                        region.fit_into_parent(page.get_coordinates('linearring'))
                 else:
                     print(
                         f"[red]Deleting TextRegion: {region.get_id()} - No textlines found[/red]")
@@ -1849,6 +1871,7 @@ def top_tier_textregion(
                 hull = MultiPoint(textline_coords).convex_hull
                 top_tier_region.update_coordinates(hull, 'polygon')
                 top_tier_region.buffer(distance=5, direction='all')
+                top_tier_region.fit_into_parent(page.get_coordinates('linearring'))
             top_tier_region.sort_baselines(mode='single_col')
         if not dry_run:
             fout = xml_file if outputdir is None else determine_output_path(
@@ -2457,6 +2480,7 @@ def merge_overlapping_textregions(
                     # Merge polygons
                     new_poly = unary_union([poly1, poly2])
                     region1.update_coordinates(new_poly, 'polygon')
+                    region1.fit_into_parent(page.get_coordinates('linearring'))
 
                     # Move textlines from region2 to region1
                     for line in region2.textlines:
@@ -2483,6 +2507,7 @@ def merge_overlapping_textregions(
                             hull = MultiPoint(textline_coords).convex_hull
                             region1.update_coordinates(hull, 'polygon')
                             region1.simplify_polygon(tolerance=2)
+                            region1.fit_into_parent(page.get_coordinates('linearring'))
 
                     # Reload regions as the structure has changed
                     page.load_regions()
