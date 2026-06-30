@@ -439,10 +439,10 @@ class Page:
             return None
 
         coord_tuples = [
-            (0-buffer, 0-buffer), 
-            (self.page_size()[0]-buffer, 0-buffer),
-            (self.page_size()[0]-buffer, self.page_size()[1]-buffer),
-            (0-buffer, self.page_size()[1]-buffer)
+            (-buffer, -buffer), 
+            (self.page_size()[0]+buffer, -buffer),
+            (self.page_size()[0]+buffer, self.page_size()[1]+buffer),
+            (-buffer, self.page_size()[1]+buffer)
         ]
         
         if returntype == "string":
