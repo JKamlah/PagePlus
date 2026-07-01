@@ -50,11 +50,18 @@ def _get_image_dpi(image: Image.Image) -> Tuple[int, int]:
     """
     Get the DPI of an image from its metadata, with a fallback to 300 DPI.
     """
-    if 'dpi' in image.info:
-        dpi = image.info['dpi']
-        if isinstance(dpi, (tuple, list)) and len(dpi) == 2:
-            return int(dpi[0]), int(dpi[1])
+    try:
+        if 'dpi' in image.info:
+            dpi = image.info['dpi']
+            if isinstance(dpi, (tuple, list)) and len(dpi) == 2:
+                xdpi = int(dpi[0])
+                ydpi = int(dpi[1])
+                if xdpi > 75 and ydpi > 75:
+                    return xdpi, ydpi
+    except Exception:
+        pass
     return 300, 300
+
 
 
 def _optimize_image(
