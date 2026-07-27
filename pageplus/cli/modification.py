@@ -394,7 +394,7 @@ def extend_lines(
             help="Filename of the output directory. If not specified, input files will be overwritten.",
             callback=transform_output)] = None,
         distance: Annotated[int, typer.Option(help="Distance (in pixel) of extension.")] = 8,
-        dim: Annotated[str, typer.Option(help="Dimension in which the buffer is performed")] = "all",
+        dim: Annotated[str, typer.Option(help="Dimension in which the buffer is performed: 'all', 'x', 'y', 'left', 'right'")] = "all",
         rectangularize: Annotated[bool, typer.Option(help="Rectangularize the polygons")] = True,
         cut_overlaps: Annotated[bool, typer.Option(help="Fit the extended target into the parent region.")] = True,
         dry_run: Annotated[bool, typer.Option(help="Perform a dry run without writing any files.")] = False
@@ -405,6 +405,7 @@ def extend_lines(
     Args:
         inputs: Paths to the PAGE XML files to be processed.
         outputdir: The directory where the modified XML files will be saved.
+        dim: Dimension or direction of extension ('all', 'x', 'y', 'left', 'right').
         cut_overlaps: Fit the extended target into the parent region.
         dry_run: If set, no files will be written.
     """

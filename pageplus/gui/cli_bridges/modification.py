@@ -205,7 +205,7 @@ class ModificationBridge(CLIBridge):
         outputdir: Optional[str] = None,
         dry_run: bool = False
     ) -> Dict[str, Any]:
-        """Extend lines in files."""
+        """Extend lines in files (dim: 'all', 'x', 'y', 'left', 'right')."""
         try:
             if not dry_run:
                 UndoManager.add_undo_state("Extend Lines")

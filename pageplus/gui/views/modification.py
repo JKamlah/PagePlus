@@ -247,7 +247,7 @@ def show_modification(bridge: ModificationBridge) -> None:
                 )
                 dim = st.selectbox(
                     "Dimension",
-                    ["all", "x", "y"],
+                    ["all", "x", "y", "left", "right"],
                     key="extend_lines_dim"
                 )
                 rectangularize = st.checkbox(

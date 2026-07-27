@@ -1465,7 +1465,10 @@ def _render_modification_params(node: Dict, node_type: NodeType):
 
     elif node_type.id == "mod_extend_lines":
         distance = st.number_input("Distance", min_value=1, value=params.get('distance', 8), key=f"dist_{node_id}")
-        dim = st.selectbox("Dimension", ["all", "x", "y"], index=["all", "x", "y"].index(params.get('dim', 'all')), key=f"dim_{node_id}")
+        dim_options = ["all", "x", "y", "left", "right"]
+        current_dim = params.get('dim', 'all')
+        dim_index = dim_options.index(current_dim) if current_dim in dim_options else 0
+        dim = st.selectbox("Dimension", dim_options, index=dim_index, key=f"dim_{node_id}")
         rectangularize = st.checkbox("Rectangularize", value=params.get('rectangularize', False), key=f"rect_{node_id}")
         cut_overlaps = st.checkbox("Cut overlaps", value=params.get('cut_overlaps', False), key=f"cut_{node_id}")
         dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")

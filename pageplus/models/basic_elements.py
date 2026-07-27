@@ -510,6 +510,7 @@ class CoordElement:
                simplify: bool = False, rectangle: bool = False) -> None:
         """
         Buffers the coordinates of the element based on specified parameters and updates the element.
+        Supported directions: 'all', 'x', 'width', 'horizontal', 'left', 'right', 'y', 'height'.
         """
         coords = self.get_coordinates(returntype="linearring")
         if coords is None:
@@ -533,7 +534,7 @@ class CoordElement:
                 distance, cap_style="square", join_style="bevel")
         else:
             padded_polygon = polygon
-        if direction in ["width", "horizontal"]:
+        if direction in ["width", "horizontal", "x", "left", "right"]:
             try:
                 coords = affinity.scale(
                     polygon.minimum_rotated_rectangle,
@@ -558,10 +559,20 @@ class CoordElement:
                     logging.warning(
                         "Cutting upper and lower bound produced multiple areas")
                     return polygon
-                extensions = [sorted(list(split(padded_polygon,
-                                                line).geoms),
-                                     key=lambda x: x.area,
-                                     reverse=False)[0] for line in scaled_lines[:2]]
+                side_lines = sorted(scaled_lines[:2], key=lambda line: line.centroid.x)
+                left_line = side_lines[0]
+                right_line = side_lines[1]
+
+                left_ext = sorted(list(split(padded_polygon, left_line).geoms), key=lambda x: x.area, reverse=False)[0]
+                right_ext = sorted(list(split(padded_polygon, right_line).geoms), key=lambda x: x.area, reverse=False)[0]
+
+                if direction == "left":
+                    extensions = [left_ext]
+                elif direction == "right":
+                    extensions = [right_ext]
+                else:
+                    extensions = [left_ext, right_ext]
+
                 padded_polygon = unary_union(extensions + [Polygon(polygon)])
             except BaseException:
                 return polygon
