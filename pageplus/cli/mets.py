@@ -111,7 +111,8 @@ def download(
         nametag: Annotated[str, typer.Option(help="Use the original filename or the USE or ID tag for filename. (default: all)")] = None,
         selection: Annotated[List[int], typer.Option(help="The documents that should be downloaded, e.g 0,1,3 .")] = None,
         outputdir: Annotated[Path, typer.Option(help="Directory to save the files. If not specified, files will be saved in the same directory as the METS file.")] = None,
-        batch_size: Annotated[int, typer.Option("--batch-size", help="Number of files to download in parallel.")] = 25):
+        batch_size: Annotated[int, typer.Option("--batch-size", help="Number of files to download in parallel.")] = 25,
+        skip_existing: Annotated[bool, typer.Option("--skip-existing/--no-skip-existing", help="Skip images/files if they already exist on disk.")] = True):
     """
     Download files referenced in a METS XML document by <fileGrp>.
     """
@@ -157,7 +158,7 @@ def download(
                     download_tasks.append((child, grp_folder, nametag))
 
     if download_tasks:
-        stats = asyncio.run(download_files_async(download_tasks, batch_size, base_output))
+        stats = asyncio.run(download_files_async(download_tasks, batch_size, base_output, skip_existing=skip_existing))
         print("\n📊 Download Summary:")
         print(f"   Total: {stats['total']}")
         print(f"   ✅ Downloaded: {stats['successful']}")

@@ -75,6 +75,7 @@ class IIIFManifest:
         batch_size: int = 25,
         progress_callback=None,
         overwrite: bool = False,
+        skip_existing: bool = True,
         **kwargs,
     ):
         self.url = unquote(url)
@@ -93,7 +94,8 @@ class IIIFManifest:
         self.min_dim = min_dim
         self.batch_size = batch_size
         self.progress_callback = progress_callback
-        self.overwrite = overwrite
+        self.skip_existing = skip_existing
+        self.overwrite = overwrite or not skip_existing
 
     @property
     def save_dir(self) -> Path:
@@ -303,7 +305,7 @@ class IIIFManifest:
                 async with semaphore:
                     if not self.overwrite and image.img_path.exists():
                         logger.info(f"Skipping existing image: {image.img_name}")
-                        tracker.report_success()
+                        tracker.report_exists()
                         return True
                     result = await image.save(re_download=self.overwrite)
                     if result:
@@ -338,6 +340,7 @@ class IIIFManifest:
 
             logger.info(f"Download statistics saved to {info_path}")
             print(f"\n✅ Successfully downloaded: {stats.successful}/{len(images)}")
+            print(f"📁 Already exists: {stats.exists}/{len(images)}")
             print(f"❌ Failed: {stats.failed}/{len(images)}")
 
             self.save_log()

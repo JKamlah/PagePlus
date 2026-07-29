@@ -114,12 +114,14 @@ def download_form(bridge: MetsBridge):
         selection_str = st.text_input("Filter by document number (e.g., 1, 2, 4)")
 
         st.markdown("##### Options")
-        col_opts1, col_opts2, col_opts3 = st.columns(3)
+        col_opts1, col_opts2, col_opts3, col_opts4 = st.columns(4)
         with col_opts1:
             strict_download = st.checkbox("Strict parsing", key="strict_download")
         with col_opts2:
             verbose_download = st.checkbox("Verbose output", key="verbose_download")
         with col_opts3:
+            skip_existing_download = st.checkbox("Skip existing files", value=True, key="skip_existing_mets", help="Skip images/files if they already exist on disk.")
+        with col_opts4:
             batch_size = st.number_input(
                 "Batch Size",
                 min_value=1,
@@ -166,6 +168,7 @@ def download_form(bridge: MetsBridge):
                             selection=selection,
                             outputdir=Path(st.session_state.output_dir_download),
                             batch_size=batch_size,
+                            skip_existing=skip_existing_download,
                             progress_callback=update_progress
                         )
 

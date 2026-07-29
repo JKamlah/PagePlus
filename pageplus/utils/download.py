@@ -50,7 +50,7 @@ async def download_file_from_flocat_async(
             return href, f"failed: {e}"
 
 
-async def download_files_async(download_tasks: List[Tuple[File, Path, str]], batch_size: int, output_dir: Path = None):
+async def download_files_async(download_tasks: List[Tuple[File, Path, str]], batch_size: int, output_dir: Path = None, skip_existing: bool = True):
     """Download METS files asynchronously with progress tracking (CLI version)."""
     progress_columns = [
         SpinnerColumn(),
@@ -73,7 +73,7 @@ async def download_files_async(download_tasks: List[Tuple[File, Path, str]], bat
                     file,
                     folder,
                     nametag,
-                    overwrite=True,
+                    overwrite=not skip_existing,
                     semaphore=semaphore) for file,
                 folder,
                 nametag in download_tasks]
@@ -102,7 +102,7 @@ async def download_files_async(download_tasks: List[Tuple[File, Path, str]], bat
     return stats.to_dict()
 
 
-async def download_files_async_with_progress(download_tasks: List[Tuple[File, Path, str]], batch_size: int, output_dir: Path = None, progress_callback=None):
+async def download_files_async_with_progress(download_tasks: List[Tuple[File, Path, str]], batch_size: int, output_dir: Path = None, skip_existing: bool = True, progress_callback=None):
     """
     Download METS files asynchronously with progress callback support for GUI.
     """
@@ -114,7 +114,7 @@ async def download_files_async_with_progress(download_tasks: List[Tuple[File, Pa
     async with aiohttp.ClientSession() as session:
         async def download_with_callback(file, folder, nametag):
             href, status = await download_file_from_flocat_async(
-                session, file, folder, nametag, overwrite=True, semaphore=semaphore
+                session, file, folder, nametag, overwrite=not skip_existing, semaphore=semaphore
             )
 
             if status == "downloaded":

@@ -23,6 +23,7 @@ class IIIFBridge(CLIBridge):
         batch_size: int = 25,
         progress_callback: Optional[Callable] = None,
         overwrite: bool = False,
+        skip_existing: bool = True,
     ) -> dict:
         """Download a IIIF manifest."""
         try:
@@ -42,6 +43,7 @@ class IIIFBridge(CLIBridge):
                 batch_size=batch_size,
                 progress_callback=progress_callback,
                 overwrite=overwrite,
+                skip_existing=skip_existing,
             )
             result = manifest.download()
             

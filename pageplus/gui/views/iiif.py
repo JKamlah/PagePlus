@@ -45,7 +45,7 @@ def show_iiif_downloader(cli_bridge):
             key="page_range_iiif"
         )
 
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             filename_strategy = st.selectbox(
                 "Filename Strategy",
@@ -57,6 +57,8 @@ def show_iiif_downloader(cli_bridge):
         with col2:
             keep_original_size = st.checkbox("Keep original size", value=True, key="keep_size_iiif")
         with col3:
+            skip_existing_iiif = st.checkbox("Skip existing images", value=True, key="skip_existing_iiif", help="Skip images if they already exist on disk.")
+        with col4:
             batch_size = st.number_input(
                 "Batch Size",
                 min_value=1,
@@ -123,6 +125,7 @@ def show_iiif_downloader(cli_bridge):
                     min_dim,
                     batch_size,
                     progress_callback=update_progress,
+                    skip_existing=skip_existing_iiif,
                 )
 
                 if result["success"]:

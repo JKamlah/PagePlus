@@ -169,12 +169,10 @@ class MetsElement:
                 else:
                     if not loose:
                         MetsError(
-                            f"WARNING: Attribute '{key}' is not allowed in element '{
-                                self.tag}'.")
+                            f"WARNING: Attribute '{key}' is not allowed in element '{self.tag}'.")
                     if self.verbose:
                         print(
-                            f"WARNING: Attribute '{key}' is not allowed in element '{
-                                self.tag}'.")
+                            f"WARNING: Attribute '{key}' is not allowed in element '{self.tag}'.")
                     self.attributes[key] = value
 
         if content is not None:

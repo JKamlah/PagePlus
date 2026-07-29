@@ -40,6 +40,7 @@ class MetsBridge(CLIBridge):
         selection: List[int],
         outputdir: Path,
         batch_size: int = 25,
+        skip_existing: bool = True,
         progress_callback: Optional[Callable] = None
     ) -> dict:
         """Download files referenced in a METS XML document."""
@@ -93,7 +94,7 @@ class MetsBridge(CLIBridge):
                             download_tasks.append((child, grp_folder, nametag))
 
             if download_tasks:
-                stats = asyncio.run(download_files_async_with_progress(download_tasks, batch_size, base_output, progress_callback))
+                stats = asyncio.run(download_files_async_with_progress(download_tasks, batch_size, base_output, skip_existing, progress_callback))
                 return {"success": True, "output": f"Downloaded {stats['successful']} files successfully", "stats": stats}
             else:
                 return {"success": True, "output": "No files to download"}
