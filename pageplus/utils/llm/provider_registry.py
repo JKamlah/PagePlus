@@ -387,18 +387,9 @@ def spec_from_preset(
     json_object_mode: Optional[bool] = None,
     calls_per_minute: int = 120,
     max_image_size: Optional[int] = 1000,
+    is_batch: bool = False,
 ) -> OCRBackendSpec:
-    """Build an :class:`OCRBackendSpec` for the given preset.
-
-    The preset supplies provider prefix, API key, base URL, and a default model
-    (overridable via ``model``). If ``task_mode`` is provided, we validate it
-    against the preset's ``task_modes`` so the CLI fails fast when a user asks,
-    e.g., a text-only provider for ``layout_and_text``.
-
-    Custom endpoints (preset IDs starting with ``custom_``) use the direct
-    OpenAI backend instead of LiteLLM for maximum compatibility with vLLM,
-    TGI, and other OpenAI-protocol servers.
-    """
+    """Build an :class:`OCRBackendSpec` for the given preset."""
     preset = get_preset(preset_id)
 
     if task_mode is not None and task_mode not in preset.task_modes:
@@ -410,13 +401,12 @@ def spec_from_preset(
 
     api_key, api_base = preset.resolve_credentials()
     import logging
-    # Never log resolved credentials; only note that resolution happened.
     logging.debug(
         "[registry] spec_from_preset resolved for %s (api_key set=%s, api_base set=%s)",
         preset_id, bool(api_key), bool(api_base),
     )
 
-    # --- Local transformers (direct, in-process) --------------------------
+    # --- Transformers / HuggingFace backend -------------------------------
     if preset.litellm_prefix == "transformers" or preset_id == "transformers":
         from pageplus.utils.llm.core.specs import HuggingFaceOptions
 
@@ -444,15 +434,12 @@ def spec_from_preset(
         chosen_model = model or preset.default_model or "curl-default"
         url = api_base or preset.api_base_hint
         if not url:
-            raise ValueError(
-                f"Preset '{preset.id}' has no target URL; please configure a base URL."
-            )
+            raise ValueError(f"Preset '{preset.id}' has no API base URL; pass api_base=...")
         options = CurlHTTPOptions(
             url=url,
             api_key=api_key,
             timeout=timeout if timeout is not None else 60.0,
-            image_key=preset.image_key,
-            prompt_key=preset.prompt_key,
+            calls_per_minute=calls_per_minute,
             max_image_size=max_image_size,
         )
         return OCRBackendSpec(
@@ -478,9 +465,43 @@ def spec_from_preset(
             table_format="html",
             include_blocks=True,
             timeout=timeout if timeout is not None else 60.0,
+            calls_per_minute=calls_per_minute,
+            max_image_size=max_image_size,
         )
         return OCRBackendSpec(
             provider="mistral_ocr",
+            model=chosen_model,
+            options=options,
+            metadata={
+                "preset_id": preset.id,
+                "preset_display_name": preset.display_name,
+                "preset_vision_capable": preset.vision_capable,
+            },
+        )
+
+    # --- Native Gemini SDK backend (google-genai) ------------------------
+    if preset.litellm_prefix == "gemini" or preset_id == "gemini":
+        from pageplus.utils.llm.core.specs import GeminiOptions, GeminiBatchOptions
+
+        chosen_model = model or preset.default_model or "gemini-2.5-flash"
+        if "/" in chosen_model:
+            chosen_model = chosen_model.split("/", 1)[1]
+
+        if is_batch:
+            options = GeminiBatchOptions(
+                api_key=api_key,
+                calls_per_minute=calls_per_minute if calls_per_minute != 120 else 60,
+                service_tier="auto",
+            )
+        else:
+            options = GeminiOptions(
+                api_key=api_key,
+                calls_per_minute=calls_per_minute,
+                timeout=timeout if timeout is not None else 300.0,
+                service_tier="auto",
+            )
+        return OCRBackendSpec(
+            provider="gemini",
             model=chosen_model,
             options=options,
             metadata={

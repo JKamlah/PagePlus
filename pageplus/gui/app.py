@@ -273,7 +273,7 @@ def main():
     kraken_configured = get_kraken_python_path() is not None
 
     main_pages = ["✨ Home", "🗂️ Workspace", "📂 Input", "🖼️ Viewer", "🔍 Analytics", "📝 Guidelines", "✅ Validation",
-                  "📊 Evaluation", "🛠️ Modification", "🌟 Gemini", "🤖 LLM-OCR", "📊 Batches", "🔀 Flow Editor", "📤 Export",
+                  "📊 Evaluation", "🛠️ Modification", "🌟 Gemini", "🤖 LLM-OCR", "🔀 Flow Editor", "📤 Export",
                   "⚙️ Settings"]
 
 
@@ -351,8 +351,6 @@ def main():
         gemini.show_gemini(st.session_state.bridges['gemini'])
     elif page == "🤖 LLM-OCR":
         llm_ocr_view.show_llm_ocr(st.session_state.bridges['llm_ocr'])
-    elif page == "📊 Batches":
-        batches_view.show_batches(st.session_state.bridges['batch'])
     elif page == "🔀 Flow Editor":
 
         flow_editor.flow_editor_view()

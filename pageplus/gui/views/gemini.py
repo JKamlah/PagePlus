@@ -801,6 +801,27 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                         key="gemini_batch_mode",
                         help="Submits Gemini task as a background batch job. Monitor progress and results in 📊 Batches tab."
                     )
+                    custom_gemini_batch_name = ""
+                    gemini_pages_per_batch = 0
+                    if use_gemini_batch:
+                        gbc1, gbc2 = st.columns(2)
+                        with gbc1:
+                            custom_gemini_batch_name = st.text_input(
+                                "Batch process name (optional)",
+                                value="",
+                                key="gemini_batch_name",
+                                placeholder="e.g. Gemini_Manuscript",
+                                help="Custom name for batch job(s). If split into multiple batches, batch numbers are appended automatically. If blank, provider batch ID is used."
+                            )
+                        with gbc2:
+                            gemini_pages_per_batch = st.number_input(
+                                "Pages per batch (0 = all in 1 batch)",
+                                min_value=0,
+                                value=0,
+                                step=1,
+                                key="gemini_pages_per_batch",
+                                help="Split total input pages into separate batch jobs of this size. Set to 0 to send all pages in one single batch."
+                            )
 
                     if config_mode == "🎯 Quick Mode (Single Stage)":
                         # Use our new variables
@@ -829,6 +850,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                         elif use_gemini_batch:
                             batch_bridge = st.session_state.bridges.get('batch')
                             input_files_batch = selected_files_for_ocr if current_mode == "OCR" else loaded_files
+                            input_files_list = list(input_files_batch) if input_files_batch else []
                             output_dir_batch = st.session_state.get("modification_dir") or None
 
                             formatted_tasks = []
@@ -842,30 +864,61 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                                     "preset_id": stg.get("id", "gemini-stage"),
                                 })
 
-                            b_res = batch_bridge.submit_batch(
-                                name=f"Gemini {current_mode} ({current_process})",
-                                provider="gemini",
-                                model=settings.get("GEMINI_MODEL", "gemini-2.5-flash"),
-                                tasks=formatted_tasks,
-                                input_files=input_files_batch or [],
-                                output_dir=output_dir_batch,
-                                execution_mode="stepwise",
-                                options={
-                                    "jobs": int(jobs_multi),
-                                    "calls_per_minute": int(calls_per_minute_multi),
-                                    "overwrite": bool(overwrite_multi),
-                                    "dry_run": bool(dry_run_multi),
-                                },
-                            )
-                            if b_res.get("success"):
-                                job = b_res.get("batch", {})
-                                st.success(f"✅ Gemini Batch job `{job.get('batch_id')}` submitted successfully!")
-                                st.info(f"Status: 🟡 `{job.get('status')}` — {job.get('status_message')}")
-                                if st.button("📊 View Running Batches", key="gemini_goto_batches_confirm"):
-                                    st.session_state.main_page_selection = "📊 Batches"
-                                    st.rerun()
+                            g_ppb = int(gemini_pages_per_batch)
+                            if g_ppb > 0 and input_files_list:
+                                chunks = [input_files_list[i : i + g_ppb] for i in range(0, len(input_files_list), g_ppb)]
                             else:
-                                st.error(b_res.get("output", "Failed to submit Gemini batch job."))
+                                chunks = [input_files_list]
+
+                            submitted_jobs = []
+                            errors = []
+                            num_chunks = len(chunks)
+
+                            for idx, chunk in enumerate(chunks, start=1):
+                                clean_name = custom_gemini_batch_name.strip()
+                                if clean_name:
+                                    job_name = f"{clean_name} (Batch {idx})" if num_chunks > 1 else clean_name
+                                else:
+                                    job_name = ""
+
+                                b_res = batch_bridge.submit_batch(
+                                    name=job_name,
+                                    provider="gemini",
+                                    model=settings.get("GEMINI_MODEL", "gemini-2.5-flash"),
+                                    tasks=formatted_tasks,
+                                    input_files=chunk,
+                                    output_dir=output_dir_batch,
+                                    execution_mode="stepwise",
+                                    options={
+                                        "jobs": int(jobs_multi),
+                                        "calls_per_minute": int(calls_per_minute_multi),
+                                        "overwrite": bool(overwrite_multi),
+                                        "dry_run": bool(dry_run_multi),
+                                    },
+                                )
+                                if b_res.get("success"):
+                                    submitted_jobs.append(b_res.get("batch", {}))
+                                else:
+                                    errors.append(b_res.get("output", f"Batch {idx} failed to submit."))
+
+                            if submitted_jobs:
+                                if len(submitted_jobs) == 1:
+                                    job = submitted_jobs[0]
+                                    disp_name = job.get('name') or job.get('batch_id')
+                                    st.success(f"✅ Gemini Batch job `{disp_name}` submitted successfully!")
+                                    st.info(f"Status: 🟡 `{job.get('status')}` — {job.get('status_message')}")
+                                else:
+                                    st.success(f"✅ Submitted {len(submitted_jobs)} Gemini batch jobs successfully!")
+                                    for job in submitted_jobs:
+                                        disp_name = job.get('name') or job.get('batch_id')
+                                        num_f = len(job.get('input_files', []))
+                                        st.write(f"- `{disp_name}` ({num_f} page(s)) — 🟡 `{job.get('status')}`")
+                                if st.button("📊 View Running Batches in LLM-OCR", key="gemini_goto_batches_confirm"):
+                                    st.session_state.main_page_selection = "🤖 LLM-OCR"
+                                    st.rerun()
+                            if errors:
+                                for err in errors:
+                                    st.error(err)
                         else:
 
                             first_stage = selected_stages[0]

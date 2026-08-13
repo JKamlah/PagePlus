@@ -257,6 +257,8 @@ class LLMOcrBridge:
         overwrite: bool = True,
         dry_run: bool = False,
         max_image_size: Optional[int] = 1000,
+        recalculate_baselines: bool = False,
+        is_batch: bool = False,
     ) -> dict:
         """Run a single OCR step across files.
 
@@ -392,6 +394,7 @@ class LLMOcrBridge:
                         json_object_mode=json_object or None,
                         calls_per_minute=calls_per_minute,
                         max_image_size=max_image_size,
+                        is_batch=is_batch,
                     )
                 except ValueError as exc:
                     return {"success": False, "output": str(exc), "usage": []}
@@ -434,10 +437,22 @@ class LLMOcrBridge:
                     target = out.document.output_xml_path
                     target.parent.mkdir(parents=True, exist_ok=True)
                     if out.page is not None:
+                        if recalculate_baselines:
+                            try:
+                                out.page.compute_pseudobaselines(position="bottom", cut_to_polygon=True)
+                            except Exception as exc:
+                                logging.warning("Failed to recalculate baselines for %s: %s", target, exc)
                         out.page.save_xml(target)
                         written.append(target)
                     elif out.xml_content:
                         target.write_text(out.xml_content, encoding="utf-8")
+                        if recalculate_baselines:
+                            try:
+                                p_recalc = Page(target)
+                                p_recalc.compute_pseudobaselines(position="bottom", cut_to_polygon=True)
+                                p_recalc.save_xml(target)
+                            except Exception as exc:
+                                logging.warning("Failed to recalculate baselines for %s: %s", target, exc)
                         written.append(target)
 
                 summary = [
@@ -576,6 +591,7 @@ class LLMOcrBridge:
         overwrite: bool = True,
         dry_run: bool = False,
         max_image_size: Optional[int] = 1000,
+        recalculate_baselines: bool = False,
     ) -> dict:
         """Run an ordered list of tasks as a chained pipeline.
 
@@ -628,7 +644,8 @@ class LLMOcrBridge:
                                              same_names=same_names, jobs=jobs,
                                              calls_per_minute=calls_per_minute,
                                              overwrite=overwrite, dry_run=dry_run,
-                                             max_image_size=max_image_size)
+                                             max_image_size=max_image_size,
+                                             recalculate_baselines=recalculate_baselines)
                         if res.get("written"):
                             working_xmls = res["written"]
                     else:
@@ -644,7 +661,8 @@ class LLMOcrBridge:
                                                  same_names=same_names if working_xmls is None else True,
                                                  jobs=jobs, calls_per_minute=calls_per_minute,
                                                  overwrite=overwrite, dry_run=dry_run,
-                                                 max_image_size=max_image_size)
+                                                 max_image_size=max_image_size,
+                                                 recalculate_baselines=recalculate_baselines)
                             if res.get("written"):
                                 working_xmls = res["written"]
                     print(res.get("output", ""), flush=True)
@@ -663,6 +681,7 @@ class LLMOcrBridge:
                     same_names=same_names, calls_per_minute=calls_per_minute,
                     overwrite=overwrite, dry_run=dry_run,
                     max_image_size=max_image_size, jobs=jobs,
+                    recalculate_baselines=recalculate_baselines,
                 )
                 for res in results:
                     _accumulate(res)
@@ -688,6 +707,7 @@ class LLMOcrBridge:
         outputdir: Optional[str], chain_image_folder: Optional[str], same_names: bool,
         calls_per_minute: int, overwrite: bool, dry_run: bool,
         max_image_size: Optional[int], jobs: int,
+        recalculate_baselines: bool = False,
     ) -> List[dict]:
         """Pagewise: run the whole task chain per page, pages in a thread pool."""
         from concurrent.futures import ThreadPoolExecutor
@@ -704,7 +724,8 @@ class LLMOcrBridge:
                                          same_names=same_names, jobs=1,
                                          calls_per_minute=calls_per_minute,
                                          overwrite=overwrite, dry_run=dry_run,
-                                         max_image_size=max_image_size)
+                                         max_image_size=max_image_size,
+                                         recalculate_baselines=recalculate_baselines)
                     if res.get("written"):
                         working_xml = res["written"][0]
                 else:
@@ -717,7 +738,8 @@ class LLMOcrBridge:
                                              same_names=True, jobs=1,
                                              calls_per_minute=calls_per_minute,
                                              overwrite=overwrite, dry_run=dry_run,
-                                             max_image_size=max_image_size)
+                                             max_image_size=max_image_size,
+                                             recalculate_baselines=recalculate_baselines)
                         if res.get("written"):
                             working_xml = res["written"][0]
                 print(f"{label}: {'ok' if res.get('success') else 'failed'}", flush=True)

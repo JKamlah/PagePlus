@@ -55,16 +55,27 @@ class LiteLLMTransportConfig:
 
 @dataclass
 class GeminiOptions:
-    """Options specific to the ``google-genai`` SDK backend."""
+    """Options specific to standard/interactive ``google-genai`` SDK backend requests."""
     api_key: Optional[str] = None
     thinking_budget: int = 0
     temperature: float = 1e-7
     top_p: float = 1e-8
-    max_output_tokens: int = 8192
-    timeout: float = 60.0
-    calls_per_minute: int = 120
+    max_output_tokens: int = 65536
+    timeout: float = 300.0           # 5 minutes for interactive requests
+    max_attempts: int = 3            # 3 retries for standard requests
+    calls_per_minute: int = 120      # Default rate limit for interactive requests
     detail: str = "high"
-    service_tier: str = "auto"  # "auto", "flex", "priority"
+    service_tier: str = "auto"       # "auto", "flex", "priority"
+    is_batch: bool = False
+
+
+@dataclass
+class GeminiBatchOptions(GeminiOptions):
+    """Options tailored specifically for long-running Gemini batch processing jobs."""
+    timeout: float = 86400.0         # 24 hours processing limit for batch workloads
+    max_attempts: int = 50           # 50 retries across 24h for resilient batch processing
+    calls_per_minute: int = 60       # Throttled rate limit tailored for high-volume background batches
+    is_batch: bool = True
 
 
 

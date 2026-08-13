@@ -330,6 +330,17 @@ class PagePlusOCRPipeline:
         Returns the path written (or ``None``).
         """
         subdir, ext = self._raw_format()
+
+        # Always save full unformatted raw response string to .raw.txt
+        if text and text.strip():
+            try:
+                raw_txt_target = self._raw_target(document, subdir, ".raw.txt")
+                raw_txt_target.parent.mkdir(parents=True, exist_ok=True)
+                raw_txt_target.write_text(text, encoding="utf-8")
+                logging.info("[raw] saved raw text response -> %s", raw_txt_target)
+            except Exception as exc:
+                logging.warning("[raw] could not save raw text file: %s", exc)
+
         if ext == ".json" and structured is not None:
             import json as _json
             try:

@@ -38,6 +38,7 @@ from pageplus.gui.utils.terminal_stream import (
     process_result,
     update_terminal_display,
 )
+from pageplus.gui.views.batches import show_batches
 from pageplus.gui.views.load_files import get_loaded_workspace_dir
 from pageplus.utils.fs import shuffle
 from pageplus.utils.llm.ocr_presets import (
@@ -786,12 +787,39 @@ def _process_tab(bridge: LLMOcrBridge, settings: Settings) -> None:
         rescale = st.checkbox("Rescale image", value=True, key="llmocr_rescale")
     max_size = st.number_input("Max image dimension (px)", min_value=100, max_value=10000, value=1000,
                                disabled=not rescale, key="llmocr_max_size")
+    recalculate_baselines = st.checkbox(
+        "Recalculate baseline",
+        value=False,
+        key="llmocr_recalculate_baselines",
+        help="Recalculate pseudo-baselines cut to textline polygons for all lines after generating PAGE XML."
+    )
     use_batch_mode = st.checkbox(
         "⚡ Run in Batch Mode (Non-blocking, background status monitoring)",
         value=False,
         key="llmocr_batch_mode",
         help="Submits the task as a background batch job. Progress and results can be tracked in the 📊 Batches tab without blocking the GUI."
     )
+    custom_batch_name = ""
+    pages_per_batch = 0
+    if use_batch_mode:
+        bc1, bc2 = st.columns(2)
+        with bc1:
+            custom_batch_name = st.text_input(
+                "Batch process name (optional)",
+                value="",
+                key="llmocr_batch_name",
+                placeholder="e.g. MyManuscript",
+                help="Custom name for the batch job(s). If split into multiple batches, batch numbers are appended automatically (e.g. MyManuscript (Batch 1)). If left blank, the provider batch ID is used."
+            )
+        with bc2:
+            pages_per_batch = st.number_input(
+                "Pages per batch (0 = all in 1 batch)",
+                min_value=0,
+                value=0,
+                step=1,
+                key="llmocr_pages_per_batch",
+                help="Split total input pages into separate batch jobs of this size. Set to 0 to send all pages in one single batch."
+            )
     verbose = st.checkbox("🐞 Verbose LLM debug (log the exact upstream request: URL + payload)",
                           value=False, key="llmocr_verbose",
                           help="Prints LiteLLM's raw request/curl to the terminal so you can see "
@@ -834,31 +862,62 @@ def _process_tab(bridge: LLMOcrBridge, settings: Settings) -> None:
             provider_id = first_task.get("provider_id", "llm_ocr")
             model_name = first_task.get("model", "default")
 
-            b_res = batch_bridge.submit_batch(
-                name=f"LLM-OCR Pipeline ({exec_mode})",
-                provider=provider_id,
-                model=model_name,
-                tasks=tasks,
-                input_files=input_list or [],
-                output_dir=output_dir,
-                execution_mode=exec_mode,
-                options={
-                    "jobs": int(jobs),
-                    "calls_per_minute": int(cpm),
-                    "overwrite": bool(overwrite),
-                    "dry_run": bool(dry_run),
-                    "max_image_size": int(max_size) if rescale else None,
-                },
-            )
-            if b_res.get("success"):
-                job = b_res.get("batch", {})
-                st.success(f"✅ Batch job `{job.get('batch_id')}` submitted successfully!")
-                st.info(f"Status: 🟡 `{job.get('status')}` — {job.get('status_message')}")
-                if st.button("📊 View Running Batches", key="llmocr_goto_batches_confirm"):
-                    st.session_state.main_page_selection = "📊 Batches"
-                    st.rerun()
+            input_files_list = list(input_list) if input_list else []
+            ppb = int(pages_per_batch)
+            if ppb > 0 and input_files_list:
+                chunks = [input_files_list[i : i + ppb] for i in range(0, len(input_files_list), ppb)]
             else:
-                st.error(b_res.get("output", "Failed to submit batch job."))
+                chunks = [input_files_list]
+
+            submitted_jobs = []
+            errors = []
+            num_chunks = len(chunks)
+
+            for idx, chunk in enumerate(chunks, start=1):
+                clean_name = custom_batch_name.strip()
+                if clean_name:
+                    job_name = f"{clean_name} (Batch {idx})" if num_chunks > 1 else clean_name
+                else:
+                    job_name = ""
+
+                b_res = batch_bridge.submit_batch(
+                    name=job_name,
+                    provider=provider_id,
+                    model=model_name,
+                    tasks=tasks,
+                    input_files=chunk,
+                    output_dir=output_dir,
+                    execution_mode=exec_mode,
+                    options={
+                        "jobs": int(jobs),
+                        "calls_per_minute": int(cpm),
+                        "overwrite": bool(overwrite),
+                        "dry_run": bool(dry_run),
+                        "max_image_size": int(max_size) if rescale else None,
+                        "recalculate_baselines": bool(recalculate_baselines),
+                    },
+                )
+                if b_res.get("success"):
+                    submitted_jobs.append(b_res.get("batch", {}))
+                else:
+                    errors.append(b_res.get("output", f"Batch {idx} failed to submit."))
+
+            if submitted_jobs:
+                if len(submitted_jobs) == 1:
+                    job = submitted_jobs[0]
+                    disp_name = job.get('name') or job.get('batch_id')
+                    st.success(f"✅ Batch job `{disp_name}` submitted successfully!")
+                    st.info(f"Status: 🟡 `{job.get('status')}` — {job.get('status_message')}")
+                else:
+                    st.success(f"✅ Submitted {len(submitted_jobs)} batch jobs successfully!")
+                    for job in submitted_jobs:
+                        disp_name = job.get('name') or job.get('batch_id')
+                        num_f = len(job.get('input_files', []))
+                        st.write(f"- `{disp_name}` ({num_f} page(s)) — 🟡 `{job.get('status')}`")
+                st.info("💡 Monitor running jobs and view results in the **📊 Batch-Jobs** tab above.")
+            if errors:
+                for err in errors:
+                    st.error(err)
             return
 
         output_queue: queue.Queue = queue.Queue()
@@ -884,6 +943,7 @@ def _process_tab(bridge: LLMOcrBridge, settings: Settings) -> None:
                     overwrite=bool(overwrite),
                     dry_run=bool(dry_run),
                     max_image_size=int(max_size) if rescale else None,
+                    recalculate_baselines=bool(recalculate_baselines),
                 )
             except Exception as exc:  # pragma: no cover - defensive
                 res = {"success": False, "output": str(exc), "usage": []}
@@ -944,13 +1004,39 @@ def show_llm_ocr(bridge: LLMOcrBridge) -> None:
     except Exception:
         pass
 
-    tab_names = ["⚙️ Settings", "🧬 Presets", "📁 I/O", "🔬 Process"]
-    tabs = st.tabs(tab_names)
-    with tabs[0]:
-        _settings_tab(bridge, settings)
-    with tabs[1]:
-        _presets_tab(bridge)
-    with tabs[2]:
-        _io_tab()
-    with tabs[3]:
-        _process_tab(bridge, settings)
+    target_tab = st.session_state.pop("llmocr_active_tab", None)
+    if target_tab == "📊 Batch-Jobs":
+        tab_names = ["📊 Batch-Jobs", "⚙️ Settings", "🧬 Presets", "📁 I/O", "🔬 Process"]
+        tabs = st.tabs(tab_names)
+        with tabs[0]:
+            batch_bridge = (st.session_state.get("bridges") or {}).get("batch")
+            if not batch_bridge:
+                from pageplus.gui.cli_bridges.batch import BatchBridge
+                batch_bridge = BatchBridge()
+            show_batches(batch_bridge)
+        with tabs[1]:
+            _settings_tab(bridge, settings)
+        with tabs[2]:
+            _presets_tab(bridge)
+        with tabs[3]:
+            _io_tab()
+        with tabs[4]:
+            _process_tab(bridge, settings)
+    else:
+        tab_names = ["⚙️ Settings", "🧬 Presets", "📁 I/O", "🔬 Process", "📊 Batch-Jobs"]
+        tabs = st.tabs(tab_names)
+        with tabs[0]:
+            _settings_tab(bridge, settings)
+        with tabs[1]:
+            _presets_tab(bridge)
+        with tabs[2]:
+            _io_tab()
+        with tabs[3]:
+            _process_tab(bridge, settings)
+        with tabs[4]:
+            batch_bridge = (st.session_state.get("bridges") or {}).get("batch")
+            if not batch_bridge:
+                from pageplus.gui.cli_bridges.batch import BatchBridge
+                batch_bridge = BatchBridge()
+            show_batches(batch_bridge)
+

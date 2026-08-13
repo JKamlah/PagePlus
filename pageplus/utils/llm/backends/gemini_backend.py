@@ -98,28 +98,25 @@ class GeminiBackend(OCRBackend):
 
     def client(self) -> "genai.Client":
         if self._client is None:
-            stier = (self._options.service_tier or "").lower()
-            # For Flex inference, set client-side timeout to at least 600s (10 min) per Google docs.
-            timeout_sec = max(600.0, self._options.timeout) if stier == "flex" else self._options.timeout
+            timeout_sec = float(self._options.timeout)
             try:
                 self._client = genai.Client(
                     api_key=self._options.api_key,
-                    http_options={"timeout": int(timeout_sec * 1000)}
+                    http_options={"timeout": timeout_sec},
                 )
-            except Exception:
+            except TypeError:
                 self._client = genai.Client(api_key=self._options.api_key)
         return self._client
 
-    # ---- OCRBackend API -------------------------------------------------
+    # ---- Implementation --------------------------------------------------
 
     def ocr(self, prompt: RenderedPrompt, ctx: BackendCallContext) -> OCRResult:
         if not self.model_name:
             raise ConfigurationError("No Gemini model configured.",
                                      provider=self.provider_name)
         self._limiter.wait()
-        stier = (self._options.service_tier or "").lower()
-        max_attempts = 3 if stier == "flex" else 1
-        base_delay = 5.0
+        max_attempts = getattr(self._options, "max_attempts", 3)
+        start_time = time.time()
 
         for attempt in range(max_attempts):
             try:
@@ -139,12 +136,18 @@ class GeminiBackend(OCRBackend):
             except Exception as exc:
                 msg = str(exc)
                 low = msg.lower()
-                is_transient_busy = "503" in msg or "429" in msg or "unavailable" in low or "capacity" in low or "rate" in low
-                if stier == "flex" and is_transient_busy and attempt < max_attempts - 1:
-                    delay = base_delay * (2 ** attempt)
+                is_transient_busy = (
+                    "503" in msg or "504" in msg or "429" in msg or
+                    "deadline" in low or "timeout" in low or
+                    "unavailable" in low or "capacity" in low or "rate" in low
+                )
+                if is_transient_busy and attempt < max_attempts - 1:
+                    elapsed = time.time() - start_time
+                    # Retry schedule for batch queues: first 10m every 60s; thereafter every 300s (5m)
+                    delay = 60.0 if elapsed < 600.0 else 300.0
                     logging.warning(
-                        "[Flex Inference] Server busy/congested (%s). Retrying in %.1fs (attempt %d/%d)...",
-                        msg, delay, attempt + 1, max_attempts
+                        "[Gemini Backend] Server busy/deadline (%s). Retrying in %.0fs (attempt %d/%d, elapsed %.0fs)...",
+                        msg, delay, attempt + 1, max_attempts, elapsed
                     )
                     time.sleep(delay)
                     continue
@@ -186,16 +189,8 @@ class GeminiBackend(OCRBackend):
         )
         if thinking_config is not None:
             cfg_kwargs["thinking_config"] = thinking_config
-        stier = (self._options.service_tier or "").lower()
-        if stier and stier not in ("auto", "unspecified"):
-            cfg_kwargs["service_tier"] = stier
-        try:
-            return genai_types.GenerateContentConfig(**cfg_kwargs)
-        except TypeError as exc:
-            if "service_tier" in cfg_kwargs and "service_tier" in str(exc):
-                cfg_kwargs.pop("service_tier", None)
-                return genai_types.GenerateContentConfig(**cfg_kwargs)
-            raise
+
+        return genai_types.GenerateContentConfig(**cfg_kwargs)
 
 
     def _build_contents(self, prompt: RenderedPrompt, ctx: BackendCallContext, file_upload) -> list:

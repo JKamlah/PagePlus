@@ -44,6 +44,30 @@ class Page:
             self.tree, self.root, self.ns = self._open_xml(self.filename)
         self.load_regions()
 
+    def compute_pseudobaselines(self, position: str = 'bottom', cut_to_polygon: bool = True) -> int:
+        """
+        Computes pseudo-baselines for all textlines across all text and table regions on the page.
+        Returns the total number of textlines updated.
+        """
+        count = 0
+        for region in (self.regions.textregions or []):
+            for line in (region.textlines or []):
+                try:
+                    line.compute_pseudobaseline(position=position, cut_to_polygon=cut_to_polygon, update=True)
+                    count += 1
+                except Exception:
+                    pass
+
+        for tableregion in (self.regions.tableregions or []):
+            for tc in (tableregion.tablecells or []):
+                for line in (tc.textlines or []):
+                    try:
+                        line.compute_pseudobaseline(position=position, cut_to_polygon=cut_to_polygon, update=True)
+                        count += 1
+                    except Exception:
+                        pass
+        return count
+
     def update_pcgts_version(self, version: PcGtsVersion):
         """
         Updates the PcGts xmlns and schemaLocation to a specific version.

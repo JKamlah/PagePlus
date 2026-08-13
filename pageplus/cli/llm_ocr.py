@@ -212,6 +212,7 @@ else:
         tags: List[str], tag_regex: bool, model: Optional[str], inputs: List[str],
         image_folder: str, same_names: bool, image_extensions: List[ImageExtension],
         jobs: int, calls_per_minute: int, json_object: bool, overwrite: bool, dry_run: bool,
+        recalculate_baselines: bool = False,
     ) -> List[Path]:
         """Run one task (preset + step + provider) over inputs; return written paths."""
         family = step_family(step)
@@ -292,10 +293,22 @@ else:
             target = out.document.output_xml_path
             target.parent.mkdir(parents=True, exist_ok=True)
             if out.page is not None:
+                if recalculate_baselines:
+                    try:
+                        out.page.compute_pseudobaselines(position="bottom", cut_to_polygon=True)
+                    except Exception as exc:
+                        logging.warning("Failed to recalculate baselines for %s: %s", target, exc)
                 out.page.save_xml(target)
                 written.append(target)
             elif out.xml_content:
                 target.write_text(out.xml_content, encoding="utf-8")
+                if recalculate_baselines:
+                    try:
+                        p_recalc = Page(target)
+                        p_recalc.compute_pseudobaselines(position="bottom", cut_to_polygon=True)
+                        p_recalc.save_xml(target)
+                    except Exception as exc:
+                        logging.warning("Failed to recalculate baselines for %s: %s", target, exc)
                 written.append(target)
             logging.info("Wrote %s", target)
         return written
@@ -317,7 +330,7 @@ else:
         image_folder: str, model: Optional[str], same_names: bool,
         image_extensions: List[ImageExtension], tag_filter: List[str], tag_regex: bool,
         jobs: int, calls_per_minute: int, json_object: bool, overwrite: bool,
-        dry_run: bool, fresh: bool,
+        dry_run: bool, fresh: bool, recalculate_baselines: bool = False,
     ) -> None:
         preset = _presets.get_preset(preset_id) if preset_id else None
         if preset is None:
@@ -345,7 +358,7 @@ else:
             tags=tags, tag_regex=tag_regex, model=model, inputs=inputs, image_folder=image_folder,
             same_names=same_names, image_extensions=image_extensions, jobs=jobs,
             calls_per_minute=calls_per_minute, json_object=json_object, overwrite=overwrite,
-            dry_run=dry_run,
+            dry_run=dry_run, recalculate_baselines=recalculate_baselines,
         )
         print(f"[green]Done. Wrote {len(written)} file(s).[/green]")
 
@@ -364,13 +377,14 @@ else:
         calls_per_minute: Annotated[int, typer.Option()] = 120,
         json_object: Annotated[bool, typer.Option()] = False,
         dry_run: Annotated[bool, typer.Option()] = False,
+        recalculate_baselines: Annotated[bool, typer.Option(help="Recalculate pseudo-baselines cut to textline polygons.")] = False,
     ) -> None:
         """Fresh OCR: image(s) -> new PAGE-XML (All-in-One, Segmentation, Table, Markdown)."""
         _run(provider_id=provider, preset_id=preset, inputs=inputs or [], image_folder='.',
              model=model, same_names=False, image_extensions=image_extensions,
              tag_filter=tag_filter or [], tag_regex=tag_regex, jobs=jobs,
              calls_per_minute=calls_per_minute, json_object=json_object,
-             overwrite=False, dry_run=dry_run, fresh=True)
+             overwrite=False, dry_run=dry_run, fresh=True, recalculate_baselines=recalculate_baselines)
 
     @app.command()
     def reocr(
@@ -390,13 +404,14 @@ else:
         json_object: Annotated[bool, typer.Option()] = False,
         overwrite: Annotated[bool, typer.Option(help="Overwrite input XML in place.")] = False,
         dry_run: Annotated[bool, typer.Option()] = False,
+        recalculate_baselines: Annotated[bool, typer.Option(help="Recalculate pseudo-baselines cut to textline polygons.")] = False,
     ) -> None:
         """Correction ReOCR on existing PAGE-XML (Text Recognition, Field-Tagging, Reading-Order)."""
         _run(provider_id=provider, preset_id=preset, inputs=inputs or [], image_folder=image_folder,
              model=model, same_names=same_names, image_extensions=image_extensions,
              tag_filter=tag_filter or [], tag_regex=tag_regex, jobs=jobs,
              calls_per_minute=calls_per_minute, json_object=json_object,
-             overwrite=overwrite, dry_run=dry_run, fresh=False)
+             overwrite=overwrite, dry_run=dry_run, fresh=False, recalculate_baselines=recalculate_baselines)
 
     # ------------------------------------------------------------------
     # Pipelines (saved multi-task chains)
@@ -432,7 +447,7 @@ else:
     def run_pipeline(
         pipeline_id: Annotated[str, typer.Argument(help="Saved pipeline id.")],
         inputs: Annotated[List[str], typer.Argument(help="Images (fresh first step) or PAGE-XML.",
-                                                    callback=transform_inputs)] = None,
+                                                     callback=transform_inputs)] = None,
         mode: Annotated[Optional[str], typer.Option(help="Override execution mode: stepwise|pagewise.")] = None,
         image_folder: Annotated[str, typer.Option(help="Folder with images for correction steps.")] = '.',
         same_names: Annotated[bool, typer.Option(help="Match images by XML basename.")] = True,
@@ -442,6 +457,7 @@ else:
         calls_per_minute: Annotated[int, typer.Option()] = 120,
         json_object: Annotated[bool, typer.Option()] = False,
         dry_run: Annotated[bool, typer.Option()] = False,
+        recalculate_baselines: Annotated[bool, typer.Option(help="Recalculate pseudo-baselines cut to textline polygons.")] = False,
     ) -> None:
         """Run a saved pipeline (chained tasks) over images or PAGE-XML."""
         pl = _pipelines.get_pipeline(pipeline_id)
@@ -463,7 +479,7 @@ else:
                 model=task.get("model") or None, inputs=task_inputs, image_folder=image_folder,
                 same_names=same_names, image_extensions=image_extensions, jobs=jobs,
                 calls_per_minute=calls_per_minute, json_object=json_object,
-                overwrite=overwrite, dry_run=dry_run,
+                overwrite=overwrite, dry_run=dry_run, recalculate_baselines=recalculate_baselines,
             )
 
         total_written: List[Path] = []

@@ -194,7 +194,7 @@ class BatchManager:
 
         job: Dict[str, Any] = {
             "batch_id": batch_id,
-            "name": name or f"Batch {batch_id}",
+            "name": name or batch_id,
             "provider": provider,
             "model": model,
             "status": STATUS_VALIDATING,
@@ -319,6 +319,7 @@ class BatchManager:
                 overwrite=opts.get("overwrite", True),
                 dry_run=opts.get("dry_run", False),
                 max_image_size=opts.get("max_image_size", 1000),
+                is_batch=True,
             )
 
             if cancel_event.is_set():

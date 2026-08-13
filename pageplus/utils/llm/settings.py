@@ -254,20 +254,33 @@ def spec_from_gemini_settings(
     thinking_budget: int = 0,
     temperature: float = 1e-7,
     top_p: float = 1e-8,
-    max_output_tokens: int = 8192,
+    max_output_tokens: int = 65536,
     service_tier: Optional[str] = None,
+    is_batch: bool = False,
 ) -> OCRBackendSpec:
+    from pageplus.utils.llm.core.specs import GeminiOptions, GeminiBatchOptions
     stier = service_tier or settings.get("GEMINI_SERVICE_TIER", "auto")
-    options = GeminiOptions(
-        api_key=settings.api_key,
-        thinking_budget=thinking_budget,
-        temperature=temperature,
-        top_p=top_p,
-        max_output_tokens=max_output_tokens,
-        timeout=settings.keep_alive_time,
-        calls_per_minute=calls_per_minute,
-        service_tier=stier,
-    )
+    if is_batch:
+        options = GeminiBatchOptions(
+            api_key=settings.api_key,
+            thinking_budget=thinking_budget,
+            temperature=temperature,
+            top_p=top_p,
+            max_output_tokens=max_output_tokens,
+            calls_per_minute=60,
+            service_tier=stier,
+        )
+    else:
+        options = GeminiOptions(
+            api_key=settings.api_key,
+            thinking_budget=thinking_budget,
+            temperature=temperature,
+            top_p=top_p,
+            max_output_tokens=max_output_tokens,
+            timeout=settings.keep_alive_time or 300.0,
+            calls_per_minute=calls_per_minute,
+            service_tier=stier,
+        )
     return OCRBackendSpec(
         provider="gemini",
         model=settings.model,
