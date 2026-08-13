@@ -64,6 +64,8 @@ class GeminiOptions:
     timeout: float = 60.0
     calls_per_minute: int = 120
     detail: str = "high"
+    service_tier: str = "auto"  # "auto", "flex", "priority"
+
 
 
 @dataclass

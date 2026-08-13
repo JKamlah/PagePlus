@@ -2,8 +2,13 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
-from pageplus.cli.export import ReadingOrderMode, alto, dsv, fulltext, pdf, tei_fsl
+from pageplus.cli.export import ReadingOrderMode, alto, dsv, fulltext, tei_fsl
+try:
+    from pageplus.cli.export import pdf
+except ImportError:
+    pdf = None
 from pageplus.gui.cli_bridges import CLIBridge
+
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +72,11 @@ class ExportBridge(CLIBridge):
                    output_filename: str = "PagePlus", **kwargs) -> List[Path]:
         """Export files to PDF format."""
         try:
+            if pdf is None:
+                logger.error("pikepdf is not installed. PDF export is unavailable.")
+                return []
             # The new `pdf` function in cli/export.py handles everything.
+
             # We just need to call it with the right parameters.
             pdf(inputs=files,
                 images=images,

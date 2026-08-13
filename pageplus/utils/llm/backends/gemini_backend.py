@@ -98,7 +98,16 @@ class GeminiBackend(OCRBackend):
 
     def client(self) -> "genai.Client":
         if self._client is None:
-            self._client = genai.Client(api_key=self._options.api_key)
+            stier = (self._options.service_tier or "").lower()
+            # For Flex inference, set client-side timeout to at least 600s (10 min) per Google docs.
+            timeout_sec = max(600.0, self._options.timeout) if stier == "flex" else self._options.timeout
+            try:
+                self._client = genai.Client(
+                    api_key=self._options.api_key,
+                    http_options={"timeout": int(timeout_sec * 1000)}
+                )
+            except Exception:
+                self._client = genai.Client(api_key=self._options.api_key)
         return self._client
 
     # ---- OCRBackend API -------------------------------------------------
@@ -108,33 +117,47 @@ class GeminiBackend(OCRBackend):
             raise ConfigurationError("No Gemini model configured.",
                                      provider=self.provider_name)
         self._limiter.wait()
-        try:
-            file_upload = self._upload_image(ctx)
-            config = self._build_config(prompt)
-            contents = self._build_contents(prompt, ctx, file_upload)
-            response = self.client().models.generate_content(
-                model=self.model_name,
-                contents=contents,
-                config=config,
-            )
-        except GenAIClientError as exc:  # pragma: no cover - depends on SDK shape
-            raise self._translate_client_error(exc) from exc
-        except (ConfigurationError, TransientError, AuthError, ProviderError, SchemaError, RateLimitError):
-            raise
-        except Exception as exc:
-            # Any other failure: assume transient unless obviously auth.
-            msg = str(exc)
-            low = msg.lower()
-            if "api key" in low or "unauthorized" in low or "permission" in low:
-                raise AuthError(msg, provider=self.provider_name,
-                                model=self.model_name, cause=exc) from exc
-            if "rate" in low and "limit" in low:
-                raise RateLimitError(msg, provider=self.provider_name,
-                                     model=self.model_name, cause=exc) from exc
-            raise TransientError(msg, provider=self.provider_name,
-                                 model=self.model_name, cause=exc) from exc
+        stier = (self._options.service_tier or "").lower()
+        max_attempts = 3 if stier == "flex" else 1
+        base_delay = 5.0
 
-        return self._parse_response(response, prompt, ctx)
+        for attempt in range(max_attempts):
+            try:
+                file_upload = self._upload_image(ctx)
+                config = self._build_config(prompt)
+                contents = self._build_contents(prompt, ctx, file_upload)
+                response = self.client().models.generate_content(
+                    model=self.model_name,
+                    contents=contents,
+                    config=config,
+                )
+                return self._parse_response(response, prompt, ctx)
+            except GenAIClientError as exc:  # pragma: no cover - depends on SDK shape
+                raise self._translate_client_error(exc) from exc
+            except (ConfigurationError, AuthError, SchemaError):
+                raise
+            except Exception as exc:
+                msg = str(exc)
+                low = msg.lower()
+                is_transient_busy = "503" in msg or "429" in msg or "unavailable" in low or "capacity" in low or "rate" in low
+                if stier == "flex" and is_transient_busy and attempt < max_attempts - 1:
+                    delay = base_delay * (2 ** attempt)
+                    logging.warning(
+                        "[Flex Inference] Server busy/congested (%s). Retrying in %.1fs (attempt %d/%d)...",
+                        msg, delay, attempt + 1, max_attempts
+                    )
+                    time.sleep(delay)
+                    continue
+
+                if "api key" in low or "unauthorized" in low or "permission" in low:
+                    raise AuthError(msg, provider=self.provider_name,
+                                    model=self.model_name, cause=exc) from exc
+                if "rate" in low and "limit" in low:
+                    raise RateLimitError(msg, provider=self.provider_name,
+                                         model=self.model_name, cause=exc) from exc
+                raise TransientError(msg, provider=self.provider_name,
+                                     model=self.model_name, cause=exc) from exc
+
 
     # ---- Internals ------------------------------------------------------
 
@@ -163,7 +186,17 @@ class GeminiBackend(OCRBackend):
         )
         if thinking_config is not None:
             cfg_kwargs["thinking_config"] = thinking_config
-        return genai_types.GenerateContentConfig(**cfg_kwargs)
+        stier = (self._options.service_tier or "").lower()
+        if stier and stier not in ("auto", "unspecified"):
+            cfg_kwargs["service_tier"] = stier
+        try:
+            return genai_types.GenerateContentConfig(**cfg_kwargs)
+        except TypeError as exc:
+            if "service_tier" in cfg_kwargs and "service_tier" in str(exc):
+                cfg_kwargs.pop("service_tier", None)
+                return genai_types.GenerateContentConfig(**cfg_kwargs)
+            raise
+
 
     def _build_contents(self, prompt: RenderedPrompt, ctx: BackendCallContext, file_upload) -> list:
         contents: list = [

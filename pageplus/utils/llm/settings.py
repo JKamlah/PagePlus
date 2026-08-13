@@ -255,7 +255,9 @@ def spec_from_gemini_settings(
     temperature: float = 1e-7,
     top_p: float = 1e-8,
     max_output_tokens: int = 8192,
+    service_tier: Optional[str] = None,
 ) -> OCRBackendSpec:
+    stier = service_tier or settings.get("GEMINI_SERVICE_TIER", "auto")
     options = GeminiOptions(
         api_key=settings.api_key,
         thinking_budget=thinking_budget,
@@ -264,9 +266,11 @@ def spec_from_gemini_settings(
         max_output_tokens=max_output_tokens,
         timeout=settings.keep_alive_time,
         calls_per_minute=calls_per_minute,
+        service_tier=stier,
     )
     return OCRBackendSpec(
         provider="gemini",
         model=settings.model,
         options=options,
     )
+

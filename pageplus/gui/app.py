@@ -99,10 +99,13 @@ from pageplus.gui.views import (
     settings as settings_view,
     iiif,
     llm_ocr as llm_ocr_view,
+    batches as batches_view,
 )
 from pageplus.gui.views import flow_editor
 from pageplus.gui.cli_bridges.gemini import GeminiBridge
 from pageplus.gui.cli_bridges.llm_ocr import LLMOcrBridge
+from pageplus.gui.cli_bridges.batch import BatchBridge
+from pageplus.utils.llm import start_batch_monitor
 from pageplus.gui.cli_bridges.escriptorium import EscriptoriumBridge
 from pageplus.gui.cli_bridges.transkribus import TranskribusBridge
 from pageplus.gui.cli_bridges.mets import MetsBridge
@@ -205,6 +208,9 @@ def main():
     else:
         logger.debug("Session monitor is already running, skipping thread creation")
 
+    # Start background LLM batch monitor thread (checks on startup and every 5 min)
+    start_batch_monitor(interval_seconds=300)
+
     # Initialize session state
     if 'loaded_files' not in st.session_state:
         st.session_state.loaded_files = load_previous_files()
@@ -221,6 +227,7 @@ def main():
             'modification': ModificationBridge(),
             'gemini': GeminiBridge(),
             'llm_ocr': LLMOcrBridge(),
+            'batch': BatchBridge(),
             'escriptorium': EscriptoriumBridge(),
             'transkribus': TranskribusBridge(),
             'mets': MetsBridge(),
@@ -266,8 +273,9 @@ def main():
     kraken_configured = get_kraken_python_path() is not None
 
     main_pages = ["✨ Home", "🗂️ Workspace", "📂 Input", "🖼️ Viewer", "🔍 Analytics", "📝 Guidelines", "✅ Validation",
-                  "📊 Evaluation", "🛠️ Modification", "🌟 Gemini", "🤖 LLM-OCR", "🔀 Flow Editor", "📤 Export",
+                  "📊 Evaluation", "🛠️ Modification", "🌟 Gemini", "🤖 LLM-OCR", "📊 Batches", "🔀 Flow Editor", "📤 Export",
                   "⚙️ Settings"]
+
 
     # Add OCR pages if configured/activated
     ocr_insert_position = -2  # Position before Settings
@@ -343,7 +351,10 @@ def main():
         gemini.show_gemini(st.session_state.bridges['gemini'])
     elif page == "🤖 LLM-OCR":
         llm_ocr_view.show_llm_ocr(st.session_state.bridges['llm_ocr'])
+    elif page == "📊 Batches":
+        batches_view.show_batches(st.session_state.bridges['batch'])
     elif page == "🔀 Flow Editor":
+
         flow_editor.flow_editor_view()
     elif page == "📤 Export":
         if not st.session_state.loaded_files:

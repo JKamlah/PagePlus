@@ -139,7 +139,19 @@ TesseractLanguageNames = {
 }
 
 
+class Languages(str, Enum):
+    """Supported languages for spellchecking."""
+    en = "en"
+    de = "de"
+    es = "es"
+    fr = "fr"
+    pt = "pt"
+    ru = "ru"
+    ar = "ar"
+
+
 class OutputFormats(str, Enum):
+
     """
     Level of function profiling
     """

@@ -275,6 +275,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
         **📋 Current Default Settings**
 
         🤖 **Model:** `{settings.get("GEMINI_MODEL", "Not set")}`  
+        ⚡ **Service Tier:** `{settings.get("GEMINI_SERVICE_TIER", "auto")}` *(Flex Inference)*  
         💭 **Thinking Budget:** `{settings.get("THINKING_BUDGET", "0")} tokens`  
         💰 **Input Token Cost:** `${settings.get("INPUT_TOKEN_COSTS", "Not set")} per 1M`  
         💰 **Output Token Cost:** `${settings.get("OUTPUT_TOKEN_COSTS", "Not set")} per 1M`
@@ -371,6 +372,33 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                 else:
                     st.error(result["output"])
 
+        # Service Tier (Flex Inference)
+        with st.expander("⚡ Service Tier (Flex Inference)", expanded=False):
+            st.markdown(
+                "Configure Gemini API Service Tier for standard requests. "
+                "[Learn more about Flex Inference](https://ai.google.dev/gemini-api/docs/flex-inference)"
+            )
+            stier_options = {
+                "auto": "Auto / Standard (Default latency & availability)",
+                "flex": "Flex (Flex Inference - Lower cost, flexible throughput/latency)",
+                "priority": "Priority (Standard / High Priority processing)",
+            }
+            cur_stier = settings.get("GEMINI_SERVICE_TIER", "auto")
+            if cur_stier not in stier_options:
+                cur_stier = "auto"
+
+            selected_stier = st.selectbox(
+                "Service Tier Option",
+                options=list(stier_options.keys()),
+                index=list(stier_options.keys()).index(cur_stier),
+                format_func=lambda k: stier_options[k],
+                key="gemini_service_tier_select"
+            )
+            if st.button("Set Service Tier", key="set_service_tier_button"):
+                settings.set("GEMINI_SERVICE_TIER", selected_stier)
+                st.success(f"Gemini Service Tier set to: {selected_stier}")
+                st.rerun()
+
         with st.expander("Token Settings", expanded=False):
             # Thinking Budget
             thinking_budget = st.number_input(
@@ -444,6 +472,7 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                             "Invalid output token cost. Please enter a number "
                             "(e.g., 1.5) or leave empty."
                         )
+
 
     with tabs[1]:  # Pipeline Editor
         pipeline_editor_view()
@@ -766,6 +795,13 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                         key="processing_task_mode",
                     )
 
+                    use_gemini_batch = st.checkbox(
+                        "⚡ Run in Batch Mode (Non-blocking, background status monitoring)",
+                        value=False,
+                        key="gemini_batch_mode",
+                        help="Submits Gemini task as a background batch job. Monitor progress and results in 📊 Batches tab."
+                    )
+
                     if config_mode == "🎯 Quick Mode (Single Stage)":
                         # Use our new variables
                         current_mode = operation_mode
@@ -785,12 +821,53 @@ def show_gemini(bridge: "GeminiBridge") -> None:
                     terminal_text = terminal_container.text_area("Process Terminal", value="", height=200, disabled=True, key="terminal_output_display_initial_process")
                     
                     # Update button text to reflect what we are doing
-                    run_label = f"Run {current_mode} ({current_process})"
+                    run_label = f"Run {current_mode} ({current_process}){' [BATCH]' if use_gemini_batch else ''}"
 
                     if st.button(run_label, key=f"run_multithreaded_button"):
                         if not selected_stages:
                             st.error("No stages selected. Please configure pipeline/stage first.")
+                        elif use_gemini_batch:
+                            batch_bridge = st.session_state.bridges.get('batch')
+                            input_files_batch = selected_files_for_ocr if current_mode == "OCR" else loaded_files
+                            output_dir_batch = st.session_state.get("modification_dir") or None
+
+                            formatted_tasks = []
+                            for stg in selected_stages:
+                                formatted_tasks.append({
+                                    "step": stg.get("type", "All-in-One"),
+                                    "task_mode": task_mode_multi,
+                                    "task_level": recognize_level,
+                                    "provider_id": "gemini",
+                                    "model": settings.get("GEMINI_MODEL", "gemini-2.5-flash"),
+                                    "preset_id": stg.get("id", "gemini-stage"),
+                                })
+
+                            b_res = batch_bridge.submit_batch(
+                                name=f"Gemini {current_mode} ({current_process})",
+                                provider="gemini",
+                                model=settings.get("GEMINI_MODEL", "gemini-2.5-flash"),
+                                tasks=formatted_tasks,
+                                input_files=input_files_batch or [],
+                                output_dir=output_dir_batch,
+                                execution_mode="stepwise",
+                                options={
+                                    "jobs": int(jobs_multi),
+                                    "calls_per_minute": int(calls_per_minute_multi),
+                                    "overwrite": bool(overwrite_multi),
+                                    "dry_run": bool(dry_run_multi),
+                                },
+                            )
+                            if b_res.get("success"):
+                                job = b_res.get("batch", {})
+                                st.success(f"✅ Gemini Batch job `{job.get('batch_id')}` submitted successfully!")
+                                st.info(f"Status: 🟡 `{job.get('status')}` — {job.get('status_message')}")
+                                if st.button("📊 View Running Batches", key="gemini_goto_batches_confirm"):
+                                    st.session_state.main_page_selection = "📊 Batches"
+                                    st.rerun()
+                            else:
+                                st.error(b_res.get("output", "Failed to submit Gemini batch job."))
                         else:
+
                             first_stage = selected_stages[0]
                             system_prompt_selected = first_stage.get('system_prompt', '')
                             stage_attributes = {**first_stage.get('attributes', {}), **first_stage.get('override_attributes', {})}

@@ -786,6 +786,12 @@ def _process_tab(bridge: LLMOcrBridge, settings: Settings) -> None:
         rescale = st.checkbox("Rescale image", value=True, key="llmocr_rescale")
     max_size = st.number_input("Max image dimension (px)", min_value=100, max_value=10000, value=1000,
                                disabled=not rescale, key="llmocr_max_size")
+    use_batch_mode = st.checkbox(
+        "⚡ Run in Batch Mode (Non-blocking, background status monitoring)",
+        value=False,
+        key="llmocr_batch_mode",
+        help="Submits the task as a background batch job. Progress and results can be tracked in the 📊 Batches tab without blocking the GUI."
+    )
     verbose = st.checkbox("🐞 Verbose LLM debug (log the exact upstream request: URL + payload)",
                           value=False, key="llmocr_verbose",
                           help="Prints LiteLLM's raw request/curl to the terminal so you can see "
@@ -817,13 +823,49 @@ def _process_tab(bridge: LLMOcrBridge, settings: Settings) -> None:
     terminal_container.text_area("Process terminal", value="", height=260, disabled=True,
                                  key="llmocr_terminal_init")
 
-    if st.button(f"▶ Run pipeline ({exec_mode}, {len(tasks)} task(s))",
+    if st.button(f"▶ Run pipeline ({exec_mode}, {len(tasks)} task(s)){' [BATCH]' if use_batch_mode else ''}",
                  key="llmocr_run", disabled=not can_run):
+        output_dir = st.session_state.get("modification_dir") or None
+        input_list = image_files if first_family == "fresh" else xml_files
+
+        if use_batch_mode:
+            batch_bridge = st.session_state.bridges.get('batch')
+            first_task = tasks[0] if tasks else {}
+            provider_id = first_task.get("provider_id", "llm_ocr")
+            model_name = first_task.get("model", "default")
+
+            b_res = batch_bridge.submit_batch(
+                name=f"LLM-OCR Pipeline ({exec_mode})",
+                provider=provider_id,
+                model=model_name,
+                tasks=tasks,
+                input_files=input_list or [],
+                output_dir=output_dir,
+                execution_mode=exec_mode,
+                options={
+                    "jobs": int(jobs),
+                    "calls_per_minute": int(cpm),
+                    "overwrite": bool(overwrite),
+                    "dry_run": bool(dry_run),
+                    "max_image_size": int(max_size) if rescale else None,
+                },
+            )
+            if b_res.get("success"):
+                job = b_res.get("batch", {})
+                st.success(f"✅ Batch job `{job.get('batch_id')}` submitted successfully!")
+                st.info(f"Status: 🟡 `{job.get('status')}` — {job.get('status_message')}")
+                if st.button("📊 View Running Batches", key="llmocr_goto_batches_confirm"):
+                    st.session_state.main_page_selection = "📊 Batches"
+                    st.rerun()
+            else:
+                st.error(b_res.get("output", "Failed to submit batch job."))
+            return
+
         output_queue: queue.Queue = queue.Queue()
         output_buffer = StringIO()
         result_container: dict = {"result": None}
-        output_dir = st.session_state.get("modification_dir") or None
         os.environ["PAGEPLUS_LLM_DEBUG"] = "1" if verbose else "0"
+
 
         def run_process() -> None:
             old_stdout = sys.stdout
