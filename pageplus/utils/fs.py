@@ -87,20 +87,15 @@ def transform_output(
         value: str):
     """
     Transforms the output value using the specified transformation inputs.
-
-    This function applies a transformation to the given value if it is not None,
-    using the `transform_inputs` function. The transformation context and parameters
-    are specified by `ctx` and `param`.
-
-    Args:
-        ctx (typer.Context): The context in which the command is executed.
-        param (typer.CallbackParam): The callback parameter associated with the command.
-        value (str): The value to transform.
-
-    Returns:
-        The transformed value or None if the original value is None.
+    If the specified output directory does not exist yet, returns the string value.
     """
-    return transform_inputs(ctx, param, [value])[0] if value else None
+    if not value:
+        return None
+    try:
+        res = transform_inputs(ctx, param, [value])
+        return str(res[0])
+    except Exception:
+        return value
 
 
 def transform_input(

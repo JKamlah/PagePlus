@@ -6,7 +6,7 @@ from pageplus.cli.modification import (delete_text, delete_textlines,
                                        match_textlines_to_region, match_textlines_to_smallest_region,
                                        merge_columnaligned_regions,
                                        merge_overlapping_textregions,
-                                       pseudolinepolygon, reassign_ids,
+                                       pseudolinepolygon, pseudobaseline, reassign_ids,
                                        recalculate_textregion_polygon,
                                        rectangularize, remove_empty,
                                        remove_tag, repair, repair_dummy_region,
@@ -240,6 +240,32 @@ class ModificationBridge(CLIBridge):
             return {
                 "success": True,
                 "output": "Pseudo line polygon computation completed"
+            }
+        except Exception as e:
+            return {"success": False, "output": str(e)}
+
+    def pseudobaseline(
+        self,
+        files: List[str],
+        position: str = "bottom",
+        cut_to_polygon: bool = True,
+        outputdir: Optional[str] = None,
+        dry_run: bool = False
+    ) -> Dict[str, Any]:
+        """Compute pseudo baselines for files."""
+        try:
+            if not dry_run:
+                UndoManager.add_undo_state("Compute Pseudo Baselines")
+            pseudobaseline(
+                inputs=files,
+                position=position,
+                cut_to_polygon=cut_to_polygon,
+                outputdir=outputdir,
+                dry_run=dry_run
+            )
+            return {
+                "success": True,
+                "output": "Pseudo baseline computation completed successfully"
             }
         except Exception as e:
             return {"success": False, "output": str(e)}

@@ -380,6 +380,36 @@ def show_modification(bridge: ModificationBridge) -> None:
                     else:
                         st.error(result["output"])
 
+            # Pseudobaseline
+            with st.expander("Pseudobaseline"):
+                st.write("Calculates pseudo-baselines from textline polygons, optionally mapped/clipped inside the polygon.")
+                position = st.selectbox(
+                    "Position",
+                    ["bottom", "mid", "top"],
+                    index=0,
+                    key="pseudobaseline_position"
+                )
+                cut_to_polygon = st.checkbox(
+                    "Cut / map baseline to existing polygon",
+                    value=True,
+                    key="pseudobaseline_cut_to_polygon"
+                )
+                dry_run = st.checkbox("Dry run", key="pseudobaseline_dry_run")
+                if st.button("Calculate Pseudo-Baselines"):
+                    params = {
+                        "position": position,
+                        "cut_to_polygon": cut_to_polygon,
+                        "dry_run": dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("pseudobaseline", **params)
+                    with st.spinner("Calculating pseudo-baselines...", show_time=True):
+                        result = bridge.pseudobaseline(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
+
             # Recalculate TextRegion Polygon
             with st.expander("Recalculate TextRegion Polygon"):
                 st.write(

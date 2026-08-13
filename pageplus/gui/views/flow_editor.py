@@ -235,6 +235,7 @@ def _initialize_node_types():
         ("mod_reduce_points", "📉", "Reduce Points", "Simplify polygon boundaries"),
         ("mod_simplify_polygon", "📉", "Simplify Polygon", "Simplify polygon"),
         ("mod_pseudoline_polygon", "📐", "Pseudoline Polygon", "Generate pseudo-line polygons"),
+        ("mod_pseudobaseline", "📐", "Pseudobaseline", "Calculate pseudo-baselines from textline polygons"),
         ("mod_recalculate_polygon", "♻️", "Recalculate Polygon", "Recalculate TextRegion polygon"),
         ("mod_fit_into_parent", "📐", "Fit Into Parent", "Fit elements into parent boundaries"),
         ("mod_match_textlines", "🔗", "Match Textlines", "Match textlines to regions"),
@@ -1644,6 +1645,15 @@ def _render_modification_params(node: Dict, node_type: NodeType):
         dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
         node['params'] = {'dry_run': dry_run}
 
+    elif node_type.id == "mod_pseudobaseline":
+        pos_options = ["bottom", "mid", "top"]
+        cur_pos = params.get('position', 'bottom')
+        pos_idx = pos_options.index(cur_pos) if cur_pos in pos_options else 0
+        position = st.selectbox("Position", pos_options, index=pos_idx, key=f"pos_{node_id}")
+        cut_to_polygon = st.checkbox("Cut / map to polygon", value=params.get('cut_to_polygon', True), key=f"cutpoly_{node_id}")
+        dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
+        node['params'] = {'position': position, 'cut_to_polygon': cut_to_polygon, 'dry_run': dry_run}
+
     elif node_type.id == "mod_recalculate_polygon":
         rectangular = st.checkbox("Rectangular", value=params.get('rectangular', False), key=f"rect_{node_id}")
         min_textlines = st.number_input("Minimum Textlines", min_value=0, value=params.get('min_textlines', 0), key=f"min_tl_{node_id}")
@@ -2924,6 +2934,7 @@ def _execute_modification_node(node_type_id: str, files: list, params: dict,
         'mod_reassign_ids': 'reassign_ids',
         # New Text-Layout nodes
         'mod_pseudoline_polygon': 'pseudolinepolygon',
+        'mod_pseudobaseline': 'pseudobaseline',
         'mod_recalculate_polygon': 'recalculate_textregion_polygon',
         'mod_match_textlines': 'match_textlines_to_region',
         'mod_match_textlines_smallest': 'match_textlines_to_smallest_region',
@@ -3046,6 +3057,11 @@ def _execute_modification_node(node_type_id: str, files: list, params: dict,
     elif node_type_id == 'mod_pseudoline_polygon':
         # No special parameters
         pass
+
+    elif node_type_id == 'mod_pseudobaseline':
+        kwargs['position'] = params.get('position', 'bottom')
+        kwargs['cut_to_polygon'] = params.get('cut_to_polygon', True)
+        kwargs['dry_run'] = params.get('dry_run', dry_run)
 
     elif node_type_id == 'mod_recalculate_polygon':
         kwargs['rectangular'] = params.get('rectangular', False)

@@ -67,6 +67,13 @@ class TextRegion(Region):
         self.textlines.append(new_textline)
         return new_textline
 
+    def compute_pseudobaseline(self, position: str = 'bottom', cut_to_polygon: bool = True):
+        """
+        Computes pseudo-baselines for all textlines in the region.
+        """
+        for line in self.textlines:
+            line.compute_pseudobaseline(position=position, cut_to_polygon=cut_to_polygon, update=True)
+
     def delete_textlines(self, idx_list: list):
         """
         Deletes textlines from the region based on a list of indices.
@@ -635,38 +642,217 @@ class Textline(CoordElement):
             self.update_baseline_coordinates(new_baseline_tuples)
         return True
 
+    def compute_pseudobaseline(
+        self,
+        position: str | float = 'bottom',
+        cut_to_polygon: bool = True,
+        update: bool = True
+    ) -> list:
+        """
+        Computes a pseudo-baseline based on the minimum rotated rectangle and geometry of the textline polygon.
+        Optionally cuts / maps the baseline line segment so that it stays strictly within the existing polygon.
+
+        Enforces canonical page-orientation (bottom position is always at larger Y for horizontal lines,
+        and on the right side for vertical bottom-to-top lines).
+
+        Args:
+            position (str | float): Position of baseline relative to textline height ('bottom', 'mid', 'top'
+                                    or float ratio 0.0=top .. 1.0=bottom). Default is 'bottom'.
+            cut_to_polygon (bool): If True, intersects/clips the baseline segment with the textline polygon.
+            update (bool): If True, updates the XML Baseline element with the computed coordinates.
+
+        Returns:
+            list: List of (x, y) coordinate tuples representing the pseudo-baseline.
+        """
+        import math
+        from shapely.geometry import Polygon, LineString, Point, MultiLineString
+        from shapely.affinity import rotate
+
+        textline_polygon = self.get_coordinates(returntype='polygon')
+        if textline_polygon is None or textline_polygon.is_empty:
+            return []
+
+        poly = textline_polygon if textline_polygon.is_valid else textline_polygon.buffer(0)
+        if poly.is_empty:
+            return []
+
+        bounds_orig = poly.bounds  # (minx, miny, maxx, maxy)
+        w_orig = bounds_orig[2] - bounds_orig[0]
+        h_orig = bounds_orig[3] - bounds_orig[1]
+        is_vertical = h_orig > w_orig
+
+        # Determine ratio based on position
+        if isinstance(position, (int, float)):
+            ratio = max(0.0, min(1.0, float(position)))
+        elif position == 'top':
+            ratio = 0.225
+        elif position == 'mid':
+            ratio = 0.5
+        else:  # 'bottom' or default
+            ratio = 0.775
+
+        if is_vertical:
+            # Vertical line handling:
+            # By default, vertical lines run from BOTTOM to TOP (y_max -> y_min in page space)
+            # position="bottom" (ratio 0.85) places baseline on the RIGHT side of vertical line
+            mrr = poly.minimum_rotated_rectangle
+            if isinstance(mrr, LineString):
+                baseline_tuples = [(int(round(c[0])), int(round(c[1]))) for c in mrr.coords]
+                if update:
+                    self.update_baseline_coordinates(baseline_tuples)
+                return baseline_tuples
+
+            mrr_coords = list(mrr.exterior.coords)[:-1]
+            if len(mrr_coords) >= 4:
+                edges = [LineString([mrr_coords[i], mrr_coords[(i + 1) % 4]]) for i in range(4)]
+                # Short edges are the end-caps (top and bottom)
+                short_edges = sorted(edges, key=lambda e: e.length)[:2]
+                # E_bot is short edge with larger avg Y (bottom end-cap)
+                # E_top is short edge with smaller avg Y (top end-cap)
+                short_edges_by_y = sorted(short_edges, key=lambda e: (e.coords[0][1] + e.coords[1][1]) / 2)
+                e_top = short_edges_by_y[0]
+                e_bot = short_edges_by_y[1]
+
+                # Sort points on e_bot and e_top left-to-right (by X coordinate)
+                e_bot_pts = sorted(list(e_bot.coords), key=lambda c: c[0])
+                e_top_pts = sorted(list(e_top.coords), key=lambda c: c[0])
+
+                e_bot_ls = LineString(e_bot_pts)
+                e_top_ls = LineString(e_top_pts)
+
+                # pt_start is on e_bot (bottom end-cap) at ratio (left-to-right)
+                # pt_end is on e_top (top end-cap) at ratio (left-to-right)
+                pt_start = e_bot_ls.interpolate(ratio * e_bot_ls.length).coords[0]
+                pt_end = e_top_ls.interpolate(ratio * e_top_ls.length).coords[0]
+
+                bl_orig = LineString([pt_start, pt_end])
+            else:
+                min_x_orig, min_y_orig, max_x_orig, max_y_orig = bounds_orig
+                x_pos = min_x_orig + ratio * (max_x_orig - min_x_orig)
+                bl_orig = LineString([(x_pos, max_y_orig), (x_pos, min_y_orig)])
+        else:
+            # Horizontal or slanted line handling
+            mrr = poly.minimum_rotated_rectangle
+            if isinstance(mrr, LineString):
+                baseline_tuples = [(int(round(c[0])), int(round(c[1]))) for c in mrr.coords]
+                if update:
+                    self.update_baseline_coordinates(baseline_tuples)
+                return baseline_tuples
+
+            mrr_coords = list(mrr.exterior.coords)[:-1]
+            if len(mrr_coords) < 4:
+                return []
+
+            # 1. Identify MRR long edges to determine orientation and canonical top/bottom
+            edges = [LineString([mrr_coords[i], mrr_coords[(i + 1) % 4]]) for i in range(4)]
+            long_edges = sorted(edges, key=lambda e: e.length, reverse=True)[:2]
+
+            long_edges_by_y = sorted(long_edges, key=lambda e: (e.coords[0][1] + e.coords[1][1]) / 2)
+            e_top_orig = long_edges_by_y[0]
+            e_bot_orig = long_edges_by_y[1]
+
+            dx = long_edges[0].coords[1][0] - long_edges[0].coords[0][0]
+            dy = long_edges[0].coords[1][1] - long_edges[0].coords[0][1]
+            theta = math.degrees(math.atan2(dy, dx))
+
+            center = poly.centroid
+            poly_rot = rotate(poly, -theta, origin=center)
+
+            # Ensure e_bot_orig maps to larger Y (max_y / bottom) in rotated space
+            e_bot_rot = rotate(e_bot_orig, -theta, origin=center)
+            avg_e_bot_y_rot = (e_bot_rot.coords[0][1] + e_bot_rot.coords[1][1]) / 2
+
+            bounds_rot = poly_rot.bounds
+            mid_y_rot = (bounds_rot[1] + bounds_rot[3]) / 2
+
+            if avg_e_bot_y_rot < mid_y_rot:
+                theta = (theta + 180.0) % 360.0
+                poly_rot = rotate(poly, -theta, origin=center)
+                bounds_rot = poly_rot.bounds
+
+            min_x, min_y, max_x, max_y = bounds_rot
+            width = max_x - min_x
+
+            if width <= 0:
+                return []
+
+            # Sample top and bottom Y coordinates at left and right ends of rotated polygon
+            delta = min(2.0, width * 0.02)
+            x_left = min_x + delta
+            x_right = max_x - delta
+
+            line_left = LineString([(x_left, min_y - 10000), (x_left, max_y + 10000)])
+            line_right = LineString([(x_right, min_y - 10000), (x_right, max_y + 10000)])
+
+            int_left = poly_rot.intersection(line_left)
+            int_right = poly_rot.intersection(line_right)
+
+            if not int_left.is_empty:
+                min_y_l, max_y_l = int_left.bounds[1], int_left.bounds[3]
+            else:
+                min_y_l, max_y_l = min_y, max_y
+
+            if not int_right.is_empty:
+                min_y_r, max_y_r = int_right.bounds[1], int_right.bounds[3]
+            else:
+                min_y_r, max_y_r = min_y, max_y
+
+            y_l = min_y_l + ratio * (max_y_l - min_y_l)
+            y_r = min_y_r + ratio * (max_y_r - min_y_r)
+
+            pt_l_rot = Point(min_x, y_l)
+            pt_r_rot = Point(max_x, y_r)
+            bl_rot = LineString([pt_l_rot, pt_r_rot])
+
+            # Rotate baseline back to original page coordinates
+            bl_orig = rotate(bl_rot, theta, origin=center)
+
+        baseline_tuples = [(int(round(c[0])), int(round(c[1]))) for c in bl_orig.coords]
+
+        # 4. Optionally clip to polygon
+        if cut_to_polygon:
+            try:
+                intersection = poly.intersection(bl_orig)
+                if not intersection.is_empty:
+                    linestrings = []
+                    if isinstance(intersection, LineString):
+                        linestrings = [intersection]
+                    elif isinstance(intersection, MultiLineString):
+                        linestrings = list(intersection.geoms)
+                    elif hasattr(intersection, 'geoms'):
+                        linestrings = [g for g in intersection.geoms if isinstance(g, LineString)]
+
+                    if linestrings:
+                        # Sort all line snippets sequentially along the bl_orig baseline direction
+                        linestrings_sorted = sorted(linestrings, key=lambda g: bl_orig.project(Point(g.coords[0])))
+
+                        all_clipped_coords = []
+                        for g in linestrings_sorted:
+                            coords = list(g.coords)
+                            # Ensure snippet direction matches bl_orig direction
+                            if bl_orig.project(Point(coords[0])) > bl_orig.project(Point(coords[-1])):
+                                coords.reverse()
+                            all_clipped_coords.extend(coords)
+
+                        if is_vertical:
+                            # For vertical lines, ensure point 0 is at bottom (larger Y) and end point is at top (smaller Y)
+                            if all_clipped_coords[0][1] < all_clipped_coords[-1][1]:
+                                all_clipped_coords.reverse()
+
+                        baseline_tuples = [(int(round(c[0])), int(round(c[1]))) for c in all_clipped_coords]
+            except Exception as e:
+                logging.warning(f"{self.get_id()}: Error clipping pseudo-baseline to polygon - {e}")
+
+        if update and baseline_tuples:
+            self.update_baseline_coordinates(baseline_tuples)
+
+        return baseline_tuples
+
     def _compute_baseline(self, position: str = 'mid') -> list:
         """
         Computes the baseline coordinates based on the textline polygon.
         """
-        # get minimum bounding box
-        textline = self.get_coordinates(returntype='polygon')
-        bbox = textline.minimum_rotated_rectangle
-
-        # If the minimum rotated rectangle is a line, it represents the
-        # baseline
-        if isinstance(bbox, LineString):
-            return list(bbox.coords)
-
-        coords = list(bbox.exterior.coords)
-        # factor = 2 if 'mid' else 1.25
-        # Calculate the baseline as the midline between the two longest sides
-        # of the bounding box
-        lines = sorted(sorted([LineString([c1,
-                                           c2]) if c1[1] < c2[1] else LineString([c2,
-                                                                                  c1]) for c1,
-                               c2 in zip(coords[:-1],
-                                         coords[1:])],
-                              key=lambda x: x.length,
-                              reverse=False)[:2],
-                       key=lambda x: round((x.xy[0][1] + x.xy[1][1]) / 2),
-                       reverse=False)
-        baseline_tuples = [
-            list(
-                line.interpolate(
-                    (line.length) /
-                    1.25).coords)[0] for line in lines]
-        return baseline_tuples
+        return self.compute_pseudobaseline(position=position, cut_to_polygon=True, update=False)
 
     @staticmethod
     def find_nearest_intersection_polygon_linestring(

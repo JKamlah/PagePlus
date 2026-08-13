@@ -497,6 +497,59 @@ def pseudolinepolygon(
 
 
 @app.command()
+def pseudobaseline(
+        inputs: Annotated[List[str], typer.Argument(exists=True,
+                                                    help="Paths or workspace to the PAGE XML files to be processed.",
+                                                    callback=transform_inputs)] = None,
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Filename of the output directory. If not specified, input files will be overwritten.",
+            callback=transform_output)] = None,
+        position: Annotated[str, typer.Option(
+            help="Position of baseline relative to line polygon: 'bottom', 'mid', 'top'")] = "bottom",
+        cut_to_polygon: Annotated[bool, typer.Option(
+            help="Cut/clip the baseline line segment so that it stays strictly inside the textline polygon.")] = True,
+        dry_run: Annotated[bool, typer.Option(
+            help="Perform a dry run without saving modifications.")] = False):
+    """
+    Processes PAGE XML files to compute pseudo baselines from textline polygons.
+
+    Args:
+        inputs: Paths to the PAGE XML files to be processed.
+        outputdir: The directory where the modified XML files will be saved.
+        position: Position relative to textline height ('bottom', 'mid', 'top').
+        cut_to_polygon: If True, clips the baseline segment to the textline polygon.
+        dry_run: Perform a dry run without saving modifications.
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+
+    if not xml_files:
+        raise FileNotFoundError('No XML files found in the input paths.')
+
+    for xml_file in track(
+            xml_files,
+            description="Calculating Pseudo Baselines.."):
+        filename = xml_file.name
+        logging.info(f'Processing file: {filename}')
+
+        page = Page(xml_file)
+        for region in page.regions.textregions:
+            for line in region.textlines:
+                try:
+                    line.compute_pseudobaseline(position=position, cut_to_polygon=cut_to_polygon, update=True)
+                except Exception as e:
+                    logging.error(
+                        f"Failed to calculate pseudo-baseline for line '{line.get_id()}' in '{filename}': {e}"
+                    )
+
+        if not dry_run:
+            fout = xml_file if outputdir is None else determine_output_path(
+                xml_file, outputdir, filename)
+            logging.info(
+                f'Wrote modified xml file to output directory: {fout}')
+            page.save_xml(fout)
+
+
+@app.command()
 def sort(
         inputs: Annotated[List[str], typer.Argument(exists=True,
                                                     help="Paths or workspace to the PAGE XML files to be processed.",
