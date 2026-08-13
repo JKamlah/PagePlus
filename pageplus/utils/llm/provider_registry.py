@@ -105,7 +105,7 @@ class LiteLLMProviderPreset:
             raise ValueError(f"Preset '{self.id}' has no default model; pass model=...")
         
         known_prefixes = {
-            "openai", "azure", "anthropic", "mistral", "gemini", "vertex_ai",
+            "openai", "azure", "anthropic", "mistral", "mistral_ocr", "gemini", "vertex_ai",
             "groq", "deepseek", "cohere", "ollama", "huggingface", "bedrock", "sagemaker", "curl"
         }
         has_prefix = False
@@ -176,11 +176,20 @@ _BUILTINS: Tuple[LiteLLMProviderPreset, ...] = (
     ),
     LiteLLMProviderPreset(
         id="mistral",
-        display_name="Mistral",
+        display_name="Mistral (Pixtral via LiteLLM)",
         litellm_prefix="mistral",
         env_api_key="MISTRAL_API_KEY",
         default_model="pixtral-large-latest",
         alt_models=("pixtral-12b-2409", "mistral-large-latest"),
+    ),
+    LiteLLMProviderPreset(
+        id="mistral_ocr",
+        display_name="Mistral Document OCR",
+        litellm_prefix="mistral_ocr",
+        env_api_key="MISTRAL_API_KEY",
+        default_model="mistral-ocr-latest",
+        alt_models=("mistral-ocr-2512", "mistral-ocr-4-0"),
+        api_base_hint="https://api.mistral.ai/v1/ocr",
     ),
     LiteLLMProviderPreset(
         id="gemini",
@@ -188,7 +197,7 @@ _BUILTINS: Tuple[LiteLLMProviderPreset, ...] = (
         litellm_prefix="gemini",
         env_api_key="GEMINI_API_KEY",
         default_model="gemini-2.5-pro",
-        alt_models=("gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"),
+        alt_models=("gemini-3.5-flash", "gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"),
     ),
     LiteLLMProviderPreset(
         id="vertex_ai",
@@ -448,6 +457,30 @@ def spec_from_preset(
         )
         return OCRBackendSpec(
             provider="curl",
+            model=chosen_model,
+            options=options,
+            metadata={
+                "preset_id": preset.id,
+                "preset_display_name": preset.display_name,
+                "preset_vision_capable": preset.vision_capable,
+            },
+        )
+
+    # --- Mistral OCR backend (direct Document AI API) ---------------------
+    if preset.litellm_prefix == "mistral_ocr" or preset_id == "mistral_ocr":
+        from pageplus.utils.llm.core.specs import MistralOptions
+
+        chosen_model = model or preset.default_model or "mistral-ocr-latest"
+        options = MistralOptions(
+            api_key=api_key,
+            api_base_url=api_base or preset.api_base_hint or "https://api.mistral.ai/v1/ocr",
+            model=chosen_model,
+            table_format="html",
+            include_blocks=True,
+            timeout=timeout if timeout is not None else 60.0,
+        )
+        return OCRBackendSpec(
+            provider="mistral_ocr",
             model=chosen_model,
             options=options,
             metadata={

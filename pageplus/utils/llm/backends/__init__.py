@@ -32,4 +32,8 @@ from pageplus.utils.llm.backends import transformers_backend  # noqa: F401
 # The direct Curl HTTP POST backend is always registered.
 from pageplus.utils.llm.backends import curl_backend  # noqa: F401
 
+# The direct Mistral Document OCR backend is always registered.
+from pageplus.utils.llm.backends import mistral_ocr_backend  # noqa: F401
+
+
 

@@ -12,66 +12,13 @@ from typing import Any, Dict, List
 from PIL import Image
 
 from pageplus.utils.mappings.mapping_utils import page_xml_header, page_xml_footer
+from pageplus.utils.mappings.markdown_parser import parse_markdown_to_blocks
 
 
 def _parse_markdown_blocks(markdown_text: str) -> List[Dict[str, Any]]:
-    """Split markdown into ordered blocks for PAGE conversion.
+    """Split markdown into ordered blocks for PAGE conversion."""
+    return parse_markdown_to_blocks(markdown_text)
 
-    Returns a list of ``{"kind": "heading"|"paragraph"|"table", ...}`` dicts.
-    Geometry is *not* assigned here; :func:`markdown2pagexml` lays the blocks
-    out vertically because markdown carries no coordinates.
-    """
-    blocks: List[Dict[str, Any]] = []
-    raw_lines = (markdown_text or "").replace("\r\n", "\n").split("\n")
-
-    i = 0
-    n = len(raw_lines)
-    while i < n:
-        line = raw_lines[i]
-        stripped = line.strip()
-        if not stripped:
-            i += 1
-            continue
-
-        # Heading: one or more leading '#'
-        heading_match = re.match(r'^(#{1,6})\s+(.*)$', stripped)
-        if heading_match:
-            blocks.append({
-                "kind": "heading",
-                "lines": [heading_match.group(2).strip()],
-            })
-            i += 1
-            continue
-
-        # Table: current and next line look like a markdown table
-        if "|" in stripped and i + 1 < n and re.match(r'^\s*\|?[\s:|-]+\|?\s*$', raw_lines[i + 1]):
-            table_lines: List[str] = []
-            while i < n and "|" in raw_lines[i]:
-                table_lines.append(raw_lines[i])
-                i += 1
-            rows: List[List[str]] = []
-            for tl in table_lines:
-                if re.match(r'^\s*\|?[\s:|-]+\|?\s*$', tl):
-                    continue  # separator row
-                cells = [c.strip() for c in tl.strip().strip("|").split("|")]
-                rows.append(cells)
-            if rows:
-                blocks.append({"kind": "table", "rows": rows})
-            continue
-
-        # Otherwise: a paragraph = consecutive non-blank, non-special lines
-        para_lines: List[str] = []
-        while i < n and raw_lines[i].strip() and not re.match(r'^#{1,6}\s+', raw_lines[i].strip()):
-            if "|" in raw_lines[i] and i + 1 < n and re.match(r'^\s*\|?[\s:|-]+\|?\s*$', raw_lines[i + 1]):
-                break
-            # Strip common list markers but keep the text
-            cleaned = re.sub(r'^\s*([-*+]|\d+\.)\s+', '', raw_lines[i])
-            para_lines.append(cleaned.strip())
-            i += 1
-        if para_lines:
-            blocks.append({"kind": "paragraph", "lines": para_lines})
-
-    return blocks
 
 
 def markdown2pagexml(markdown_text: str, image_path: Path, **opts) -> str:

@@ -168,12 +168,13 @@ def pp_layout_extend_json_to_page(
                 pass
 
         # Custom / structure tag
-        custom_attr = ""
         type_attr = ""
         if structure:
-            custom_attr = f' custom="structure {{type:{escape(structure)};}}"'
+            custom_attr = f' custom="readingOrder {{index:{idx};}} structure {{type:{escape(structure)};}}"'
             if region_tag == "TextRegion":
                 type_attr = f' type="{escape(structure)}"'
+        else:
+            custom_attr = f' custom="readingOrder {{index:{idx};}}"'
 
         page_xml_lines.append(f'        <{region_tag} id="{xml_region_id}"{type_attr}{custom_attr}{conf_attr}>')
         page_xml_lines.append(f'            <Coords points="{coords_str}"/>')

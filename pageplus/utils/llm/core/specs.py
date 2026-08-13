@@ -95,9 +95,16 @@ class AzureDocumentIntelligenceOptions:
 
 @dataclass
 class MistralOptions:
-    """Stub for Mistral OCR; wire up when the backend is implemented."""
+    """Options for Mistral Document OCR API."""
     api_key: Optional[str] = None
-    endpoint: Optional[str] = None
+    api_base_url: str = "https://api.mistral.ai/v1/ocr"
+    model: str = "mistral-ocr-latest"
+    table_format: Optional[str] = "html"
+    include_blocks: bool = True
+    extract_header: bool = False
+    extract_footer: bool = False
+    timeout: float = 60.0
+    calls_per_minute: int = 120
 
 
 @dataclass

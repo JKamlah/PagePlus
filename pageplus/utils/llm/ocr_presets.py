@@ -90,12 +90,14 @@ MAPPING_CHOICES: List[str] = [
     "pp_layout_json_to_page",# PP-Layout JSON (PaddleOCR) -> fresh PAGE XML
     "pp_layout_extend_json_to_page",# PP-Layout Extend JSON (regions + lines) -> fresh PAGE XML
     "pp_layout_extend_table_json_to_page",# PP-Layout Extend Table JSON -> fresh PAGE XML
+    "mistral_ocr_to_page",   # Mistral OCR JSON (blocks + HTML tables) -> fresh PAGE XML
     "markdown_to_page",      # markdown text -> fresh PAGE XML
     "text_only_apply",       # JSON text -> mutate existing Page
     "text_correction_apply",
     "layout_correction_apply",
     "field_tagging_apply",
     "reading_order_apply",
+    "reading_order_text_correction_apply",
 ]
 
 TASK_LEVELS: List[str] = ["Page", "TextRegion", "Textline"]
@@ -148,6 +150,19 @@ READING_ORDER_PROMPT = (
     "columns) when appropriate. Do not invent ids that are not in the input."
 )
 
+READING_ORDER_GEMINI_3_5_FLASH_PROMPT = (
+    "You are a reading-order analysis and OCR correction AI for historical documents. "
+    "You receive a document image and a PAGE-XML to JSON conversion containing regions with "
+    "their IDs, polygon coordinates ('coords'), and OCR textlines with existing text.\n\n"
+    "Your tasks are:\n"
+    "1. Determine and correct the logical reading order ('ro') of the regions and textlines based on "
+    "the visual layout, polygon coordinates, and text context. Use nested arrays to group logical "
+    "macro-blocks (e.g. columns) when appropriate.\n"
+    "2. Correct any OCR text mistakes or typos in the textlines while preserving original spelling "
+    "and diacritics.\n\n"
+    "Return JSON only: {\"regions\": [{\"id\": \"r0\", \"textlines\": [{\"id\": \"tl0\", \"text\": \"corrected text\"}]}], \"ro\": [\"r0\", \"r1\", ...]}."
+)
+
 TABLE_RECOGNITION_PROMPT = (
     "You are a table transcription AI. Transcribe every table in the image into JSON "
     "optimized for visual reconstruction. Use verbatim transcription (keep archaic "
@@ -173,19 +188,26 @@ MARKDOWN_OCR_PROMPT = (
 
 def _preset(
     id: str, name: str, step: str, *,
+    provider_preset: str = "",
+    model: str = "",
     system_prompt: str = "",
     mapping: Optional[str] = None,
     task_mode: Optional[str] = None,
     task_level: Optional[str] = None,
     description: str = "",
+    bindings: Optional[List[Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
     sd = STEP_DEFINITIONS[step]
+    b_list = bindings
+    if b_list is None and provider_preset:
+        b_list = [{"provider": provider_preset, "model": model}]
     return {
         "id": id,
         "name": name,
         "description": description,
-        "provider_preset": "",      # "" => use the provider selected in the tab
-        "model": "",                # "" => provider default / UI override
+        "provider_preset": provider_preset,
+        "model": model,
+        "bindings": b_list or [],
         "step": step,
         "task_mode": task_mode or sd["task_mode"],
         "task_level": task_level or sd["task_level"],
@@ -220,6 +242,16 @@ DEFAULT_PRESETS: List[Dict[str, Any]] = [
     _preset("reading_order", "Reading-Order", "Reading-Order",
             system_prompt=READING_ORDER_PROMPT,
             description="Recompute the reading order of existing regions."),
+    _preset("reading_order_gemini_3_5_flash", "Reading-Order & Text Correction (Gemini 3.5 Flash)", "Reading-Order",
+            provider_preset="gemini", model="gemini-3.5-flash",
+            system_prompt=READING_ORDER_GEMINI_3_5_FLASH_PROMPT,
+            task_mode="text_correction",
+            mapping="reading_order_apply",
+            description="Correct reading order and OCR text mistakes using Gemini 3.5 Flash based on PAGE-XML to JSON conversion."),
+    _preset("mistral_ocr_allinone", "Mistral Document OCR (Layout + HTML Tables)", "All-in-One",
+            provider_preset="mistral_ocr", model="mistral-ocr-latest",
+            mapping="mistral_ocr_to_page",
+            description="Extract document layout, text blocks, and HTML tables into PAGE-XML using Mistral OCR API."),
 ]
 
 

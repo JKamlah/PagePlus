@@ -189,15 +189,16 @@ def _field_tagging_apply(structured: Any, image_path: Path,
 
 def _reading_order_apply(structured: Any, image_path: Path,
                          page=None, **opts) -> Optional[str]:
-    """Rebuild the Page ``<ReadingOrder>`` from the model output.
+    """Rebuild the Page ``<ReadingOrder>`` from the model output and update line text if present.
 
     Accepts either ``{ro: [...]}`` (possibly nested) or ``{regions: [{id}, ...]}``
-    interpreted as a flat top-to-bottom order. Nothing else on the page is
-    touched.
+    interpreted as a flat top-to-bottom order. Also merges text corrections
+    present in regions/textlines.
     """
     if page is None:
         logging.warning("reading_order postprocessor received no page; skipping merge")
         return None
+    _apply_text_updates(structured, page, overwrite_tags=False)
     ro = None
     if isinstance(structured, dict):
         ro = structured.get("ro")
@@ -438,6 +439,7 @@ register_postprocessor("text_correction_apply", _text_correction_apply)
 register_postprocessor("layout_correction_apply", _layout_correction_apply)
 register_postprocessor("field_tagging_apply", _field_tagging_apply)
 register_postprocessor("reading_order_apply", _reading_order_apply)
+register_postprocessor("reading_order_text_correction_apply", _reading_order_apply)
 
 
 def _pp_layout_json_to_xml(structured: Any, image_path: Path,
@@ -469,6 +471,17 @@ def _pp_layout_extend_table_json_to_xml(structured: Any, image_path: Path,
 
 
 register_postprocessor("pp_layout_extend_table_json_to_page", _pp_layout_extend_table_json_to_xml)
+
+
+def _mistral_ocr_to_xml(structured: Any, image_path: Path,
+                         page=None, **opts) -> str:
+    """Mistral OCR JSON (blocks + HTML tables) -> fresh PAGE XML string."""
+    from pageplus.utils.mappings import mistral_ocr_to_page  # local import
+    return mistral_ocr_to_page(structured, image_path, settings=opts)
+
+
+register_postprocessor("mistral_ocr_to_page", _mistral_ocr_to_xml)
+
 
 
 def scale_structured_coordinates(data: Any, scale_x: float, scale_y: float) -> Any:
