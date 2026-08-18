@@ -168,13 +168,26 @@ class TableRecognitionStage:
         
         for table_idx, table_data in enumerate(tables_data):
             offset_x, offset_y = table_data.get("_snippet_offset", (0, 0))
-            snippet_w, snippet_h = table_data.get("_snippet_dim", (1000, 1000)) # Default to avoid div by zero if missing
-            
+            snippet_w, snippet_h = table_data.get("_snippet_dim", (1000, 1000))
+
+            if "cells" in table_data:
+                from pageplus.utils.mappings.table_json import build_table_region_element
+                import time
+                timestamp = int(time.time() * 1000)
+                table_id = f"Table_{timestamp}_{table_idx}"
+                table_region_elem = build_table_region_element(
+                    table_data,
+                    ns=page.ns,
+                    img_width=snippet_w,
+                    img_height=snippet_h,
+                    offset=(offset_x, offset_y),
+                    override_id=table_id,
+                )
+                page_elem.append(table_region_elem)
+                continue
+
             # 1. Create TableRegion
-            # box_2d is [y1, x1, y2, x2] (0-1000 relative to snippet)
-            # We need to convert to absolute coords in original image
-            
-            bbox_rel = table_data.get("bbox", [0, 0, 1000, 1000]) # y1, x1, y2, x2
+            bbox_rel = table_data.get("bbox", [0, 0, 1000, 1000])
             
             # Convert to absolute relative to snippet
             y1_abs = ceil(bbox_rel[0] * snippet_h / 1000)
@@ -329,6 +342,9 @@ class TableRecognitionStage:
                         
                         last_cell_coords = ET.SubElement(cell_elem, f"{{{page.ns}}}Coords")
                         last_cell_coords.set("points", cell_points)
+                        
+                        corner_pts = ET.SubElement(cell_elem, f"{{{page.ns}}}CornerPts")
+                        corner_pts.text = "0 1 2 3"
                         
                         # Handle Content & TextLines
                         # Content can be String or Array (Nested Rows)

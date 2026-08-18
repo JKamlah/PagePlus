@@ -811,3 +811,34 @@ class ModificationBridge(CLIBridge):
             }
         except Exception as e:
             return {"success": False, "output": str(e)}
+
+    def merge_table_rowspan_cells(
+        self,
+        files: List[str],
+        outputdir: Optional[str] = None,
+        dry_run: bool = False
+    ) -> Dict[str, Any]:
+        """Merge implicit rowspan cells in table regions."""
+        try:
+            if not dry_run:
+                UndoManager.add_undo_state("Merge Table Rowspan Cells")
+            from pageplus.cli.modification import merge_table_rowspan_cells
+            modified_count = merge_table_rowspan_cells(
+                inputs=files,
+                outputdir=outputdir,
+                dry_run=dry_run
+            )
+            if dry_run:
+                msg = f"[DRY RUN] Completed check. Would modify {modified_count} file(s)."
+            elif modified_count > 0:
+                dest = "in-place (overwritten)" if outputdir is None else f"to '{outputdir}'"
+                msg = f"Successfully modified and saved {modified_count} file(s) {dest}."
+            else:
+                msg = "No files needed modification (no tables met the rowspan merge criteria)."
+            return {
+                "success": True,
+                "output": msg
+            }
+        except Exception as e:
+            return {"success": False, "output": str(e)}
+

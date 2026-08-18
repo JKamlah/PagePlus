@@ -14,7 +14,13 @@ from pageplus.utils.mappings.mapping_utils import (
     PP_LAYOUT_LABEL_TO_STRUCTURE,
 )
 from pageplus.utils.mappings.gemini2d import gemini2d_to_page, gemini2d_preprocess
-from pageplus.utils.mappings.table_json import table_json_to_page
+from pageplus.utils.mappings.table_json import (
+    table_json_to_page,
+    table_xml_to_html,
+    table2html,
+    replace_table_region_from_html,
+    table_html_to_page,
+)
 from pageplus.utils.mappings.markdown import markdown2pagexml
 from pageplus.utils.mappings.pp_layout import pp_layout_json_to_page
 from pageplus.utils.mappings.pp_layout_extend import pp_layout_extend_json_to_page
@@ -40,6 +46,10 @@ __all__ = [
     "gemini2d_to_page",
     "gemini2d_preprocess",
     "table_json_to_page",
+    "table_xml_to_html",
+    "table2html",
+    "replace_table_region_from_html",
+    "table_html_to_page",
     "markdown2pagexml",
     "pp_layout_json_to_page",
     "pp_layout_extend_json_to_page",

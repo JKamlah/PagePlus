@@ -428,11 +428,156 @@ def _extract_coord_points(entry: dict, *, key: str = "coords") -> Optional[list]
 # Registrations
 # ---------------------------------------------------------------------------
 
+def _table_correction_apply(structured: Any, image_path: Path,
+                            page=None, **opts) -> Optional[str]:
+    """Applies refined table structures and replaces old <TableRegion> elements in an existing Page in-place by ID.
+    If page is None, returns fresh PAGE-XML string.
+    """
+    if page is None:
+        from pageplus.utils.mappings.table_json import table_json_to_page
+        return table_json_to_page(structured, image_path)
+
+    from pageplus.utils.mappings.table_json import replace_table_region_by_id
+
+    tables = []
+    if isinstance(structured, list):
+        tables = structured
+    elif isinstance(structured, dict):
+        tables = structured.get("tables", [structured]) if ("tables" in structured or "id" in structured or "box_2d" in structured) else []
+
+    offset = opts.get("offset", (0, 0))
+    snippet_dim = opts.get("snippet_dim")
+
+    for table_data in tables:
+        t_id = table_data.get("id")
+        if t_id:
+            replace_table_region_by_id(page, t_id, table_data, offset=offset, snippet_dim=snippet_dim)
+
+    return None
+
+
+def _table_html_correction_apply(structured: Any, image_path: Path,
+                                page=None, **opts) -> Optional[str]:
+    """Applies HTML <table> updates and replaces matching <TableRegion> elements in an existing Page in-place.
+    Extracts table HTML strings from structured input (dict, list, or text) and updates matching table regions by ID.
+    If page is None, returns fresh PAGE-XML string.
+    """
+    import re
+    import json
+    from pageplus.utils.mappings.table_json import replace_table_region_from_html, table_html_to_page
+
+    html_tables: List[str] = []
+
+    def _extract_tables(obj: Any):
+        if isinstance(obj, str):
+            s_clean = obj.strip()
+            if (s_clean.startswith("{") or s_clean.startswith("[")) and not s_clean.startswith("<table"):
+                try:
+                    parsed = json.loads(s_clean)
+                    _extract_tables(parsed)
+                    return
+                except Exception:
+                    pass
+            matches = re.findall(r"(<table.*?>.*?</table>)", obj, re.DOTALL | re.IGNORECASE)
+            if matches:
+                html_tables.extend(matches)
+            elif "<tr" in obj.lower():
+                html_tables.append(obj)
+        elif isinstance(obj, dict):
+            if "html" in obj and isinstance(obj["html"], str):
+                _extract_tables(obj["html"])
+            elif "tables" in obj and isinstance(obj["tables"], list):
+                for item in obj["tables"]:
+                    _extract_tables(item)
+            elif "content" in obj and isinstance(obj["content"], str):
+                _extract_tables(obj["content"])
+            else:
+                for v in obj.values():
+                    if isinstance(v, (dict, list, str)):
+                        _extract_tables(v)
+        elif isinstance(obj, list):
+            for item in obj:
+                _extract_tables(item)
+
+    _extract_tables(structured)
+    text_opt = opts.get("text")
+    if text_opt and not html_tables:
+        _extract_tables(text_opt)
+
+    if page is None:
+        combined_html = "\n\n".join(html_tables) if html_tables else (structured if isinstance(structured, str) else "")
+        return table_html_to_page(combined_html, image_path, **opts)
+
+    offset = opts.get("offset", (0, 0))
+    snippet_dim = opts.get("snippet_dim")
+
+    if not html_tables:
+        logging.warning("No HTML tables found in model output for table correction.")
+        return None
+
+    element_id = opts.get("element_id")
+    region_filter = opts.get("region_filter")
+
+    ns = getattr(page, "ns", "http://schema.primaresearch.org/PAGE/gts/pagecontent/2019-07-15")
+    table_ids_in_page = []
+    if hasattr(page, "root") and page.root is not None:
+        for tr in page.root.iter(f"{{{ns}}}TableRegion"):
+            t_id = tr.get("id")
+            if t_id:
+                table_ids_in_page.append(t_id)
+
+    for idx, h_str in enumerate(html_tables):
+        table_id = None
+        m_id = re.search(r'<table[^>]*\bid=["\']([^"\']+)["\']', h_str, re.IGNORECASE)
+        if m_id:
+            table_id = m_id.group(1)
+
+        target_id = None
+        if table_id and table_id in table_ids_in_page:
+            target_id = table_id
+        elif element_id and element_id in table_ids_in_page:
+            target_id = element_id
+        elif region_filter is not None:
+            if hasattr(page, "regions") and getattr(page.regions, "tableregions", None):
+                for tr in page.regions.tableregions:
+                    try:
+                        if region_filter(tr):
+                            target_id = tr.get_id()
+                            break
+                    except Exception:
+                        pass
+        if not target_id:
+            if idx < len(table_ids_in_page):
+                target_id = table_ids_in_page[idx]
+            elif table_ids_in_page:
+                target_id = table_ids_in_page[0]
+            else:
+                target_id = table_id or "t0"
+
+        replace_table_region_from_html(page, target_id, h_str, offset=offset, snippet_dim=snippet_dim)
+
+    return None
+
+
+def _table_html_to_xml(structured: Any, image_path: Path,
+                      page=None, **opts) -> str:
+    """HTML <table> string -> fresh PAGE XML string."""
+    from pageplus.utils.mappings.table_json import table_html_to_page
+    html_text = opts.get("text")
+    if not html_text and isinstance(structured, str):
+        html_text = structured
+    return table_html_to_page(html_text or structured or "", image_path, **opts)
+
+
 register_postprocessor("layout_and_text_to_xml", _layout_and_text_to_xml)
 register_postprocessor("gemini2d_to_page", _layout_and_text_to_xml)  # legacy alias
 register_postprocessor("layout_only_to_xml", _layout_only_to_xml)
 register_postprocessor("segmentation_to_page", _layout_only_to_xml)  # legacy alias
 register_postprocessor("table_json_to_page", _table_json_to_xml)
+register_postprocessor("table_correction_apply", _table_correction_apply)
+register_postprocessor("table_html_correction_apply", _table_html_correction_apply)
+register_postprocessor("table2html_apply", _table_html_correction_apply)
+register_postprocessor("table_html_to_page", _table_html_to_xml)
 register_postprocessor("markdown_to_page", _markdown_to_xml)
 register_postprocessor("text_only_apply", _text_only_apply)
 register_postprocessor("text_correction_apply", _text_correction_apply)

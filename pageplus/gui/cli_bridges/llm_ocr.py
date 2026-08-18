@@ -40,7 +40,17 @@ from pageplus.utils.llm.pipeline_store import EXECUTION_MODES, LLMOCRPipelineSto
 
 def _litellm_available() -> bool:
     from importlib import util
-    return util.find_spec("litellm") is not None
+    try:
+        if util.find_spec("litellm") is not None:
+            return True
+    except Exception:
+        pass
+    try:
+        import google.genai
+        return True
+    except ImportError:
+        pass
+    return False
 
 
 def _normalize_usage(usage: Dict[str, Any]) -> Dict[str, int]:
@@ -245,6 +255,8 @@ class LLMOcrBridge:
         user_prompt: Optional[str] = None,
         tag_filter: Optional[List[str]] = None,
         tag_regex: bool = False,
+        min_table_rows: Optional[int] = None,
+        max_table_rows: Optional[int] = None,
         model: Optional[str] = None,
         image_files: Optional[List[str]] = None,
         xml_files: Optional[List[str]] = None,
@@ -306,17 +318,30 @@ class LLMOcrBridge:
             except ValueError:
                 return {"success": False, "output": f"Unknown task_mode '{task_mode_str}'.", "usage": []}
 
-            family = step_family(step)
-            use_snippets = task_level in ("TextRegion", "Textline") and family == "correction"
+            family = step_family(step, task_mode=task_mode_str)
+            use_snippets = task_level in ("TableRegion", "TextRegion", "Textline") and family == "correction"
+
+            from pageplus.utils.llm.filters import (
+                make_tag_filter,
+                make_table_row_filter,
+                combine_region_filters,
+            )
+            filters_cfg = preset.get("filters") or {}
+            min_table_rows = min_table_rows if min_table_rows is not None else filters_cfg.get("min_table_rows")
+            max_table_rows = max_table_rows if max_table_rows is not None else filters_cfg.get("max_table_rows")
 
             region_filter = None
             line_filter = None
             if tag_filter:
                 predicate = make_tag_filter(tag_filter, regex=tag_regex)
-                if task_level == "TextRegion" or family == "fresh":
+                if task_level in ("TableRegion", "TextRegion") or family == "fresh":
                     region_filter = predicate
                 else:
                     line_filter = predicate
+
+            row_predicate = make_table_row_filter(min_table_rows, max_table_rows)
+            if row_predicate is not None:
+                region_filter = combine_region_filters(region_filter, row_predicate)
 
             # --- Build the document list -------------------------------------
             documents: List[PagePlusDocumentPage] = []
@@ -337,6 +362,10 @@ class LLMOcrBridge:
             else:  # correction
                 if not xml_files:
                     return {"success": False, "output": f"Step '{step}' needs PAGE-XML files.", "usage": []}
+
+                candidate_paths = {Path(p).resolve() for p in image_files} if image_files else None
+                candidate_stems = {Path(p).stem for p in image_files} if image_files else None
+
                 image_folder_path = Path(image_folder) if image_folder else None
                 for xml in xml_files:
                     xml_path = Path(xml)
@@ -346,14 +375,47 @@ class LLMOcrBridge:
                     search_dir = image_folder_path or xml_path.parent
                     img_path = None
                     if same_names:
-                        for ext in ('.png', '.jpg', '.jpeg', '.tif', '.tiff'):
+                        for ext in ('.png', '.jpg', '.jpeg', '.tif', '.tiff', '.PNG', '.JPG', '.JPEG'):
                             img_path = find_image(xml_path.with_suffix(ext).name, search_dir)
                             if img_path:
                                 break
                     else:
-                        img_path = find_image(page.imageFilename(), search_dir)
+                        try:
+                            img_path = find_image(page.imageFilename(), search_dir)
+                        except Exception:
+                            img_path = None
+
+                    if not img_path:
+                        for ext in ('.png', '.jpg', '.jpeg', '.tif', '.tiff', '.PNG', '.JPG', '.JPEG'):
+                            candidate = search_dir / f"{xml_path.stem}{ext}"
+                            if candidate.is_file():
+                                img_path = candidate
+                                break
+                    if not img_path:
+                        try:
+                            img_fn = page.imageFilename()
+                            if img_fn:
+                                img_stem = Path(img_fn).stem
+                                for ext in ('.png', '.jpg', '.jpeg', '.tif', '.tiff', '.PNG', '.JPG', '.JPEG'):
+                                    candidate = search_dir / f"{img_stem}{ext}"
+                                    if candidate.is_file():
+                                        img_path = candidate
+                                        break
+                        except Exception:
+                            pass
+
+                    # If candidate images were explicitly selected, enforce matching against candidate set
+                    if candidate_paths is not None and candidate_stems is not None:
+                        if not img_path:
+                            continue
+                        if (img_path.resolve() not in candidate_paths and 
+                            img_path.stem not in candidate_stems and 
+                            xml_path.stem not in candidate_stems):
+                            continue
+
                     if not img_path:
                         continue
+
                     out_xml = (Path(outputdir) / xml_path.name) if outputdir else xml_path
                     if out_xml.exists() and overwrite and not dry_run:
                         backups.append(out_xml)
@@ -413,7 +475,7 @@ class LLMOcrBridge:
                     profile=profile,
                     retry_policy=RetryPolicy(max_attempts=3),
                     max_concurrency=max(1, int(jobs)),
-                    snippet_level=task_level if task_level in ("TextRegion", "Textline") else "Textline",
+                    snippet_level=task_level if task_level in ("TableRegion", "TextRegion", "Textline") else "Textline",
                 )
 
                 outputs = asyncio.run(pipeline.aocr_pages(documents, continue_on_error=True))
@@ -592,6 +654,8 @@ class LLMOcrBridge:
         dry_run: bool = False,
         max_image_size: Optional[int] = 1000,
         recalculate_baselines: bool = False,
+        is_batch: bool = False,
+        **kwargs: Any,
     ) -> dict:
         """Run an ordered list of tasks as a chained pipeline.
 
@@ -635,7 +699,7 @@ class LLMOcrBridge:
             if execution_mode == "stepwise":
                 working_xmls: Optional[List[str]] = list(xml_files) if xml_files else None
                 for i, task in enumerate(tasks, start=1):
-                    fam = step_family(task.get("step", "All-in-One"))
+                    fam = step_family(task.get("step", "All-in-One"), task.get("task_mode"))
                     label = f"[{i}/{len(tasks)}] {task.get('step')} via {task.get('provider_id')}"
                     print(f"\n=== Step {label} ({fam}) ===", flush=True)
                     if fam == "fresh":
@@ -655,7 +719,7 @@ class LLMOcrBridge:
                                    "output": f"{label}: no XML available for correction step.",
                                    "errors": [f"{label}: no XML available."]}
                         else:
-                            res = self._run_task(task, image_files=None, xml_files=xmls,
+                            res = self._run_task(task, image_files=image_files, xml_files=xmls,
                                                  outputdir=None,
                                                  image_folder=chain_image_folder,
                                                  same_names=same_names if working_xmls is None else True,
@@ -668,12 +732,16 @@ class LLMOcrBridge:
                     print(res.get("output", ""), flush=True)
                     _accumulate(res)
             else:  # pagewise
-                first_fresh = step_family(tasks[0].get("step", "All-in-One")) == "fresh"
-                units = (image_files or []) if first_fresh else (xml_files or [])
+                first_fresh = step_family(tasks[0].get("step", "All-in-One"), tasks[0].get("task_mode")) == "fresh"
+                if not first_fresh and image_files:
+                    allowed_stems = {Path(p).stem for p in image_files}
+                    units = [x for x in (xml_files or []) if Path(x).stem in allowed_stems]
+                else:
+                    units = (image_files or []) if first_fresh else (xml_files or [])
                 if not units:
                     return {"success": False,
                             "output": "No input pages (images for a fresh first step, "
-                                      "or loaded XML otherwise)."}
+                                      "or loaded XML matching selected images otherwise)."}
 
                 results = self._run_pages_concurrent(
                     units=units, first_fresh=first_fresh, tasks=tasks,
@@ -764,6 +832,8 @@ class LLMOcrBridge:
             model=task.get("model") or None,
             tag_filter=task.get("tags", filters.get("tags")) or None,
             tag_regex=bool(task.get("tag_regex", filters.get("tag_regex", False))),
+            min_table_rows=task.get("min_table_rows", filters.get("min_table_rows")),
+            max_table_rows=task.get("max_table_rows", filters.get("max_table_rows")),
             json_object=bool(task.get("json_object", False)),
             **run_kwargs,
         )

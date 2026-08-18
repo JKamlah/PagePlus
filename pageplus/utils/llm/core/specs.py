@@ -95,6 +95,7 @@ class OpenAICompatibleOptions:
     api_base_url: str = "http://localhost:8000/v1"
     api_key: Optional[str] = None
     timeout: float = 60.0
+    calls_per_minute: int = 120
     max_image_size: Optional[int] = 1000
 
 
@@ -118,6 +119,7 @@ class MistralOptions:
     extract_footer: bool = False
     timeout: float = 60.0
     calls_per_minute: int = 120
+    max_image_size: Optional[int] = 1000
 
 
 @dataclass
@@ -128,6 +130,7 @@ class CurlHTTPOptions:
     timeout: float = 60.0
     image_key: str = "image"
     prompt_key: str = "prompt"
+    calls_per_minute: int = 120
     max_image_size: Optional[int] = 1000
 
 

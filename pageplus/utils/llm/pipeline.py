@@ -123,6 +123,9 @@ class PagePlusOCRPipeline:
     # Persist the raw model answer (JSON / markdown) next to the output, into a
     # ``json/`` or ``markdown/`` subfolder, *before* converting to PAGE-XML.
     save_raw: bool = True
+    # Table row count filters for TableRegion processing.
+    min_table_rows: Optional[int] = None
+    max_table_rows: Optional[int] = None
 
     # Constructors ---------------------------------------------------------
 
@@ -137,6 +140,8 @@ class PagePlusOCRPipeline:
         max_concurrency: int = 4,
         snippet_level: str = "Textline",
         save_raw: bool = True,
+        min_table_rows: Optional[int] = None,
+        max_table_rows: Optional[int] = None,
     ) -> "PagePlusOCRPipeline":
         backend = build_ocr_backend(spec)
         resolved = profile or spec.profile or resolve_profile(
@@ -156,6 +161,8 @@ class PagePlusOCRPipeline:
             execution=spec.execution,
             snippet_level=snippet_level,
             save_raw=save_raw,
+            min_table_rows=min_table_rows,
+            max_table_rows=max_table_rows,
         )
 
     # Sync entrypoints -----------------------------------------------------
@@ -277,6 +284,7 @@ class PagePlusOCRPipeline:
                 line_filter=document.line_filter,
                 scale_x=scale_x,
                 scale_y=scale_y,
+                mapping=getattr(self.profile, "postprocess", None),
             )
 
         prompt = render_prompt(
@@ -448,7 +456,7 @@ class PagePlusOCRPipeline:
         from PIL import Image
         from pageplus.utils.image import crop_image_by_polygon
 
-        unit = "text region" if self.snippet_level == "TextRegion" else "text line"
+        unit = "table" if self.snippet_level == "TableRegion" else ("text region" if self.snippet_level == "TextRegion" else "text line")
         system_text = (self.profile.system_prompt if self.profile else None) or \
             self._SNIPPET_SYSTEM_DEFAULT.format(unit=unit)
         user_text = (self.profile.user_prompt if self.profile else None) or \
@@ -475,7 +483,7 @@ class PagePlusOCRPipeline:
                 if polygon is None:
                     continue
                 try:
-                    snippet, _bbox = crop_image_by_polygon(
+                    snippet, bbox = crop_image_by_polygon(
                         base_image, polygon, transparent_background=False,
                         square_canvas=False,
                     )
@@ -486,16 +494,39 @@ class PagePlusOCRPipeline:
                                     self._element_id(element), exc)
                     continue
 
-                prompt = RenderedPrompt(
-                    system=system_text,
-                    user=user_text,
-                    task_mode=self.task_mode.value,
-                    schema=None,
-                    expected_format="text",
-                )
+                elem_id = self._element_id(element)
+                offset = (int(bbox[0]), int(bbox[1])) if bbox else (0, 0)
+                snippet_dim = (snippet.width, snippet.height)
+
+                if self.profile and (self.task_mode in _CORRECTION_MODES or getattr(self.profile, "postprocess", None)):
+                    include_text = self.task_mode == TaskMode.TEXT_CORRECTION
+                    page_xml_text = render_page_xml_payload(
+                        document.page,
+                        include_text=include_text,
+                        mode=self.task_mode,
+                        region_filter=lambda r: (self._element_id(r) == elem_id or r == element),
+                        line_filter=document.line_filter,
+                        scale_x=1.0,
+                        scale_y=1.0,
+                        mapping=getattr(self.profile, "postprocess", None),
+                    )
+                    prompt = render_prompt(
+                        self.profile,
+                        page_xml_dict=None,
+                        page_xml_text=page_xml_text,
+                    )
+                else:
+                    prompt = RenderedPrompt(
+                        system=system_text,
+                        user=user_text,
+                        task_mode=self.task_mode.value,
+                        schema=None,
+                        expected_format=getattr(self.profile, "expected_format", "text") if self.profile else "text",
+                    )
+
                 ctx = BackendCallContext(
                     image_path=snippet_path,
-                    snippet_id=self._element_id(element),
+                    snippet_id=elem_id,
                     metadata=dict(document.metadata),
                 )
 
@@ -507,19 +538,55 @@ class PagePlusOCRPipeline:
                     result = _call()
                 except OCRError as exc:
                     logging.error("Snippet OCR failed for %s: %s",
-                                  self._element_id(element), exc)
+                                  elem_id, exc)
                     continue
 
                 text = (result.text or "").strip()
                 if text:
-                    raw_map[self._element_id(element) or f"snippet_{idx}"] = text
-                if text and hasattr(element, "update_text"):
+                    raw_map[elem_id or f"snippet_{idx}"] = text
+
+                if self.profile and self.profile.postprocess:
+                    fn = get_postprocessor(self.profile.postprocess)
+                    if fn is not None:
+                        try:
+                            fn(
+                                result.structured,
+                                snippet_path,
+                                page=document.page,
+                                text=result.text,
+                                region_filter=document.region_filter,
+                                line_filter=document.line_filter,
+                                offset=offset,
+                                snippet_dim=snippet_dim,
+                                element_id=elem_id,
+                            )
+                            n_done += 1
+                        except Exception as exc:
+                            logging.warning("Postprocessor '%s' failed for %s: %s",
+                                            self.profile.postprocess, elem_id, exc)
+                elif self.snippet_level == "TableRegion" or "table" in str(getattr(self.profile, "postprocess", "")).lower():
+                    from pageplus.utils.mappings.table_json import save_table_json_file
+                    from pageplus.utils.mappings.mistral_ocr import parse_html_table_grid
+                    table_id = elem_id or f"table_{idx}"
+                    payload_data = {
+                        "id": table_id,
+                        "html": text,
+                        "cells": parse_html_table_grid(text) if text and ("<table" in text.lower() or "<tr" in text.lower()) else [],
+                    }
+                    save_table_json_file(
+                        document.page,
+                        table_id,
+                        payload_data,
+                        image_path=document.image_path,
+                        output_xml_path=document.output_xml_path,
+                    )
+                elif text and hasattr(element, "update_text"):
                     try:
                         element.update_text(text)
                         n_done += 1
                     except Exception as exc:  # pragma: no cover - defensive
                         logging.warning("update_text failed for %s: %s",
-                                        self._element_id(element), exc)
+                                        elem_id, exc)
                 for key, value in (result.usage or {}).items():
                     if isinstance(value, (int, float)):
                         usage_total[key] = usage_total.get(key, 0) + int(value)
@@ -563,17 +630,28 @@ class PagePlusOCRPipeline:
         regions = []
         page_regions = getattr(page, "regions", None)
         if page_regions is not None:
-            for attr in ("textregions", "tableregions"):
-                regions.extend(getattr(page_regions, attr, []) or [])
+            if self.snippet_level == "TableRegion":
+                regions.extend(getattr(page_regions, "tableregions", []) or [])
+            else:
+                for attr in ("textregions", "tableregions"):
+                    regions.extend(getattr(page_regions, attr, []) or [])
 
         for region in regions:
+            if self.snippet_level == "TableRegion" or hasattr(region, "tablecells"):
+                from pageplus.utils.llm.filters import get_table_row_count
+                rows = get_table_row_count(region)
+                if self.min_table_rows is not None and rows < self.min_table_rows:
+                    continue
+                if self.max_table_rows is not None and rows > self.max_table_rows:
+                    continue
+
             if document.region_filter is not None:
                 try:
                     if not document.region_filter(region):
                         continue
                 except Exception:  # pragma: no cover - defensive
                     pass
-            if self.snippet_level == "TextRegion":
+            if self.snippet_level in ("TextRegion", "TableRegion"):
                 yield region
                 continue
             for line in getattr(region, "textlines", []) or []:

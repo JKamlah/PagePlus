@@ -87,6 +87,10 @@ MAPPING_CHOICES: List[str] = [
     "gemini2d_to_page",      # JSON bbox+text -> fresh PAGE XML
     "segmentation_to_page",  # JSON regions -> fresh PAGE XML
     "table_json_to_page",    # JSON tables -> fresh PAGE XML
+    "table_correction_apply",# Crop table XML+image -> detect merged cells & proportions -> replace by ID
+    "table_html_correction_apply", # HTML table -> correct structure & text -> replace by ID
+    "table2html_apply",
+    "table_html_to_page",    # HTML table -> fresh PAGE XML
     "pp_layout_json_to_page",# PP-Layout JSON (PaddleOCR) -> fresh PAGE XML
     "pp_layout_extend_json_to_page",# PP-Layout Extend JSON (regions + lines) -> fresh PAGE XML
     "pp_layout_extend_table_json_to_page",# PP-Layout Extend Table JSON -> fresh PAGE XML
@@ -100,7 +104,8 @@ MAPPING_CHOICES: List[str] = [
     "reading_order_text_correction_apply",
 ]
 
-TASK_LEVELS: List[str] = ["Page", "TextRegion", "Textline"]
+
+TASK_LEVELS: List[str] = ["Page", "TableRegion", "TextRegion", "Textline"]
 
 # Mappings that consume plain text (markdown) instead of JSON.
 _TEXT_MAPPINGS = {"markdown_to_page"}
@@ -167,11 +172,32 @@ TABLE_RECOGNITION_PROMPT = (
     "You are a table transcription AI. Transcribe every table in the image into JSON "
     "optimized for visual reconstruction. Use verbatim transcription (keep archaic "
     "spelling; use \\n for line breaks within a cell).\n\n"
-    "Return JSON only: {\"meta\": {\"page\": 1, \"dim\": [height, width]}, \"tables\": "
-    "[{\"id\": \"t1\", \"box_2d\": [ymin, xmin, ymax, xmax], \"columns\": {\"width\": "
-    "[...], \"align\": [\"L\",\"R\",\"C\"]}, \"sections\": {\"note\": [...], \"header\": "
-    "[...], \"data\": [...], \"summary\": [...]}}]}. Each row is [col1, col2, ..., "
-    "row-height-ratio]; horizontal merges use -1; vertical grouping uses nested arrays."
+    "Return JSON only: {\"tables\": [{\"id\": \"t0\", \"box_2d\": [ymin, xmin, ymax, xmax], "
+    "\"rows\": 3, \"cols\": 3, \"cells\": [{\"row\": 0, \"col\": 0, \"rowspan\": 1, \"colspan\": 1, \"value\": \"text\"}]}]}."
+)
+
+TABLE_CORRECTION_PROMPT = (
+    "You are an expert table structure analysis and OCR correction AI.\n"
+    "You receive a cropped table image along with an initial table JSON structure containing:\n"
+    "- table id and bounding box ('box_2d')\n"
+    "- total rows ('rows') and total columns ('cols')\n"
+    "- list of cells ('cells'), each with 'row', 'col', 'rowspan', 'colspan', and 'value'\n\n"
+    "Your tasks are:\n"
+    "1. Inspect the cropped table image and verify the table structure and text content.\n"
+    "2. Detect merged cells (indicated by big brackets '[' / ']' or spanning lines) and set appropriate 'rowspan' and 'colspan' values.\n"
+    "3. Correct any OCR mistakes or missing text in cell values.\n"
+    "4. Refine the table bounding box 'box_2d' [ymin, xmin, ymax, xmax] on a 0-1000 scale relative to the cropped table snippet.\n\n"
+    "Return JSON only: {\"tables\": [{\"id\": \"t0\", \"box_2d\": [ymin, xmin, ymax, xmax], \"rows\": R, \"cols\": C, \"cells\": [{\"row\": 0, \"col\": 0, \"rowspan\": 1, \"colspan\": 1, \"value\": \"...\"}]}]}."
+)
+
+TABLE_HTML_CORRECTION_PROMPT = (
+    "You are an expert table structure analysis and OCR correction AI.\n"
+    "You receive a cropped table image along with an HTML table representation of the existing table structure.\n\n"
+    "Your tasks are:\n"
+    "1. Inspect the table image and verify the HTML table structure and cell content.\n"
+    "2. Correct any cell text, OCR errors, or missing contents.\n"
+    "3. Correct the table grid structure using HTML <table>, <tr>, and <td> tags with 'rowspan' and 'colspan' attributes for merged cells.\n"
+    "4. Output only valid HTML <table> elements with no commentary or markdown code fences outside the table."
 )
 
 MARKDOWN_OCR_PROMPT = (
@@ -214,7 +240,12 @@ def _preset(
         "mapping": mapping or sd["mapping"],
         "system_prompt": system_prompt,
         "user_prompt": "",
-        "filters": {"tags": [], "tag_regex": False},
+        "filters": {
+            "tags": [],
+            "tag_regex": False,
+            "min_table_rows": None,
+            "max_table_rows": None,
+        },
     }
 
 
@@ -236,6 +267,20 @@ DEFAULT_PRESETS: List[Dict[str, Any]] = [
     _preset("table", "Table Recognition", "TableRecognition",
             system_prompt=TABLE_RECOGNITION_PROMPT,
             description="Transcribe tables to TableRegions/TableCells."),
+    _preset("table_correction", "Table Recognition & Structure Correction", "TableRecognition",
+            system_prompt=TABLE_CORRECTION_PROMPT,
+            task_mode="layout_correction",
+            mapping="table_correction_apply",
+            description="Crop table regions, parse table XML + image into LLM, detect merged cells (brackets), adjust row/col proportions, and replace by ID."),
+    _preset("table_html_correction", "Table Recognition & Structure Correction (HTML Table)", "TableRecognition",
+            system_prompt=TABLE_HTML_CORRECTION_PROMPT,
+            task_mode="layout_correction",
+            mapping="table_html_correction_apply",
+            description="Crop table regions, parse table XML to HTML <table>, correct HTML structure and text via LLM, and update PAGE-XML table structure."),
+    _preset("table2html", "Table Recognition (HTML Table Output)", "TableRecognition",
+            system_prompt=TABLE_HTML_CORRECTION_PROMPT,
+            mapping="table_html_to_page",
+            description="Transcribe tables to HTML <table> structure and map back to PAGE-XML."),
     _preset("field_tagging", "Field-Tagging", "Field-Tagging",
             system_prompt=FIELD_TAGGING_PROMPT,
             description="Classify/refine region types + reading order on existing XML."),
@@ -369,8 +414,12 @@ def build_profile(preset: Dict[str, Any], spec: OCRBackendSpec,
     )
 
 
-def step_family(step: str) -> str:
+def step_family(step: str, task_mode: Optional[str] = None) -> str:
     """'fresh' (image -> new XML) or 'correction' (mutate existing XML)."""
+    if task_mode in ("layout_correction", "text_correction", "text_only"):
+        return "correction"
+    if task_mode in ("layout_and_text", "layout_only", "markdown"):
+        return "fresh"
     return STEP_DEFINITIONS.get(step, {}).get("family", "fresh")
 
 

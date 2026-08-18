@@ -112,6 +112,40 @@ def render_prompt(
     )
 
 
+def render_table_html_payload(page, region_filter=None) -> str:
+    """Serialize TableRegion elements in a Page into HTML <table> representation JSON payload.
+    Format:
+        {"html": "<table id=\"r2\">\n<tr>...</tr>\n</table>"}
+    """
+    import json
+    from pageplus.utils.mappings.table_json import table_xml_to_html
+
+    html_tables = []
+    page_regions = getattr(page, "regions", None)
+    table_regions = getattr(page_regions, "tableregions", []) if page_regions else []
+
+    if not table_regions and hasattr(page, "root") and page.root is not None:
+        ns = getattr(page, "ns", "http://schema.primaresearch.org/PAGE/gts/pagecontent/2019-07-15")
+        table_regions = list(page.root.iter(f"{{{ns}}}TableRegion"))
+
+    for tr in table_regions:
+        if region_filter is not None and not _safe_filter(region_filter, tr):
+            continue
+        try:
+            h_str = table_xml_to_html(tr)
+            if h_str:
+                html_tables.append(h_str)
+        except Exception:
+            pass
+
+    if not html_tables:
+        return json.dumps({"html": '<table id="t0"></table>'}, ensure_ascii=False, indent=2)
+    elif len(html_tables) == 1:
+        return json.dumps({"html": html_tables[0]}, ensure_ascii=False, indent=2)
+    else:
+        return json.dumps([{"html": h} for h in html_tables], ensure_ascii=False, indent=2)
+
+
 def render_page_xml_payload(
     page,
     *,
@@ -121,29 +155,13 @@ def render_page_xml_payload(
     line_filter=None,
     scale_x: float = 1.0,
     scale_y: float = 1.0,
+    mapping: Optional[str] = None,
 ) -> str:
-    """Serialize a ``Page`` into a compact JSON blob for correction prompts.
-
-    Format:
-
-        {
-          "regions": [
-            {
-              "id": str,
-              "type": str,
-              "coords": "x,y x,y ...",
-              "textlines": [
-                {"id": str, "type": str, "coords": "...", "baseline": "...",
-                 "text": str?}   # text only when include_text=True
-              ]
-            }
-          ]
-        }
-
-    For ``layout_correction`` the pipeline passes ``include_text=False`` to
-    keep the prompt compact; for ``text_correction`` it passes ``True`` so
-    the model has the existing transcription to fix.
+    """Serialize a ``Page`` into a compact JSON or HTML payload for correction prompts.
     """
+    if mapping in ("table_html_correction_apply", "table2html_apply", "table_html_to_page"):
+        return render_table_html_payload(page, region_filter=region_filter)
+
     def _scale_coords_str(coords_str: str, sx: float, sy: float) -> str:
         if not coords_str or (sx == 1.0 and sy == 1.0):
             return coords_str

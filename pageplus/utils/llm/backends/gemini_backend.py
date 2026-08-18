@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import threading
 import time
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from pageplus.io.logger import logging
@@ -99,13 +100,24 @@ class GeminiBackend(OCRBackend):
     def client(self) -> "genai.Client":
         if self._client is None:
             timeout_sec = float(self._options.timeout)
+            timeout_ms = int(timeout_sec * 1000)
             try:
+                if genai_types is not None and hasattr(genai_types, "HttpOptions"):
+                    http_opts = genai_types.HttpOptions(timeout=timeout_ms)
+                else:
+                    http_opts = {"timeout": timeout_ms}
                 self._client = genai.Client(
                     api_key=self._options.api_key,
-                    http_options={"timeout": timeout_sec},
+                    http_options=http_opts,
                 )
-            except TypeError:
-                self._client = genai.Client(api_key=self._options.api_key)
+            except Exception:
+                try:
+                    self._client = genai.Client(
+                        api_key=self._options.api_key,
+                        http_options={"timeout": timeout_sec},
+                    )
+                except Exception:
+                    self._client = genai.Client(api_key=self._options.api_key)
         return self._client
 
     # ---- Implementation --------------------------------------------------
@@ -120,9 +132,8 @@ class GeminiBackend(OCRBackend):
 
         for attempt in range(max_attempts):
             try:
-                file_upload = self._upload_image(ctx)
                 config = self._build_config(prompt)
-                contents = self._build_contents(prompt, ctx, file_upload)
+                contents = self._build_contents(prompt, ctx)
                 response = self.client().models.generate_content(
                     model=self.model_name,
                     contents=contents,
@@ -138,15 +149,17 @@ class GeminiBackend(OCRBackend):
                 low = msg.lower()
                 is_transient_busy = (
                     "503" in msg or "504" in msg or "429" in msg or
-                    "deadline" in low or "timeout" in low or
+                    "deadline" in low or "timeout" in low or "timed out" in low or
                     "unavailable" in low or "capacity" in low or "rate" in low
                 )
                 if is_transient_busy and attempt < max_attempts - 1:
                     elapsed = time.time() - start_time
-                    # Retry schedule for batch queues: first 10m every 60s; thereafter every 300s (5m)
-                    delay = 60.0 if elapsed < 600.0 else 300.0
+                    if getattr(self._options, "is_batch", False):
+                        delay = 60.0 if elapsed < 600.0 else 300.0
+                    else:
+                        delay = min(30.0, 2.0 * (2 ** attempt))
                     logging.warning(
-                        "[Gemini Backend] Server busy/deadline (%s). Retrying in %.0fs (attempt %d/%d, elapsed %.0fs)...",
+                        "[Gemini Backend] Server busy/timeout (%s). Retrying in %.0fs (attempt %d/%d, elapsed %.0fs)...",
                         msg, delay, attempt + 1, max_attempts, elapsed
                     )
                     time.sleep(delay)
@@ -164,14 +177,6 @@ class GeminiBackend(OCRBackend):
 
     # ---- Internals ------------------------------------------------------
 
-    def _upload_image(self, ctx: BackendCallContext):
-        # Mirror the existing, known-good upload pattern used by
-        # ``pageplus/utils/llm/table_recognition.py`` and the legacy Gemini
-        # CLI: ``client.files.upload(file=<path>)`` with no config. Older
-        # google-genai SDK versions don't expose ``genai_types.UploadConfig``
-        # at all, and there's no functional reason to pass a display name.
-        return self.client().files.upload(file=ctx.image_path)
-
     def _build_config(self, prompt: RenderedPrompt) -> "genai_types.GenerateContentConfig":
         thinking_config = None
         if self._options.thinking_budget > 0 and "2.5" in self.model_name:
@@ -187,18 +192,34 @@ class GeminiBackend(OCRBackend):
             system_instruction=prompt.system,
             max_output_tokens=self._options.max_output_tokens,
         )
+        if getattr(self._options, "service_tier", None) and self._options.service_tier != "auto":
+            cfg_kwargs["service_tier"] = self._options.service_tier
         if thinking_config is not None:
             cfg_kwargs["thinking_config"] = thinking_config
 
         return genai_types.GenerateContentConfig(**cfg_kwargs)
 
+    def _build_contents(self, prompt: RenderedPrompt, ctx: BackendCallContext) -> list:
+        image_part = None
+        # Send inline bytes directly for images under 20MB (especially snippet crops).
+        # This avoids Google Files API 403 permission errors and eliminates extra upload latency.
+        if ctx.image_path and Path(ctx.image_path).exists() and Path(ctx.image_path).stat().st_size < 20 * 1024 * 1024:
+            try:
+                img_bytes = Path(ctx.image_path).read_bytes()
+                mime = "image/png" if str(ctx.image_path).lower().endswith(".png") else "image/jpeg"
+                image_part = genai_types.Part.from_bytes(data=img_bytes, mime_type=mime)
+            except Exception as exc:
+                logging.warning("Inline image read failed for %s (%s); falling back to file upload", ctx.image_path, exc)
 
-    def _build_contents(self, prompt: RenderedPrompt, ctx: BackendCallContext, file_upload) -> list:
-        contents: list = [
-            genai_types.Part.from_uri(
+        if image_part is None:
+            file_upload = self.client().files.upload(file=ctx.image_path)
+            image_part = genai_types.Part.from_uri(
                 file_uri=file_upload.uri,
                 mime_type=file_upload.mime_type,
-            ),
+            )
+
+        contents: list = [
+            image_part,
             prompt.user,
         ]
         # For correction modes, the page-xml payload is passed as an additional text part.

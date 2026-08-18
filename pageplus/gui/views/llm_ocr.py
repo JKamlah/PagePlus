@@ -475,6 +475,26 @@ def _presets_tab(bridge: LLMOcrBridge) -> None:
                                  value=", ".join(((existing or {}).get("filters") or {}).get("tags", [])))
         tag_regex = st.checkbox("Treat tags as regex",
                                 value=bool(((existing or {}).get("filters") or {}).get("tag_regex", False)))
+
+        filters_dict = (existing or {}).get("filters") or {}
+        min_r_existing = filters_dict.get("min_table_rows")
+        max_r_existing = filters_dict.get("max_table_rows")
+
+        fc1, fc2 = st.columns(2)
+        with fc1:
+            min_table_rows = st.number_input(
+                "Min table rows (0 = no limit)",
+                min_value=0,
+                value=int(min_r_existing) if min_r_existing is not None else 0,
+                help="Process only tables with at least this number of rows (0 = no lower bound).",
+            )
+        with fc2:
+            max_table_rows = st.number_input(
+                "Max table rows (0 = no limit)",
+                min_value=0,
+                value=int(max_r_existing) if max_r_existing is not None else 0,
+                help="Process only tables with at most this number of rows (0 = no upper bound).",
+            )
         save = st.form_submit_button("💾 Save preset", use_container_width=True)
 
     if save:
@@ -493,6 +513,8 @@ def _presets_tab(bridge: LLMOcrBridge) -> None:
                 "filters": {
                     "tags": [t.strip() for t in tags_str.split(",") if t.strip()],
                     "tag_regex": bool(tag_regex),
+                    "min_table_rows": int(min_table_rows) if min_table_rows > 0 else None,
+                    "max_table_rows": int(max_table_rows) if max_table_rows > 0 else None,
                 },
             }
             res = bridge.save_ocr_preset(preset)
@@ -596,7 +618,11 @@ def _task_summary(task: dict) -> str:
     tags = task.get("tags") or []
     if tags:
         bits.append(f"tags={tags}{' (regex)' if task.get('tag_regex') else ''}")
-    fam = step_family(task.get("step", "All-in-One"))
+    min_r = task.get("min_table_rows")
+    max_r = task.get("max_table_rows")
+    if min_r is not None or max_r is not None:
+        bits.append(f"rows=[{min_r or ''}..{max_r or ''}]")
+    fam = step_family(task.get("step", "All-in-One"), task.get("task_mode"))
     bits.append("🆕 fresh" if fam == "fresh" else "✏️ correction")
     return " · ".join(bits)
 
@@ -729,6 +755,28 @@ def _add_task_form(bridge: LLMOcrBridge, presets: List[dict]) -> None:
                                 value=bool((chosen_preset.get("filters") or {}).get("tag_regex", False)),
                                 key="llmocr_add_tag_regex")
 
+        chosen_filters = chosen_preset.get("filters") or {}
+        def_min_r = chosen_filters.get("min_table_rows")
+        def_max_r = chosen_filters.get("max_table_rows")
+
+        trc1, trc2 = st.columns(2)
+        with trc1:
+            add_min_r = st.number_input(
+                "Min table rows (0 = no limit)",
+                min_value=0,
+                value=int(def_min_r) if def_min_r is not None else 0,
+                key="llmocr_add_min_table_rows",
+                help="Process only tables with at least this number of rows."
+            )
+        with trc2:
+            add_max_r = st.number_input(
+                "Max table rows (0 = no limit)",
+                min_value=0,
+                value=int(def_max_r) if def_max_r is not None else 0,
+                key="llmocr_add_max_table_rows",
+                help="Process only tables with at most this number of rows."
+            )
+
         if st.button("➕ Add task to pipeline", key="llmocr_add_btn", use_container_width=True):
             st.session_state.setdefault("llmocr_tasks", [])
             st.session_state.llmocr_tasks.append({
@@ -737,6 +785,8 @@ def _add_task_form(bridge: LLMOcrBridge, presets: List[dict]) -> None:
                 "preset_id": preset_id,
                 "tags": [t.strip() for t in tags_str.split(",") if t.strip()],
                 "tag_regex": bool(tag_regex),
+                "min_table_rows": int(add_min_r) if add_min_r > 0 else None,
+                "max_table_rows": int(add_max_r) if add_max_r > 0 else None,
             })
             st.rerun()
 
@@ -825,7 +875,7 @@ def _process_tab(bridge: LLMOcrBridge, settings: Settings) -> None:
                           help="Prints LiteLLM's raw request/curl to the terminal so you can see "
                                "exactly what is called. Takes effect on the next run.")
 
-    first_family = step_family(tasks[0].get("step", "All-in-One"))
+    first_family = step_family(tasks[0].get("step", "All-in-One"), tasks[0].get("task_mode"))
     image_files = (st.session_state.get("modification_input") or {}).get("files")
     loaded_all = [str(p.absolute()) for p in (st.session_state.get("loaded_files") or [])]
     xml_files = [p for p in loaded_all if Path(p).suffix.lower() == ".xml"]

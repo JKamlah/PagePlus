@@ -672,6 +672,28 @@ def show_modification(bridge: ModificationBridge) -> None:
                     else:
                         st.error(result["output"])
 
+            # Merge Table Rowspan Cells
+            with st.expander("Merge Table Rowspan Cells"):
+                st.write(
+                    """Checks all tables with merged cells (rowspan > 1). If all sibling cells in those spanned rows """
+                    """have at most 1 non-empty value per column, merges the sibling cells across those rows into matching rowspans."""
+                )
+                dry_run = st.checkbox("Dry run", key="merge_table_rowspan_dry_run")
+                if st.button("Merge Table Rowspan Cells"):
+                    params = {
+                        "dry_run": dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("merge_table_rowspan_cells", **params)
+                    with st.spinner("Merging table rowspan cells...", show_time=True):
+                        result = bridge.merge_table_rowspan_cells(
+                            files=selected_files, **params
+                        )
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
+
             st.subheader("Sorting Operations")
             # Sort
             with st.expander("Sort (textlines per region)"):

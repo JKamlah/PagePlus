@@ -2565,5 +2565,50 @@ def merge_overlapping_textregions(
                 f'[DRY RUN] Would write modified xml file to: {xml_file}')
 
 
+@app.command()
+def merge_table_rowspan_cells(
+    inputs: Annotated[List[str], typer.Argument(
+        exists=True,
+        help="Paths or workspace to the PAGE XML files to be processed.",
+        callback=transform_inputs
+    )] = None,
+    outputdir: Annotated[Optional[str], typer.Option(
+        help="Filename of the output directory. If not specified, input files will be overwritten.",
+        callback=transform_output
+    )] = None,
+    dry_run: Annotated[bool, typer.Option(help="Perform a dry run without writing any files.")] = False
+):
+    """
+    Inspects all tables in PAGE XML files. For any merged cell with rowspan > 1,
+    if all columns in that row range have at most 1 non-empty cell value,
+    merges the sibling cells in those columns into a single cell with matching rowspan.
+    """
+    from pageplus.utils.table_modification import merge_table_rowspan_implicit_cells
+
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError('No XML files found in the input paths.')
+
+    modified_count = 0
+    for xml_file in track(xml_files, description="Merging implicit rowspan table cells..."):
+        filename = xml_file.name
+        logging.info(f'Processing file: {filename}')
+        page = Page(xml_file)
+        modified = merge_table_rowspan_implicit_cells(page)
+
+        if modified:
+            modified_count += 1
+            if not dry_run:
+                fout = xml_file if outputdir is None else determine_output_path(xml_file, outputdir, filename)
+                logging.info(f'Wrote modified xml file to output directory: {fout}')
+                page.save_xml(fout)
+            else:
+                logging.info(f'[DRY RUN] Would write modified xml file to: {xml_file}')
+        else:
+            logging.info(f'No rowspan cell modifications applicable for: {filename}')
+
+    return modified_count
+
+
 if __name__ == "__main__":
     app()

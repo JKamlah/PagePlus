@@ -44,63 +44,68 @@ def parse_html_table_grid(html_str: str) -> List[Dict[str, Any]]:
 
     Returns a list of dicts with keys: 'row', 'col', 'rowSpan', 'colSpan', 'text'.
     Handles <thead>, <tbody>, <tfoot>, <tr>, <th>, <td>, rowspan, colspan.
+    Case-insensitive for tags and attributes.
     """
     if not html_str or not html_str.strip():
         return []
 
+    cleaned_html = html_str.strip()
+    if "```" in cleaned_html:
+        import re
+        m = re.search(r"```(?:html)?\s*(<table.*?>.*?</table>)\s*```", cleaned_html, re.DOTALL | re.IGNORECASE)
+        if m:
+            cleaned_html = m.group(1)
+        else:
+            cleaned_html = re.sub(r"```(?:html)?|```", "", cleaned_html).strip()
+
+    if "<tr" in cleaned_html.lower() and "<table" not in cleaned_html.lower():
+        cleaned_html = f"<table>{cleaned_html}</table>"
+
+    def _get_attr(elem_or_attrs, name: str, default: str = "1") -> str:
+        if hasattr(elem_or_attrs, "attrib"):
+            for k, v in elem_or_attrs.attrib.items():
+                if k.lower() == name.lower():
+                    return v
+        elif isinstance(elem_or_attrs, (dict, list)):
+            attrs_dict = dict(elem_or_attrs) if isinstance(elem_or_attrs, list) else elem_or_attrs
+            for k, v in attrs_dict.items():
+                if k.lower() == name.lower():
+                    return str(v)
+        return default
+
+    tr_elements = None
     try:
         import lxml.html
-        doc = lxml.html.fromstring(html_str)
+        doc = lxml.html.fromstring(cleaned_html)
         tr_elements = doc.xpath(".//tr")
     except Exception:
-        # Fallback using standard html.parser if lxml parsing fails
-        from html.parser import HTMLParser
+        tr_elements = None
 
-        class SimpleTableParser(HTMLParser):
-            def __init__(self):
-                super().__init__()
-                self.rows = []
-                self.current_row = None
-                self.current_cell = None
-                self.cell_tag = None
-
-            def handle_starttag(self, tag, attrs):
-                if tag == "tr":
-                    self.current_row = []
-                    self.rows.append(self.current_row)
-                elif tag in ("td", "th") and self.current_row is not None:
-                    attr_dict = dict(attrs)
-                    self.current_cell = {
-                        "tag": tag,
-                        "rowspan": int(attr_dict.get("rowspan", 1)),
-                        "colspan": int(attr_dict.get("colspan", 1)),
-                        "text": [],
-                    }
-                    self.current_row.append(self.current_cell)
-
-            def handle_data(self, data):
-                if self.current_cell is not None:
-                    self.current_cell["text"].append(data)
-
-            def handle_endtag(self, tag):
-                if tag in ("td", "th"):
-                    self.current_cell = None
-
-        parser = SimpleTableParser()
-        parser.feed(html_str)
+    if tr_elements is not None and len(tr_elements) > 0:
         grid: Dict[Tuple[int, int], bool] = {}
         parsed_cells: List[Dict[str, Any]] = []
-        for r_idx, row in enumerate(parser.rows):
+        for r_idx, tr in enumerate(tr_elements):
             c_idx = 0
-            for cell in row:
+            for cell in tr.xpath("./th | ./td"):
                 while (r_idx, c_idx) in grid:
                     c_idx += 1
-                rowspan = cell["rowspan"]
-                colspan = cell["colspan"]
-                cell_text = "".join(cell["text"]).strip()
+
+                rowspan_str = _get_attr(cell, "rowspan", "1")
+                colspan_str = _get_attr(cell, "colspan", "1")
+                try:
+                    rowspan = int(rowspan_str)
+                except ValueError:
+                    rowspan = 1
+                try:
+                    colspan = int(colspan_str)
+                except ValueError:
+                    colspan = 1
+
+                cell_text = cell.text_content().strip()
                 for r in range(rowspan):
                     for c in range(colspan):
                         grid[(r_idx + r, c_idx + c)] = True
+
                 parsed_cells.append({
                     "row": r_idx,
                     "col": c_idx,
@@ -111,30 +116,53 @@ def parse_html_table_grid(html_str: str) -> List[Dict[str, Any]]:
                 c_idx += colspan
         return parsed_cells
 
-    # Standard lxml path
+    # Fallback using standard html.parser if lxml parsing fails
+    from html.parser import HTMLParser
+
+    class SimpleTableParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.rows = []
+            self.current_row = None
+            self.current_cell = None
+
+        def handle_starttag(self, tag, attrs):
+            if tag.lower() == "tr":
+                self.current_row = []
+                self.rows.append(self.current_row)
+            elif tag.lower() in ("td", "th") and self.current_row is not None:
+                attr_dict = {k.lower(): v for k, v in attrs}
+                self.current_cell = {
+                    "tag": tag.lower(),
+                    "rowspan": int(attr_dict.get("rowspan", 1)),
+                    "colspan": int(attr_dict.get("colspan", 1)),
+                    "text": [],
+                }
+                self.current_row.append(self.current_cell)
+
+        def handle_data(self, data):
+            if self.current_cell is not None:
+                self.current_cell["text"].append(data)
+
+        def handle_endtag(self, tag):
+            if tag.lower() in ("td", "th"):
+                self.current_cell = None
+
+    parser = SimpleTableParser()
+    parser.feed(cleaned_html)
     grid: Dict[Tuple[int, int], bool] = {}
     parsed_cells: List[Dict[str, Any]] = []
-    for r_idx, tr in enumerate(tr_elements):
+    for r_idx, row in enumerate(parser.rows):
         c_idx = 0
-        for cell in tr.xpath("./th | ./td"):
+        for cell in row:
             while (r_idx, c_idx) in grid:
                 c_idx += 1
-            rowspan_str = cell.get("rowspan") or "1"
-            colspan_str = cell.get("colspan") or "1"
-            try:
-                rowspan = int(rowspan_str)
-            except ValueError:
-                rowspan = 1
-            try:
-                colspan = int(colspan_str)
-            except ValueError:
-                colspan = 1
-
-            cell_text = cell.text_content().strip()
+            rowspan = cell["rowspan"]
+            colspan = cell["colspan"]
+            cell_text = "".join(cell["text"]).strip()
             for r in range(rowspan):
                 for c in range(colspan):
                     grid[(r_idx + r, c_idx + c)] = True
-
             parsed_cells.append({
                 "row": r_idx,
                 "col": c_idx,
@@ -143,7 +171,6 @@ def parse_html_table_grid(html_str: str) -> List[Dict[str, Any]]:
                 "text": cell_text,
             })
             c_idx += colspan
-
     return parsed_cells
 
 

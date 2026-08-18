@@ -193,6 +193,14 @@ _BUILTINS: Tuple[LiteLLMProviderPreset, ...] = (
     ),
     LiteLLMProviderPreset(
         id="gemini",
+        display_name="Google Gemini (Official API)",
+        litellm_prefix="gemini",
+        env_api_key="GEMINI_API_KEY",
+        default_model="gemini-2.5-pro",
+        alt_models=("gemini-3.5-flash", "gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"),
+    ),
+    LiteLLMProviderPreset(
+        id="gemini_litellm",
         display_name="Google Gemini (via LiteLLM)",
         litellm_prefix="gemini",
         env_api_key="GEMINI_API_KEY",
@@ -441,6 +449,8 @@ def spec_from_preset(
             timeout=timeout if timeout is not None else 60.0,
             calls_per_minute=calls_per_minute,
             max_image_size=max_image_size,
+            image_key=preset.image_key,
+            prompt_key=preset.prompt_key,
         )
         return OCRBackendSpec(
             provider="curl",
@@ -479,8 +489,34 @@ def spec_from_preset(
             },
         )
 
-    # --- Native Gemini SDK backend (google-genai) ------------------------
-    if preset.litellm_prefix == "gemini" or preset_id == "gemini":
+    # --- Gemini via LiteLLM backend --------------------------------------
+    if preset_id == "gemini_litellm":
+        from pageplus.utils.llm.core.specs import LiteLLMTransportConfig
+
+        chosen_model = model or preset.default_model or "gemini-2.5-pro"
+        model_str = preset.model_string(chosen_model)
+        options = LiteLLMTransportConfig(
+            api_key=api_key,
+            api_base_url=api_base,
+            timeout=timeout if timeout is not None else 300.0,
+            provider_prefix="gemini",
+            calls_per_minute=calls_per_minute,
+            max_image_size=max_image_size,
+            json_object_mode=True,
+        )
+        return OCRBackendSpec(
+            provider="litellm",
+            model=model_str,
+            options=options,
+            metadata={
+                "preset_id": preset.id,
+                "preset_display_name": preset.display_name,
+                "preset_vision_capable": preset.vision_capable,
+            },
+        )
+
+    # --- Native Gemini SDK backend (google-genai official API) ----------
+    if preset_id in ("gemini", "gemini_official") or (preset.litellm_prefix == "gemini" and preset_id != "gemini_litellm"):
         from pageplus.utils.llm.core.specs import GeminiOptions, GeminiBatchOptions
 
         chosen_model = model or preset.default_model or "gemini-2.5-flash"
@@ -529,6 +565,7 @@ def spec_from_preset(
                 api_base_url=api_base or preset.api_base_hint or "http://localhost:8000/v1",
                 api_key=api_key,
                 timeout=timeout if timeout is not None else 60.0,
+                calls_per_minute=calls_per_minute,
                 max_image_size=max_image_size,
             )
             return OCRBackendSpec(

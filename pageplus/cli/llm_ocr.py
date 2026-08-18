@@ -215,10 +215,10 @@ else:
         recalculate_baselines: bool = False,
     ) -> List[Path]:
         """Run one task (preset + step + provider) over inputs; return written paths."""
-        family = step_family(step)
-        use_snippets = task_level in ("TextRegion", "Textline") and family == "correction"
+        family = step_family(step, mode.value if isinstance(mode, TaskMode) else mode)
+        use_snippets = task_level in ("TableRegion", "TextRegion", "Textline") and family == "correction"
         predicate = make_tag_filter(tags, regex=tag_regex) if tags else None
-        region_filter = predicate if (task_level == "TextRegion" or family == "fresh") else None
+        region_filter = predicate if (task_level in ("TableRegion", "TextRegion") or family == "fresh") else None
         line_filter = predicate if (task_level == "Textline" and family == "correction") else None
 
         documents: List[PagePlusDocumentPage] = []
@@ -276,7 +276,7 @@ else:
         pipeline = PagePlusOCRPipeline.from_spec(
             spec, task_mode=mode, profile=profile,
             retry_policy=RetryPolicy(max_attempts=3), max_concurrency=max(1, jobs),
-            snippet_level=task_level if task_level in ("TextRegion", "Textline") else "Textline",
+            snippet_level=task_level if task_level in ("TableRegion", "TextRegion", "Textline") else "Textline",
         )
 
         print(f"Processing {len(documents)} page(s) with {spec.model} "
@@ -484,11 +484,11 @@ else:
 
         total_written: List[Path] = []
         if exec_mode == "pagewise":
-            first_fresh = step_family(tasks[0].get("step", "All-in-One")) == "fresh"
+            first_fresh = step_family(tasks[0].get("step", "All-in-One"), tasks[0].get("task_mode")) == "fresh"
             for unit in inputs:
                 working = None if first_fresh else unit
                 for i, task in enumerate(tasks, start=1):
-                    fam = step_family(task.get("step", "All-in-One"))
+                    fam = step_family(task.get("step", "All-in-One"), task.get("task_mode"))
                     src = [unit] if fam == "fresh" else ([working] if working else [])
                     if not src:
                         print(f"[yellow]page {Path(unit).name}: no XML for step {i}; skipping.[/yellow]")
@@ -500,7 +500,7 @@ else:
         else:  # stepwise
             working_xmls: Optional[List[str]] = None
             for i, task in enumerate(tasks, start=1):
-                fam = step_family(task.get("step", "All-in-One"))
+                fam = step_family(task.get("step", "All-in-One"), task.get("task_mode"))
                 print(f"[cyan]=== Step {i}/{len(tasks)}: {task.get('step')} ({fam}) ===[/cyan]")
                 if fam == "fresh":
                     w = _one(task, inputs, overwrite=False)
