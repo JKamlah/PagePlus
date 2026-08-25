@@ -583,3 +583,104 @@ class Page:
         for regiontype, regions in self.regions.__dict__.items():
             for region in regions:
                 yield region
+
+    def delete_fill_characters(
+        self,
+        levels: Any = ("TableRegion",),
+        fill_character: str = ".",
+        min_count: int = 2,
+    ) -> int:
+        """
+        Strips multiple trailing fill characters at the end of text lines within specified levels.
+
+        Args:
+            levels: Granularity levels ('TableRegion', 'TextRegion', 'Textline').
+            fill_character: Fill character to strip when occurring at least `min_count` times at line end (default: '.').
+            min_count: Minimum count of fill character occurrences at line end to trigger deletion (default: 2).
+
+        Returns:
+            Number of text elements modified.
+        """
+        import re
+        if not fill_character:
+            return 0
+
+        # Normalize levels
+        if not isinstance(levels, (list, tuple, set)):
+            levels = [levels]
+
+        level_names = set()
+        for lvl in levels:
+            if hasattr(lvl, "name"):
+                level_names.add(lvl.name)
+            elif hasattr(lvl, "value"):
+                level_names.add(str(lvl.value))
+            elif isinstance(lvl, str):
+                level_names.add(lvl)
+
+        escaped_char = re.escape(fill_character)
+        pattern = re.compile(rf'(?:\s*{escaped_char}){{{min_count},}}\s*$')
+
+        count = 0
+
+        def _clean_textline(tl) -> bool:
+            curr_text = tl.get_text()
+            if curr_text and pattern.search(curr_text):
+                cleaned = pattern.sub('', curr_text).rstrip()
+                tl.update_text(cleaned)
+                return True
+            return False
+
+        def _clean_element_unicode(xml_elem) -> bool:
+            mod = False
+            for uni in xml_elem.findall(f".//{{{self.ns}}}Unicode"):
+                if uni.text and pattern.search(uni.text):
+                    uni.text = pattern.sub('', uni.text).rstrip()
+                    mod = True
+            if not mod:
+                for uni in xml_elem.findall(".//{*}Unicode"):
+                    if uni.text and pattern.search(uni.text):
+                        uni.text = pattern.sub('', uni.text).rstrip()
+                        mod = True
+            return mod
+
+        if "Textline" in level_names:
+            for tr in (self.regions.textregions or []):
+                for tl in (tr.textlines or []):
+                    if _clean_textline(tl):
+                        count += 1
+            for tableregion in (self.regions.tableregions or []):
+                for tc in (tableregion.tablecells or []):
+                    for tl in (tc.textlines or []):
+                        if _clean_textline(tl):
+                            count += 1
+        else:
+            if "TextRegion" in level_names:
+                for tr in (self.regions.textregions or []):
+                    if tr.textlines:
+                        for tl in tr.textlines:
+                            if _clean_textline(tl):
+                                count += 1
+                    else:
+                        if _clean_element_unicode(tr.xml_element):
+                            count += 1
+
+            if "TableRegion" in level_names:
+                for tableregion in (self.regions.tableregions or []):
+                    for tc in (tableregion.tablecells or []):
+                        if tc.textlines:
+                            for tl in tc.textlines:
+                                if _clean_textline(tl):
+                                    count += 1
+                        else:
+                            if _clean_element_unicode(tc.xml_element):
+                                count += 1
+
+        return count
+
+    def to_mistral_ocr(self, page_index: int = 0, extract_page_only: bool = False, **kwargs) -> Dict[str, Any]:
+        """
+        Converts the Page to Mistral Document OCR response JSON format.
+        """
+        from pageplus.utils.mappings.mistral_ocr import page_to_mistral_ocr
+        return page_to_mistral_ocr(self, page_index=page_index, extract_page_only=extract_page_only, **kwargs)

@@ -1058,6 +1058,42 @@ def show_modification(bridge: ModificationBridge) -> None:
                         else:
                             st.error(result["output"])
 
+            # Delete Fill Characters
+            with st.expander("Delete Fill Characters"):
+                levels = st.multiselect(
+                    "Level",
+                    [TextLevel.TableRegion.name, TextLevel.TextRegion.name, TextLevel.Textline.name],
+                    default=[TextLevel.TableRegion.name],
+                    key="delete_fill_chars_level"
+                )
+                fill_char = st.text_input(
+                    "Fill character",
+                    value=".",
+                    max_chars=5,
+                    key="delete_fill_char"
+                )
+                min_count = st.number_input(
+                    "Minimum count",
+                    min_value=1,
+                    max_value=20,
+                    value=2,
+                    key="delete_fill_min_count"
+                )
+                if st.button("Delete Fill Characters"):
+                    params = {
+                        "levels": [TextLevel[level] for level in levels],
+                        "fill_character": fill_char if fill_char else ".",
+                        "min_count": int(min_count),
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("delete_fill_characters", **params)
+                    with st.spinner("Deleting fill characters...", show_time=True):
+                        result = bridge.delete_fill_characters(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
+
             # Delete Text
             with st.expander("Delete Text (content only)"):
                 levels = st.multiselect(
@@ -1167,7 +1203,9 @@ def show_modification(bridge: ModificationBridge) -> None:
                                 if "outputdir" in sig.parameters and ("outputdir" not in op_params or op_params["outputdir"] is None):
                                     op_params["outputdir"] = st.session_state.get('modification_dir')
                                 if 'level' in op_params and isinstance(op_params['level'], list):
-                                    op_params['level'] = [TextLevel[name] for name in op_params['level']]
+                                    op_params['level'] = [TextLevel[name] if isinstance(name, str) else name for name in op_params['level']]
+                                if 'levels' in op_params and isinstance(op_params['levels'], list):
+                                    op_params['levels'] = [TextLevel[name] if isinstance(name, str) else name for name in op_params['levels']]
                                 result = bridge_method(**op_params)
                                 if result["success"]:
                                     st.info(f"Step {i+1}: {result['output']}")

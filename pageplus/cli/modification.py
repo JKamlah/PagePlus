@@ -295,6 +295,52 @@ def delete_text(
 
 
 @app.command()
+def delete_fill_characters(
+        inputs: Annotated[List[str], typer.Argument(exists=True,
+                                                    help="Paths or workspace to the PAGE XML files to be processed.",
+                                                    callback=transform_inputs)] = None,
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Filename of the output directory. If not specified, input files will be overwritten.",
+            callback=transform_output)] = None,
+        levels: Annotated[List[TextLevel], typer.Option(
+            help="Granularity levels to process: 'TableRegion', 'TextRegion', 'Textline' "
+                 " (default: TableRegion).")] = ("TableRegion",),
+        fill_character: Annotated[str, typer.Option(
+            "--fill-character", "-c",
+            help="Fill character to strip when occurring multiple times at line end (default: '.').")] = ".",
+        min_count: Annotated[int, typer.Option(
+            "--min-count", "-m",
+            help="Minimum count of fill characters at line end to trigger deletion (default: 2).")] = 2,
+):
+    """
+    Deletes multiple trailing fill characters at the end of text lines in PAGE XML files.
+
+    Args:
+        inputs: Paths to the PAGE XML files to be processed.
+        outputdir: The directory where the modified XML files will be saved.
+        levels: Granularity levels to process ('TableRegion', 'TextRegion', 'Textline').
+        fill_character: Fill character to strip (default: '.').
+        min_count: Minimum occurrences at line end to strip (default: 2).
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+
+    if not xml_files:
+        raise FileNotFoundError('No XML files found in the input paths.')
+
+    for xml_file in track(xml_files, description="Deleting fill characters.."):
+        filename = xml_file.name
+        logging.info(f'Processing file: {filename}')
+
+        page = Page(xml_file)
+        page.delete_fill_characters(levels=levels, fill_character=fill_character, min_count=min_count)
+
+        fout = xml_file if outputdir is None else determine_output_path(
+            xml_file, outputdir, filename)
+        logging.info(f'Wrote modified xml file to output directory: {fout}')
+        page.save_xml(fout)
+
+
+@app.command()
 def delete_textlines(
         inputs: Annotated[List[str], typer.Argument(exists=True,
                                                     help="Paths or workspace to the PAGE XML files to be processed.",

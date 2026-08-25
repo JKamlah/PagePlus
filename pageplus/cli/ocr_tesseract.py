@@ -112,10 +112,28 @@ else:
 
     def process_single_file(args):
         """Process a single XML file with OCR."""
-        (xml_file, image_path, image_filename, model_name, save_snippets,
-         text_filter, region_tagfilter, textline_tagfilter, profilelevel,
-         outputdir, dry_run, model_path, processing_level, output_formats, custom_params, create_polygon,
-         create_subfolder, rename_page_xml, remove_textregion_text) = args
+        if isinstance(args, (list, tuple)):
+            args_list = list(args)
+            if len(args_list) < 19:
+                defaults = [None, None, None, None, False, None, None, None, [], None, False, None, "Textline", None, None, True, False, False, False]
+                args_list.extend(defaults[len(args_list):])
+            (xml_file, image_path, image_filename, model_name, save_snippets,
+             text_filter, region_tagfilter, textline_tagfilter, profilelevel,
+             outputdir, dry_run, model_path, processing_level, output_formats, custom_params, create_polygon,
+             create_subfolder, rename_page_xml, remove_textregion_text) = args_list[:19]
+        else:
+            raise ValueError(f"Expected tuple/list for args, got {type(args)}")
+
+        if xml_file is not None:
+            xml_file = Path(xml_file)
+        if image_path is not None:
+            image_path = Path(image_path)
+            if not image_filename:
+                image_filename = image_path.name
+
+        model_name = model_name or "eng"
+        processing_level = processing_level or "Textline"
+        profilelevel = profilelevel or []
 
         reg_filter = re.compile(rf"{text_filter}") if text_filter is not None else '.'
 
@@ -287,30 +305,41 @@ else:
         text_dict = {}
 
         # Process with tesserocr (for TextRegion and Textline levels)
-        api_kwargs = {"psm": {'TextRegion': PSM.SINGLE_BLOCK, 'Textline': PSM.SINGLE_LINE}.get(processing_level), "lang": model_name}
-        if model_path:
-            api_kwargs["path"] = model_path  # model_path
+        resolved_datapath = model_path or get_default_datapath()
+        psm_val = {'TextRegion': PSM.SINGLE_BLOCK, 'Textline': PSM.SINGLE_LINE}.get(processing_level, PSM.AUTO)
+        api_kwargs = {"psm": psm_val, "lang": model_name}
+        if resolved_datapath:
+            api_kwargs["path"] = resolved_datapath
 
         with PyTessBaseAPI(**api_kwargs) as api:
             # Process based on processing level
             if processing_level == "TextRegion":
                 # TextRegion-level processing - process each textregion
-                for textregion in page.regions.textregions:
+                for textregion in (page.regions.textregions or []):
                     tr_id = textregion.get_id()
                     if region_tagfilter is not None and region_tagfilter != textregion.get_tag():
+                        print(f"Skipping region {tr_id} due to tag filter")
                         continue
 
                     # Get region coordinates and crop image
                     region_coords = textregion.get_coordinates(returntype='mrr')
-                    region_snippet, crop_bbox = crop_image_by_polygon(
-                        image, region_coords,
-                        patch_size=1, buffer=0,
-                        save_snippet=save_snippets,
-                        transparent_background=True,
-                        square_canvas=False,
-                        snippet_dir=imageDir.joinpath(
-                            image_filename.rsplit('.', 1)[0]),
-                        snippet_name='region_' + tr_id)
+                    if region_coords is None:
+                        logging.warning(f"Could not retrieve coordinates for TextRegion {tr_id} in {xml_file.name}")
+                        continue
+
+                    try:
+                        region_snippet, crop_bbox = crop_image_by_polygon(
+                            image, region_coords,
+                            patch_size=1, buffer=0,
+                            save_snippet=save_snippets,
+                            transparent_background=True,
+                            square_canvas=False,
+                            snippet_dir=imageDir.joinpath(
+                                image_filename.rsplit('.', 1)[0]),
+                            snippet_name='region_' + tr_id)
+                    except Exception as e:
+                        logging.error(f"Error cropping TextRegion {tr_id}: {e}")
+                        continue
 
                     # Process region with OCR
                     if region_snippet.mode == "RGBA":
@@ -322,52 +351,71 @@ else:
                     api.Recognize()
                     ri = api.GetIterator()
 
-                    # Clear existing TextLines from the region
-                    if textregion.textlines:
-                        # Delete all existing textlines
-                        indices_to_delete = list(range(len(textregion.textlines)))
-                        textregion.delete_textlines(indices_to_delete)
-                    xmin_crop, ymin_crop, xmax_crop, ymax_crop = crop_bbox
-                    # Process each detected textline
-                    for idx, r in enumerate(iterate_level(ri, RIL.TEXTLINE)):
-                        ocr_text = r.GetUTF8Text(RIL.TEXTLINE)
-                        bbox = r.BoundingBox(RIL.TEXTLINE)
-                        bbox = [bbox[0]+xmin_crop, bbox[1]+ymin_crop, bbox[2]+xmin_crop, bbox[3]+ymin_crop]
-                        line_id = f"{tr_id}_l{idx+1}"
+                    text_dict[tr_id] = {}
 
-                        # Convert bbox to coordinates string
-                        line_coords = f"{bbox[0]},{bbox[1]} {bbox[2]},{bbox[1]} {bbox[2]},{bbox[3]} {bbox[0]},{bbox[3]}"
+                    if ri is not None:
+                        # Clear existing TextLines from the region
+                        if textregion.textlines:
+                            indices_to_delete = list(range(len(textregion.textlines)))
+                            textregion.delete_textlines(indices_to_delete)
+                        xmin_crop, ymin_crop, xmax_crop, ymax_crop = crop_bbox
+                        # Process each detected textline
+                        for idx, r in enumerate(iterate_level(ri, RIL.TEXTLINE)):
+                            try:
+                                ocr_text = r.GetUTF8Text(RIL.TEXTLINE)
+                            except (RuntimeError, Exception):
+                                continue
+                            if not ocr_text:
+                                continue
+                            ocr_text = unicodedata.normalize('NFC', ocr_text).strip()
+                            if not ocr_text:
+                                continue
 
-                        # Create baseline coordinates (simplified - using bbox bottom as baseline)
-                        baseline_coords = f"{bbox[0]},{bbox[3]} {bbox[2]},{bbox[3]}"
+                            try:
+                                bbox = r.BoundingBox(RIL.TEXTLINE)
+                            except (RuntimeError, Exception):
+                                bbox = None
+                            if not bbox:
+                                continue
+                            bbox = [bbox[0]+xmin_crop, bbox[1]+ymin_crop, bbox[2]+xmin_crop, bbox[3]+ymin_crop]
+                            line_id = f"{tr_id}_l{idx+1}"
 
-                        # Escape the text content
-                        line_text = escape(ocr_text.strip())
+                            # Convert bbox to coordinates string
+                            line_coords = f"{bbox[0]},{bbox[1]} {bbox[2]},{bbox[1]} {bbox[2]},{bbox[3]} {bbox[0]},{bbox[3]}"
 
-                        # Create new TextLine XML element
-                        import lxml.etree as ET
-                        textline_elem = ET.SubElement(textregion.xml_element, f"{{{textregion.ns}}}TextLine")
-                        textline_elem.set("id", line_id)
+                            # Create baseline coordinates (simplified - using bbox bottom as baseline)
+                            baseline_coords = f"{bbox[0]},{bbox[3]} {bbox[2]},{bbox[3]}"
 
-                        # Add Coords element
-                        coords_elem = ET.SubElement(textline_elem, f"{{{textregion.ns}}}Coords")
-                        coords_elem.set("points", line_coords)
+                            # Escape the text content
+                            line_text = escape(ocr_text)
 
-                        # Add Baseline element
-                        baseline_elem = ET.SubElement(textline_elem, f"{{{textregion.ns}}}Baseline")
-                        baseline_elem.set("points", baseline_coords)
+                            # Create new TextLine XML element
+                            import lxml.etree as ET
+                            textline_elem = ET.SubElement(textregion.xml_element, f"{{{textregion.ns}}}TextLine")
+                            textline_elem.set("id", line_id)
 
-                        # Add TextEquiv element
-                        text_equiv_elem = ET.SubElement(textline_elem, f"{{{textregion.ns}}}TextEquiv")
-                        unicode_elem = ET.SubElement(text_equiv_elem, f"{{{textregion.ns}}}Unicode")
-                        unicode_elem.text = line_text
+                            # Add Coords element
+                            coords_elem = ET.SubElement(textline_elem, f"{{{textregion.ns}}}Coords")
+                            coords_elem.set("points", line_coords)
 
-                        print(f'{line_id} -> [green]{line_text}[/green]')
+                            # Add Baseline element
+                            baseline_elem = ET.SubElement(textline_elem, f"{{{textregion.ns}}}Baseline")
+                            baseline_elem.set("points", baseline_coords)
 
-                    # Refresh the textlines list after adding new elements
-                    from pageplus.models.text_elements import Textline
-                    textregion.textlines = [Textline(e, textregion.ns, parent=textregion)
-                                            for e in textregion.xml_element.iter(f"{{{textregion.ns}}}TextLine")]
+                            # Add TextEquiv element
+                            text_equiv_elem = ET.SubElement(textline_elem, f"{{{textregion.ns}}}TextEquiv")
+                            unicode_elem = ET.SubElement(text_equiv_elem, f"{{{textregion.ns}}}Unicode")
+                            unicode_elem.text = line_text
+
+                            text_dict[tr_id][line_id] = {'ocr': ocr_text}
+                            print(f'{line_id} -> [green]{line_text}[/green]')
+
+                        # Refresh the textlines list after adding new elements
+                        from pageplus.models.text_elements import Textline
+                        textregion.textlines = [Textline(e, textregion.ns, parent=textregion)
+                                                for e in textregion.xml_element.iter(f"{{{textregion.ns}}}TextLine")]
+                    else:
+                        logging.info(f"No text detected in TextRegion {tr_id}")
 
             else:  # Textline level (default)
                 # Textline-level processing - process each textline individually
@@ -481,7 +529,9 @@ else:
             rename_page_xml: Annotated[bool,
                                        typer.Option(help="Rename PageXML from .page.xml to .xml.")] = False,
             remove_textregion_text: Annotated[bool,
-                                              typer.Option(help="Remove text from TextRegion elements after OCR.")] = False):
+                                              typer.Option(help="Remove text from TextRegion elements after OCR.")] = False,
+            processing_level: Annotated[str,
+                                        typer.Option(help="Processing level: 'Textline', 'TextRegion', or 'Page'.")] = "Textline"):
         """
         EXPERIMENTAL: NOT SAFE TO USE!
         OCR with the existing layout information. Existing text will be overwritten.
@@ -528,7 +578,7 @@ else:
             process_args.append((
                 xml_file, image_path, image_filename, model_name, save_snippets,
                 text_filter, region_tagfilter, textline_tagfilter, profilelevel,
-                outputdir, dry_run, None, None, None, None, True, create_subfolder, rename_page_xml, remove_textregion_text
+                outputdir, dry_run, None, processing_level, None, None, True, create_subfolder, rename_page_xml, remove_textregion_text
             ))
 
         # Process files in parallel

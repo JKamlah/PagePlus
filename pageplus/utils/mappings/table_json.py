@@ -614,6 +614,8 @@ def table_xml_to_json(
     cells = getattr(table_region, "tablecells", [])
     if not cells and hasattr(table_region, "findall"):
         cells = table_region.findall(".//TableCell")
+        if not cells:
+            cells = table_region.findall(".//{*}TableCell")
 
     cells_list = []
     max_row_idx = 0
@@ -655,12 +657,21 @@ def table_xml_to_json(
                     if uni is not None and uni.text:
                         lines.append(uni.text)
             txt = "\n".join(lines)
+        elif hasattr(cell, "findall") and cell.findall(".//{*}TextLine"):
+            lines = []
+            for tl in cell.findall(".//{*}TextLine"):
+                uni = tl.find(".//{*}Unicode")
+                if uni is not None and uni.text:
+                    lines.append(uni.text)
+            txt = "\n".join(lines)
         elif hasattr(cell, "xml_element") and cell.xml_element is not None:
             uni = cell.xml_element.find(".//{*}Unicode")
             if uni is not None and uni.text:
                 txt = uni.text
         elif hasattr(cell, "find"):
-            uni = cell.find(".//Unicode")
+            uni = cell.find(".//{*}Unicode")
+            if uni is None:
+                uni = cell.find(".//Unicode")
             if uni is not None and uni.text:
                 txt = uni.text
 

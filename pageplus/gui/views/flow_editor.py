@@ -211,6 +211,7 @@ def _initialize_node_types():
     
     # Text-Content (from modification view Tab 3)
     mod_text_content = [
+        ("mod_delete_fill_characters", "✂️", "Delete Fill Characters", "Delete trailing fill characters at line end"),
         ("mod_delete_text", "🗑️", "Delete Text", "Delete text content only"),
     ]
     for node_id, icon, label, desc in mod_text_content:
@@ -2921,6 +2922,7 @@ def _execute_modification_node(node_type_id: str, files: list, params: dict,
         'mod_sort_and_merge': 'sort_and_merge',
         'mod_replace_tags': 'replace_tag',
         'mod_remove_tags': 'remove_tag',
+        'mod_delete_fill_characters': 'delete_fill_characters',
         'mod_delete_text': 'delete_text',
         'mod_delete_textlines': 'delete_textlines',
         'mod_repair': 'repair',

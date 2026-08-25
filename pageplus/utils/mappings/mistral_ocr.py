@@ -38,6 +38,467 @@ MISTRAL_TYPE_MAP: Dict[str, Tuple[str, str]] = {
     "signature": ("TextRegion", "signature"),
 }
 
+# Reverse mapping of PAGE-XML structure attribute / tag to Mistral block type
+PAGE_STRUCTURE_TO_MISTRAL_TYPE: Dict[str, str] = {
+    # Titles & Headings
+    "heading": "title",
+    "title": "title",
+    "doc_title": "title",
+    "paragraph_title": "title",
+    # Headers & Footers
+    "header": "header",
+    "header_image": "header",
+    "footer": "footer",
+    "footer_image": "footer",
+    "page-number": "footer",
+    "catch-word": "footer",
+    # Captions
+    "caption": "caption",
+    "table_caption": "caption",
+    "figure_caption": "caption",
+    "figure_title": "caption",
+    "vision_footnote": "caption",
+    # Lists
+    "list": "list",
+    "list-label": "list",
+    # Equations & Formulas
+    "equation": "equation",
+    "formula": "equation",
+    "display_formula": "equation",
+    "inline_formula": "equation",
+    # Code & Algorithms
+    "code": "code",
+    "algorithm": "code",
+    # References & Footnotes
+    "references": "references",
+    "reference": "references",
+    "reference_content": "references",
+    "footnote": "references",
+    "footnote-continued": "references",
+    "endnote": "references",
+    "toc": "references",
+    "toc-entry": "references",
+    # Marginalia & Aside
+    "marginal": "aside_text",
+    "marginalia": "aside_text",
+    "aside_text": "aside_text",
+    "floating": "aside_text",
+    # Signatures
+    "signature": "signature",
+    "signature-mark": "signature",
+    # Tables
+    "table": "table",
+    # Images & Graphics
+    "image": "image",
+    "figure": "image",
+    "chart": "image",
+    "seal": "image",
+    "stamp": "image",
+    # Paragraphs & Body Text
+    "paragraph": "text",
+    "text": "text",
+    "content": "text",
+    "abstract": "text",
+    "vertical_text": "text",
+    "credit": "text",
+    "drop-capital": "text",
+    "other": "text",
+}
+
+
+def get_mistral_block_type_for_region(region_elem_or_obj: Any, localname: str = "") -> str:
+    """Determine Mistral OCR block type from PAGE XML region element or model object.
+
+    The OCRTextBlock type is derived from the region's structure type or tag.
+    """
+    if not localname:
+        if hasattr(region_elem_or_obj, "get_localname"):
+            localname = region_elem_or_obj.get_localname()
+        elif hasattr(region_elem_or_obj, "tag"):
+            import lxml.etree as ET
+            localname = ET.QName(region_elem_or_obj.tag).localname
+        else:
+            localname = region_elem_or_obj.__class__.__name__
+
+    if localname == "TableRegion":
+        return "table"
+    if localname in ("ImageRegion", "GraphicRegion", "ChartRegion", "LineDrawingRegion"):
+        return "image"
+    if localname == "MathsRegion":
+        return "equation"
+
+    # Extract tag / structure type
+    tag_type = ""
+    custom_str = ""
+    if hasattr(region_elem_or_obj, "get_tag"):
+        tag_type = region_elem_or_obj.get_tag() or ""
+    elif hasattr(region_elem_or_obj, "attrib"):
+        tag_type = region_elem_or_obj.attrib.get("type", "")
+        custom_str = region_elem_or_obj.attrib.get("custom", "")
+
+    if not tag_type and custom_str:
+        from pageplus.utils.converter import custom_to_dict
+        cdict = custom_to_dict(custom_str)
+        tag_type = cdict.get("structure", {}).get("type", "")
+
+    tag_clean = str(tag_type).strip().lower() if tag_type else ""
+    if tag_clean in PAGE_STRUCTURE_TO_MISTRAL_TYPE:
+        return PAGE_STRUCTURE_TO_MISTRAL_TYPE[tag_clean]
+
+    if tag_clean in MISTRAL_TYPE_MAP:
+        return tag_clean
+
+    if tag_clean:
+        return tag_clean
+
+    return "text"
+
+
+def page_to_mistral_ocr(
+    page: Any,
+    page_index: int = 0,
+    extract_page_only: bool = False,
+    **kwargs,
+) -> Dict[str, Any]:
+    """Convert PAGE XML (Page object, Path, XML file string, or XML element/tree) to Mistral Document OCR response JSON.
+
+    Maps:
+    - TextRegion / TextLine elements into OCRTextBlock objects with merged line breaks (\\n).
+    - TableRegion elements into HTML <table> strings via `table_xml_to_html`, referenced in `blocks` and stored in `tables`.
+    - ImageRegion / GraphicRegion elements into image blocks and `images` list.
+    - Preserves ReadingOrder and pixel bounding boxes (top_left_x, top_left_y, bottom_right_x, bottom_right_y).
+
+    Args:
+        page: Page model instance, Path to PAGE XML, XML string, or lxml element/tree.
+        page_index: 0-indexed page index in the OCR response (default 0).
+        extract_page_only: If True, returns only the single OCRPageObject dict.
+                           If False, returns full Mistral OCR response dict {"pages": [...]}.
+
+    Returns:
+        Dictionary following the Mistral Document OCR response JSON schema.
+    """
+    import lxml.etree as ET
+    from pageplus.models.page import Page
+    from pageplus.utils.mappings.table_json import table_xml_to_html
+
+    page_obj: Optional[Page] = None
+    root_elem: Optional[ET.Element] = None
+    ns = "http://schema.primaresearch.org/PAGE/gts/pagecontent/2019-07-15"
+
+    if isinstance(page, Page):
+        page_obj = page
+        root_elem = page.root
+        ns = page.ns or ns
+    elif isinstance(page, Path):
+        if page.is_file():
+            try:
+                page_obj = Page(page)
+                root_elem = page_obj.root
+                ns = page_obj.ns or ns
+            except Exception:
+                pass
+        if root_elem is None and page.is_file():
+            try:
+                xml_text = page.read_text(encoding="utf-8")
+                root_elem = ET.fromstring(xml_text.encode("utf-8"))
+                if hasattr(root_elem, "nsmap") and None in root_elem.nsmap:
+                    ns = root_elem.nsmap[None]
+            except Exception as e:
+                logging.error(f"Error parsing XML file {page}: {e}")
+    elif isinstance(page, str):
+        is_xml_content = page.strip().startswith("<")
+        if not is_xml_content and len(page) < 4096:
+            try:
+                p = Path(page)
+                if p.is_file():
+                    try:
+                        page_obj = Page(p)
+                        root_elem = page_obj.root
+                        ns = page_obj.ns or ns
+                    except Exception:
+                        pass
+                    if root_elem is None:
+                        xml_text = p.read_text(encoding="utf-8")
+                        root_elem = ET.fromstring(xml_text.encode("utf-8"))
+                        if hasattr(root_elem, "nsmap") and None in root_elem.nsmap:
+                            ns = root_elem.nsmap[None]
+            except OSError:
+                pass
+
+        if root_elem is None:
+            try:
+                root_elem = ET.fromstring(page.encode("utf-8"))
+                if hasattr(root_elem, "nsmap") and None in root_elem.nsmap:
+                    ns = root_elem.nsmap[None]
+            except Exception as e:
+                logging.error(f"Error parsing XML string for Mistral OCR: {e}")
+    elif hasattr(page, "getroot"):
+        root_elem = page.getroot()
+        if hasattr(root_elem, "nsmap") and None in root_elem.nsmap:
+            ns = root_elem.nsmap[None]
+    elif isinstance(page, ET._Element) or hasattr(page, "tag"):
+        root_elem = page
+        if hasattr(root_elem, "nsmap") and None in root_elem.nsmap:
+            ns = root_elem.nsmap[None]
+
+    if root_elem is None:
+        empty_page = {
+            "index": page_index,
+            "markdown": "",
+            "dimensions": {"dpi": 72, "height": 1000, "width": 1000},
+            "blocks": [],
+            "tables": [],
+            "images": [],
+        }
+        return empty_page if extract_page_only else {
+            "pages": [empty_page],
+            "model": "mistral-ocr-latest",
+            "usage_info": {"pages_processed": 1},
+        }
+
+    # Locate Page element
+    page_el = root_elem.find(f".//{{{ns}}}Page")
+    if page_el is None:
+        page_el = root_elem.find(".//{*}Page")
+    if page_el is None and ET.QName(root_elem.tag).localname == "Page":
+        page_el = root_elem
+
+    img_width = 1000
+    img_height = 1000
+    if page_el is not None:
+        try:
+            img_width = int(page_el.attrib.get("imageWidth", 1000))
+            img_height = int(page_el.attrib.get("imageHeight", 1000))
+        except (ValueError, TypeError):
+            pass
+    elif page_obj is not None:
+        try:
+            w, h = page_obj.page_size()
+            img_width = int(w or 1000)
+            img_height = int(h or 1000)
+        except Exception:
+            pass
+
+    # Collect reading order IDs
+    ordered_ids: List[str] = []
+    reading_order = root_elem.find(f".//{{{ns}}}ReadingOrder")
+    if reading_order is None:
+        reading_order = root_elem.find(".//{*}ReadingOrder")
+    if reading_order is not None:
+        for group in reading_order.iterfind(".//{*}OrderedGroup"):
+            refs = group.findall("./{*}RegionRefIndexed")
+            for ref in sorted(refs, key=lambda r: int(r.attrib.get("index", 0))):
+                r_id = ref.attrib.get("regionRef")
+                if r_id and r_id not in ordered_ids:
+                    ordered_ids.append(r_id)
+
+    # Valid region tags
+    region_tags = {
+        "TextRegion", "TableRegion", "ImageRegion", "GraphicRegion",
+        "SeparatorRegion", "ChartRegion", "MathsRegion", "LineDrawingRegion",
+        "NoiseRegion", "AdvertRegion", "MusicRegion", "ChemRegion",
+        "MapRegion", "CustomRegion", "UnknownRegion"
+    }
+
+    all_region_elements: List[ET._Element] = []
+    regions_by_id: Dict[str, ET._Element] = {}
+
+    search_container = page_el if page_el is not None else root_elem
+    for child in search_container.iterfind(".//{*}*"):
+        local_tag = ET.QName(child.tag).localname
+        if local_tag in region_tags:
+            parent = child.getparent()
+            parent_tag = ET.QName(parent.tag).localname if parent is not None else ""
+            if parent_tag in ("TableCell", "TextRegion", "TableRegion") and local_tag not in ("TableCell",):
+                continue
+            if child not in all_region_elements:
+                all_region_elements.append(child)
+                c_id = child.attrib.get("id")
+                if c_id:
+                    regions_by_id[c_id] = child
+
+    ordered_elements: List[ET._Element] = []
+    seen_ids = set()
+
+    for r_id in ordered_ids:
+        if r_id in regions_by_id:
+            ordered_elements.append(regions_by_id[r_id])
+            seen_ids.add(r_id)
+
+    for el in all_region_elements:
+        c_id = el.attrib.get("id")
+        if c_id not in seen_ids:
+            ordered_elements.append(el)
+            if c_id:
+                seen_ids.add(c_id)
+
+    blocks: List[Dict[str, Any]] = []
+    tables: List[Dict[str, Any]] = []
+    images: List[Dict[str, Any]] = []
+    markdown_parts: List[str] = []
+
+    for idx, r_elem in enumerate(ordered_elements):
+        local_tag = ET.QName(r_elem.tag).localname
+        region_id = r_elem.attrib.get("id", f"r{idx}")
+
+        # Extract bounding box from Coords
+        pts: List[Tuple[float, float]] = []
+        coords_el = r_elem.find("./{*}Coords")
+        if coords_el is None:
+            coords_el = r_elem.find(f"./{{{ns}}}Coords")
+        if coords_el is not None and "points" in coords_el.attrib:
+            for tok in coords_el.attrib["points"].split():
+                if "," in tok:
+                    try:
+                        x_str, y_str = tok.split(",")
+                        pts.append((float(x_str), float(y_str)))
+                    except ValueError:
+                        pass
+
+        if pts:
+            min_x = min(p[0] for p in pts)
+            min_y = min(p[1] for p in pts)
+            max_x = max(p[0] for p in pts)
+            max_y = max(p[1] for p in pts)
+        else:
+            min_x, min_y, max_x, max_y = 0.0, 0.0, float(img_width), float(img_height)
+
+        tl_x = max(0, min(img_width, int(round(min_x))))
+        tl_y = max(0, min(img_height, int(round(min_y))))
+        br_x = max(tl_x + 1, min(img_width, int(round(max_x))))
+        br_y = max(tl_y + 1, min(img_height, int(round(max_y))))
+
+        b_type = get_mistral_block_type_for_region(r_elem, local_tag)
+
+        if local_tag == "TableRegion" or b_type == "table":
+            tbl_ref_id = f"{region_id}.html" if not region_id.endswith(".html") else region_id
+
+            table_obj = None
+            if page_obj and hasattr(page_obj, "regions") and page_obj.regions.tableregions:
+                for tr in page_obj.regions.tableregions:
+                    if tr.get_id() == region_id:
+                        table_obj = tr
+                        break
+
+            target_table = table_obj if table_obj is not None else r_elem
+            html_table = table_xml_to_html(target_table)
+
+            tables.append({
+                "id": tbl_ref_id,
+                "format": "html",
+                "html": html_table,
+            })
+
+            table_block = {
+                "type": "table",
+                "top_left_x": tl_x,
+                "top_left_y": tl_y,
+                "bottom_right_x": br_x,
+                "bottom_right_y": br_y,
+                "table_id": tbl_ref_id,
+                "content": f"[{tbl_ref_id}]({tbl_ref_id})",
+            }
+            blocks.append(table_block)
+            markdown_parts.append(f"[{tbl_ref_id}]({tbl_ref_id})")
+
+        elif local_tag in ("ImageRegion", "GraphicRegion", "ChartRegion", "LineDrawingRegion") or b_type == "image":
+            custom_str = r_elem.attrib.get("custom", "")
+            img_id = None
+            if custom_str:
+                import re
+                m = re.search(r'image\s*\{\s*id\s*:\s*([^;]+)\s*;?\s*\}', custom_str)
+                if m:
+                    img_id = m.group(1).strip()
+            if not img_id:
+                img_id = f"img_{region_id}"
+
+            images.append({
+                "id": img_id,
+                "top_left_x": tl_x,
+                "top_left_y": tl_y,
+                "bottom_right_x": br_x,
+                "bottom_right_y": br_y,
+            })
+
+            image_block = {
+                "type": "image",
+                "top_left_x": tl_x,
+                "top_left_y": tl_y,
+                "bottom_right_x": br_x,
+                "bottom_right_y": br_y,
+                "image_id": img_id,
+                "content": f"![{img_id}]({img_id})",
+            }
+            blocks.append(image_block)
+            markdown_parts.append(f"![{img_id}]({img_id})")
+
+        else:
+            lines: List[str] = []
+            for tl in r_elem.findall(".//{*}TextLine"):
+                uni_el = tl.find(".//{*}Unicode")
+                if uni_el is not None and uni_el.text is not None:
+                    lines.append(uni_el.text)
+                else:
+                    lines.append("")
+
+            if not lines:
+                uni_el = r_elem.find(".//{*}Unicode")
+                if uni_el is not None and uni_el.text:
+                    lines = uni_el.text.splitlines()
+
+            content_text = "\n".join(lines)
+
+            text_block = {
+                "type": b_type,
+                "top_left_x": tl_x,
+                "top_left_y": tl_y,
+                "bottom_right_x": br_x,
+                "bottom_right_y": br_y,
+                "content": content_text,
+            }
+            blocks.append(text_block)
+
+            if b_type == "title":
+                markdown_parts.append(f"# {content_text}")
+            elif b_type == "equation":
+                markdown_parts.append(f"$${content_text}$$")
+            elif b_type == "code":
+                markdown_parts.append(f"```\n{content_text}\n```")
+            else:
+                markdown_parts.append(content_text)
+
+    page_object = {
+        "index": page_index,
+        "markdown": "\n\n".join(markdown_parts),
+        "dimensions": {
+            "dpi": 72,
+            "height": img_height,
+            "width": img_width,
+        },
+        "blocks": blocks,
+        "tables": tables,
+        "images": images,
+    }
+
+    if extract_page_only:
+        return page_object
+
+    return {
+        "pages": [page_object],
+        "model": "mistral-ocr-latest",
+        "usage_info": {
+            "pages_processed": 1,
+        },
+    }
+
+
+def page_to_mistral_page_object(page: Any, page_index: int = 0, **kwargs) -> Dict[str, Any]:
+    """Helper to convert PAGE XML to a single Mistral OCRPageObject dictionary."""
+    return page_to_mistral_ocr(page, page_index=page_index, extract_page_only=True, **kwargs)
+
+
+page_xml_to_mistral_ocr = page_to_mistral_ocr
+
 
 def parse_html_table_grid(html_str: str) -> List[Dict[str, Any]]:
     """Parse HTML table string into structured list of table cell dicts.
@@ -299,9 +760,28 @@ def mistral_ocr_to_page(
         # Check block type
         if b_type == "table":
             table_id_key = block.get("table_id")
-            html_table = tables_by_id.get(str(table_id_key), "") if table_id_key else ""
-            if not html_table and block.get("content") and "<table" in str(block.get("content")).lower():
-                html_table = str(block.get("content"))
+            html_table = ""
+            if table_id_key:
+                t_key_str = str(table_id_key)
+                html_table = tables_by_id.get(t_key_str, "")
+                if not html_table:
+                    if t_key_str.endswith(".html"):
+                        html_table = tables_by_id.get(t_key_str[:-5], "")
+                    else:
+                        html_table = tables_by_id.get(f"{t_key_str}.html", "")
+            if not html_table and block.get("content"):
+                c_str = str(block.get("content"))
+                import re
+                m_link = re.search(r'\[([^\]]+)\]\(([^)]+)\)', c_str)
+                if m_link:
+                    ref_key = m_link.group(2)
+                    html_table = tables_by_id.get(ref_key, "")
+                    if not html_table and ref_key.endswith(".html"):
+                        html_table = tables_by_id.get(ref_key[:-5], "")
+                if not html_table and "<table" in c_str.lower():
+                    html_table = c_str
+            if not html_table and len(tables_by_id) == 1:
+                html_table = next(iter(tables_by_id.values()))
 
             cells = parse_html_table_grid(html_table)
             if cells:

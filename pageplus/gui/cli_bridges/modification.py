@@ -1,7 +1,7 @@
 from importlib import util
 from typing import Any, Dict, List, Optional
 
-from pageplus.cli.modification import (delete_text, delete_textlines,
+from pageplus.cli.modification import (delete_fill_characters, delete_text, delete_textlines,
                                        extend_lines, fit_into_parent,
                                        match_textlines_to_region, match_textlines_to_smallest_region,
                                        merge_columnaligned_regions,
@@ -58,6 +58,31 @@ class ModificationBridge(CLIBridge):
                 }
             except Exception as e:
                 return {"success": False, "output": str(e)}
+
+    def delete_fill_characters(
+        self,
+        files: List[str],
+        levels: List[str] = ["TableRegion"],
+        fill_character: str = ".",
+        min_count: int = 2,
+        outputdir: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Delete trailing fill characters from textlines."""
+        try:
+            UndoManager.add_undo_state("Delete Fill Characters")
+            delete_fill_characters(
+                inputs=files,
+                levels=levels,
+                fill_character=fill_character,
+                min_count=min_count,
+                outputdir=outputdir
+            )
+            return {
+                "success": True,
+                "output": "Fill characters deletion completed successfully"
+            }
+        except Exception as e:
+            return {"success": False, "output": str(e)}
 
     def delete_text(
         self,

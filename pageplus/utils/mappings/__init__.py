@@ -26,7 +26,12 @@ from pageplus.utils.mappings.pp_layout import pp_layout_json_to_page
 from pageplus.utils.mappings.pp_layout_extend import pp_layout_extend_json_to_page
 from pageplus.utils.mappings.pp_layout_extend_table import pp_layout_extend_table_json_to_page
 from pageplus.utils.mappings.segmentation import segmentation_to_page
-from pageplus.utils.mappings.mistral_ocr import mistral_ocr_to_page
+from pageplus.utils.mappings.mistral_ocr import (
+    mistral_ocr_to_page,
+    page_to_mistral_ocr,
+    page_to_mistral_page_object,
+    page_xml_to_mistral_ocr,
+)
 from pageplus.utils.mappings.markdown_parser import (
     clean_markdown_line,
     clean_markdown_text,
@@ -56,6 +61,9 @@ __all__ = [
     "pp_layout_extend_table_json_to_page",
     "segmentation_to_page",
     "mistral_ocr_to_page",
+    "page_to_mistral_ocr",
+    "page_to_mistral_page_object",
+    "page_xml_to_mistral_ocr",
     "clean_markdown_line",
     "clean_markdown_text",
     "strip_markdown_headers",
