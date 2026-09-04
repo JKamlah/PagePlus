@@ -12,14 +12,52 @@ from pageplus.cli.modification import (delete_fill_characters, delete_text, dele
                                        remove_tag, repair, repair_dummy_region,
                                        replace_tag, reduce_polygon_points, simplify_polygon, set_page_version,
                                        sort, sort_and_merge,
-                                       sort_regions, top_tier_textregion,
-                                       translate_lines)
+                                       sort_regions, sort_two_column, text_mapping, top_tier_textregion,
+                                       translate_lines, update_reading_order_index)
 from pageplus.gui.cli_bridges.base import CLIBridge
 from pageplus.gui.utils.undo import UndoManager
 
 
 class ModificationBridge(CLIBridge):
     """Bridge for modification operations."""
+
+    def text_mapping(
+        self,
+        files: List[str],
+        mapping_profile: str = "GT4Hist",
+        textnormalization: str = "NFC",
+        mode: str = "deterministic",
+        report: bool = False,
+        dry_run: bool = False,
+        outputdir: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Apply guideline-based text mapping to files."""
+        try:
+            if not dry_run:
+                UndoManager.add_undo_state("Text Mapping")
+            text_mapping(
+                inputs=files,
+                mapping_profile=mapping_profile,
+                textnormalization=textnormalization,
+                mode=mode,
+                report=report,
+                dry_run=dry_run,
+                outputdir=outputdir
+            )
+            return {
+                "success": True,
+                "output": "Text mapping completed successfully"
+            }
+        except Exception as e:
+            return {"success": False, "output": str(e)}
+
+    @staticmethod
+    def get_mapping_profiles() -> List[str]:
+        """Returns a list of available mapping profiles."""
+        from pageplus.gui.utils.guideline_editor_utils import GuidelineManager
+        manager = GuidelineManager(profile_type="mappings", filename="mappings.json")
+        return manager.get_profile_names()
+
 
     if (spec := util.find_spec('spellchecker')) is not None:
         from pageplus.cli.modification import \
@@ -630,6 +668,66 @@ class ModificationBridge(CLIBridge):
             return {
                 "success": True,
                 "output": "Regions sorted successfully"
+            }
+        except Exception as e:
+            return {"success": False, "output": str(e)}
+
+    def sort_two_column(
+        self,
+        files: List[str],
+        based_on_baselines: bool = False,
+        gap_threshold: Optional[float] = None,
+        center_tolerance: float = 0.15,
+        span_width_ratio: float = 0.6,
+        sort_lines: bool = True,
+        update_reading_order: bool = True,
+        outputdir: Optional[str] = None,
+        dry_run: bool = False
+    ) -> Dict[str, Any]:
+        """Apply Two-Column Sorting Algorithm for newspapers and periodicals."""
+        try:
+            if not dry_run:
+                UndoManager.add_undo_state("Two-Column Sorting")
+            sort_two_column(
+                inputs=files,
+                based_on_baselines=based_on_baselines,
+                gap_threshold=gap_threshold,
+                center_tolerance=center_tolerance,
+                span_width_ratio=span_width_ratio,
+                sort_lines=sort_lines,
+                update_reading_order=update_reading_order,
+                outputdir=outputdir,
+                dry_run=dry_run
+            )
+            return {
+                "success": True,
+                "output": "Two-column sorting completed successfully"
+            }
+        except Exception as e:
+            return {"success": False, "output": str(e)}
+
+    def update_reading_order_index(
+        self,
+        files: List[str],
+        reorder_dom: bool = True,
+        sort_lines: bool = False,
+        outputdir: Optional[str] = None,
+        dry_run: bool = False
+    ) -> Dict[str, Any]:
+        """Update region custom reading order attributes according to the ReadingOrder element."""
+        try:
+            if not dry_run:
+                UndoManager.add_undo_state("Update Reading Order Indices")
+            update_reading_order_index(
+                inputs=files,
+                reorder_dom=reorder_dom,
+                sort_lines=sort_lines,
+                outputdir=outputdir,
+                dry_run=dry_run
+            )
+            return {
+                "success": True,
+                "output": "Reading order indices updated successfully"
             }
         except Exception as e:
             return {"success": False, "output": str(e)}

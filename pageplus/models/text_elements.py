@@ -152,9 +152,7 @@ class TextRegion(Region):
         sorting_lines = sorted(orig_sorted_lines, key=lambda x: x[1].y)
         sl_idx = 0
         while sl_idx < num_lines - 1:
-            for sl_next in range(1, 4):
-                if sl_idx + sl_next > num_lines - 1:
-                    continue
+            for sl_next in range(1, num_lines - sl_idx):
                 rng = range(max(int(sorting_lines[sl_idx][2].bounds[1]),
                                 int(sorting_lines[sl_idx + sl_next][2].bounds[1])),
                             min(int(sorting_lines[sl_idx][2].bounds[3]),
@@ -168,7 +166,7 @@ class TextRegion(Region):
                     # Check if the second line is behind the first
                     # (x-coordinate)
                     if sorting_lines[sl_idx +
-                                     sl_next][1].bounds[0] < sorting_lines[sl_idx][2].bounds[0]:
+                                     sl_next][2].bounds[0] < sorting_lines[sl_idx][2].bounds[0]:
                         logging.info(
                             f"RO-Lineswap: In textregion {self.get_id()} the lines {self.textlines[sorting_lines[sl_idx][0]].get_id()} and {self.textlines[sorting_lines[sl_idx + sl_next][0]].get_id()} got swapped.")
                         sorting_lines[sl_idx], sorting_lines[sl_idx +
@@ -206,38 +204,68 @@ class TextRegion(Region):
     def merge_split_up_lines(self, max_x_diff: int = 64, max_y_diff: int = 12):
         """
         Merges text lines that are close to each other based on x and y difference thresholds.
+        Thresholds scale dynamically with line height for large headings.
         """
+        def _get_line_baseline(line):
+            bl = line.get_baseline_coordinates(returntype="tuple")
+            if not bl and hasattr(line, "_compute_baseline"):
+                bl = line._compute_baseline()
+            return bl
 
-        baseline_tuples = [line.get_baseline_coordinates(
-            returntype="tuple") for line in self.textlines]
+        def _get_line_height(line):
+            poly = line.get_coordinates(returntype="polygon")
+            if poly and not poly.is_empty:
+                mrr = poly.minimum_rotated_rectangle
+                coords = list(mrr.exterior.coords)[:-1]
+                if len(coords) >= 4:
+                    s1 = LineString([coords[0], coords[1]]).length
+                    s2 = LineString([coords[1], coords[2]]).length
+                    return min(s1, s2)
+                return poly.bounds[3] - poly.bounds[1]
+            return 0
+
+        baseline_tuples = [_get_line_baseline(line) for line in self.textlines]
 
         i = 1
         while i < len(self.textlines):
             current_baseline = baseline_tuples[i]
             previous_baseline = baseline_tuples[i - 1]
 
+            line_height = max(
+                _get_line_height(self.textlines[i - 1]),
+                _get_line_height(self.textlines[i])
+            )
+            # Dynamic thresholds scaling with line height (e.g. for large headings/fonts)
+            effective_max_x = max(max_x_diff, int(line_height * 0.5))
+            effective_max_y = max(max_y_diff, int(line_height * 0.15))
+
             if self._can_merge_lines(
                     current_baseline,
                     previous_baseline,
-                    max_x_diff,
-                    max_y_diff):
+                    effective_max_x,
+                    effective_max_y):
                 try:
                     new_polygon, new_baseline = self._merge_line_polygons_and_baselines(
                         i, previous_baseline, current_baseline)
                     
                     if isinstance(new_polygon, MultiPolygon):
                         new_polygon = new_polygon.convex_hull
-                    self.textlines[i].update_coordinates(
-                        new_polygon.exterior, inputtype="polygon")
+                    if hasattr(new_polygon, "exterior"):
+                        self.textlines[i].update_coordinates(
+                            new_polygon.exterior, inputtype="polygon")
                     self.textlines[i].update_baseline_coordinates(new_baseline)
-                    self.textlines[i].update_text(
-                        f"{self.textlines[i - 1].get_text()} {self.textlines[i].get_text()}")
+                    
+                    text_prev = (self.textlines[i - 1].get_text() or "").strip()
+                    text_curr = (self.textlines[i].get_text() or "").strip()
+                    merged_text = f"{text_prev} {text_curr}".strip() if (text_prev and text_curr) else (text_prev or text_curr)
+                    self.textlines[i].update_text(merged_text)
+                    
                     self.delete_textlines([i - 1])
                     baseline_tuples[i] = new_baseline
                     baseline_tuples.pop(i - 1)
-                except GEOSException:
+                except Exception as e:
                     logging.warning(
-                        f"A conflict occurred while merging lines {self.textlines[i - 1].get_id()} and {self.textlines[i].get_id()}")
+                        f"A conflict occurred while merging lines {self.textlines[i - 1].get_id()} and {self.textlines[i].get_id()}: {e}")
                     i += 1
                     continue
             else:
@@ -254,8 +282,9 @@ class TextRegion(Region):
         """
         if not current_baseline or not previous_baseline:
             return False
-        return abs(previous_baseline[-1][0] - current_baseline[0][0]) <= max_x_diff and \
-            abs(previous_baseline[-1][1] - current_baseline[0][1]) <= max_y_diff
+        x_gap = current_baseline[0][0] - previous_baseline[-1][0]
+        y_diff = abs(previous_baseline[-1][1] - current_baseline[0][1])
+        return -max_x_diff <= x_gap <= max_x_diff and y_diff <= max_y_diff
 
     def _merge_line_polygons_and_baselines(
             self,
@@ -269,7 +298,7 @@ class TextRegion(Region):
                   for c1, c2 in
                   zip(line.get_coordinates(returntype='polygon').minimum_rotated_rectangle.exterior.coords[:-1],
                       line.get_coordinates(returntype='polygon').minimum_rotated_rectangle.exterior.coords[1:])]
-        mean_width = np.median(widths)
+        mean_width = np.median(widths) if widths else 10
         polygon_to_polygon_bridge = self._calculate_bridge_region(previous_baseline,
                                                                   self.textlines[line_index - 1].get_coordinates('tuple'),
                                                                   current_baseline,
@@ -290,12 +319,16 @@ class TextRegion(Region):
         """
         Calculates a bridge region between two polygons based on their baselines and mean width.
         """
-        # Calculate a region between the two regions
-        bridge_coords = [tuple for tuple in previous_textline if
-                         tuple[0] > previous_baseline[-1][0] - int(mean_width * 0.75)] + \
-                        [tuple for tuple in current_textline if
-                         tuple[0] < current_baseline[0][0] + int(mean_width * 0.75)]
-        return concave_hull(Polygon(bridge_coords), ratio=1.0)
+        bridge_coords = [t for t in (previous_textline or []) if
+                         t[0] > previous_baseline[-1][0] - int(mean_width * 0.75)] + \
+                        [t for t in (current_textline or []) if
+                         t[0] < current_baseline[0][0] + int(mean_width * 0.75)]
+        if len(bridge_coords) >= 3:
+            try:
+                return MultiPoint(bridge_coords).convex_hull
+            except Exception:
+                pass
+        return None
 
     def _unify_polygons(self, line_index, bridge_polygon):
         """
@@ -305,7 +338,11 @@ class TextRegion(Region):
                                           1].get_coordinates(returntype='polygon')
         current_polygon = self.textlines[line_index].get_coordinates(
             returntype='polygon')
-        return unary_union([previous_polygon, bridge_polygon, current_polygon])
+        polygons = [p for p in [previous_polygon, bridge_polygon, current_polygon] if p is not None and not p.is_empty]
+        if not polygons:
+            return None
+        union = unary_union(polygons)
+        return union.convex_hull if isinstance(union, MultiPolygon) else union
 
     def get_mean_textline_centroid(self):
         """

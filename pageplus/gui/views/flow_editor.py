@@ -211,6 +211,7 @@ def _initialize_node_types():
     
     # Text-Content (from modification view Tab 3)
     mod_text_content = [
+        ("mod_text_mapping", "🔤", "Text Mapping", "Apply guideline-based text/character mapping profile"),
         ("mod_delete_fill_characters", "✂️", "Delete Fill Characters", "Delete trailing fill characters at line end"),
         ("mod_delete_text", "🗑️", "Delete Text", "Delete text content only"),
     ]
@@ -276,6 +277,8 @@ def _initialize_node_types():
         ("mod_sort", "🔢", "Sort", "Sort textlines per region"),
         ("mod_sort_and_merge", "🔢", "Sort and Merge", "Sort and merge textlines"),
         ("mod_sort_regions", "🔢", "Sort Regions", "Sort regions in reading order"),
+        ("mod_sort_two_column", "📰", "Two-Column Sorting", "Sort two-column newspaper pages in reading order"),
+        ("mod_update_reading_order_index", "🔢", "Update Reading Order Indices", "Sync custom reading order attributes with ReadingOrder"),
     ]
     for node_id, icon, label, desc in mod_sorting:
         register_node_type(NodeType(
@@ -1606,6 +1609,30 @@ def _render_modification_params(node: Dict, node_type: NodeType):
         dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
         node['params'] = {'based_on_baselines': based_on_baselines, 'overlap_pct': overlap_pct, 'nested_regions': nested_regions, 'dry_run': dry_run}
 
+    elif node_type.id == "mod_sort_two_column":
+        based_on_baselines = st.checkbox("Use mean baseline centroid", value=params.get('based_on_baselines', False), key=f"bob_{node_id}")
+        gap_threshold = st.number_input("Gap Threshold (px, 0 = disabled)", min_value=0.0, value=params.get('gap_threshold', 0.0), step=10.0, key=f"gt_{node_id}")
+        center_tolerance = st.slider("Center Tolerance", 0.05, 0.35, value=params.get('center_tolerance', 0.15), step=0.01, key=f"ct_{node_id}")
+        span_width_ratio = st.slider("Spanning Heading Width Ratio", 0.3, 0.9, value=params.get('span_width_ratio', 0.6), step=0.05, key=f"sw_{node_id}")
+        sort_lines = st.checkbox("Sort textlines internally", value=params.get('sort_lines', True), key=f"sl_{node_id}")
+        update_reading_order = st.checkbox("Update <ReadingOrder> XML", value=params.get('update_reading_order', True), key=f"ro_{node_id}")
+        dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
+        node['params'] = {
+            'based_on_baselines': based_on_baselines,
+            'gap_threshold': gap_threshold,
+            'center_tolerance': center_tolerance,
+            'span_width_ratio': span_width_ratio,
+            'sort_lines': sort_lines,
+            'update_reading_order': update_reading_order,
+            'dry_run': dry_run
+        }
+
+    elif node_type.id == "mod_update_reading_order_index":
+        reorder_dom = st.checkbox("Reorder XML elements to match ReadingOrder", value=params.get('reorder_dom', True), key=f"rdom_{node_id}")
+        sort_lines = st.checkbox("Sort textlines internally", value=params.get('sort_lines', False), key=f"sl_{node_id}")
+        dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
+        node['params'] = {'reorder_dom': reorder_dom, 'sort_lines': sort_lines, 'dry_run': dry_run}
+
     # New Format & Metadata nodes
     elif node_type.id == "mod_set_page_version":
         from pageplus.utils.constants import PcGtsVersion
@@ -1753,6 +1780,43 @@ def _render_modification_params(node: Dict, node_type: NodeType):
         merge_gap_y = st.number_input("Merge lines gap Y", min_value=0, value=params.get('merge_gap_y', 10), key=f"mgy_{node_id}")
         dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
         node['params'] = {'merge_lines_gap_x': merge_gap_x, 'merge_lines_gap_y': merge_gap_y, 'dry_run': dry_run}
+
+    # Text Mapping
+    elif node_type.id == "mod_text_mapping":
+        from pageplus.gui.cli_bridges.guidelines import GuidelinesBridge
+        mapping_profiles = GuidelinesBridge.get_mapping_profiles()
+        if not mapping_profiles:
+            from pageplus.gui.views.export import get_mapping_profiles
+            mapping_profiles = get_mapping_profiles()
+
+        profile_options = mapping_profiles if mapping_profiles else ["GT4Hist"]
+        current_profile = params.get('mapping_profile', 'GT4Hist')
+        profile_index = profile_options.index(current_profile) if current_profile in profile_options else 0
+
+        mapping_profile = st.selectbox(
+            "Mapping Profile",
+            options=profile_options,
+            index=profile_index,
+            key=f"mp_{node_id}"
+        )
+
+        norm_options = ["NFC", "NFD", "NFKC", "NFKD", "None"]
+        current_norm = params.get('textnormalization', 'NFC')
+        norm_index = norm_options.index(current_norm) if current_norm in norm_options else 0
+
+        textnormalization = st.selectbox(
+            "Unicode Normalization",
+            options=norm_options,
+            index=norm_index,
+            key=f"tn_{node_id}"
+        )
+
+        dry_run = st.checkbox("Dry run only", value=params.get('dry_run', False), key=f"dryrun_{node_id}")
+        node['params'] = {
+            'mapping_profile': mapping_profile,
+            'textnormalization': textnormalization,
+            'dry_run': dry_run
+        }
 
     else:
         st.caption("No parameters for this node")
@@ -2918,12 +2982,15 @@ def _execute_modification_node(node_type_id: str, files: list, params: dict,
         'mod_merge_regions': 'merge_overlapping_textregions',
         'mod_merge_column_aligned': 'merge_columnaligned_regions',
         'mod_sort_regions': 'sort_regions',
+        'mod_sort_two_column': 'sort_two_column',
+        'mod_update_reading_order_index': 'update_reading_order_index',
         'mod_sort': 'sort',
         'mod_sort_and_merge': 'sort_and_merge',
         'mod_replace_tags': 'replace_tag',
         'mod_remove_tags': 'remove_tag',
         'mod_delete_fill_characters': 'delete_fill_characters',
         'mod_delete_text': 'delete_text',
+        'mod_text_mapping': 'text_mapping',
         'mod_delete_textlines': 'delete_textlines',
         'mod_repair': 'repair',
         'mod_repair_dummy': 'repair_dummy_region',
@@ -3026,6 +3093,21 @@ def _execute_modification_node(node_type_id: str, files: list, params: dict,
         kwargs['nested_regions'] = params.get('nested_regions', False)
         kwargs['dry_run'] = params.get('dry_run', dry_run)
 
+    elif node_type_id == 'mod_sort_two_column':
+        kwargs['based_on_baselines'] = params.get('based_on_baselines', False)
+        gap_t = params.get('gap_threshold', 0.0)
+        kwargs['gap_threshold'] = gap_t if gap_t and gap_t > 0 else None
+        kwargs['center_tolerance'] = params.get('center_tolerance', 0.15)
+        kwargs['span_width_ratio'] = params.get('span_width_ratio', 0.6)
+        kwargs['sort_lines'] = params.get('sort_lines', True)
+        kwargs['update_reading_order'] = params.get('update_reading_order', True)
+        kwargs['dry_run'] = params.get('dry_run', dry_run)
+
+    elif node_type_id == 'mod_update_reading_order_index':
+        kwargs['reorder_dom'] = params.get('reorder_dom', True)
+        kwargs['sort_lines'] = params.get('sort_lines', False)
+        kwargs['dry_run'] = params.get('dry_run', dry_run)
+
     elif node_type_id == 'mod_sort':
         # No special parameters
         pass
@@ -3037,6 +3119,11 @@ def _execute_modification_node(node_type_id: str, files: list, params: dict,
     elif node_type_id == 'mod_split_big_regions':
         kwargs['split_min_area'] = params.get('split_min_area', 4500000)
         kwargs['scale_min_area_by_maxlines'] = params.get('scale_min_area', 140)
+
+    elif node_type_id == 'mod_text_mapping':
+        kwargs['mapping_profile'] = params.get('mapping_profile', 'GT4Hist')
+        kwargs['textnormalization'] = params.get('textnormalization', 'NFC')
+        kwargs['dry_run'] = params.get('dry_run', dry_run)
 
     # New Format & Metadata nodes
     elif node_type_id == 'mod_set_page_version':

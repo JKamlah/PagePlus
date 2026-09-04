@@ -17,6 +17,7 @@ from pageplus.utils.mets_mods import (
     File,
     repair_namespace,
     validate_mets,
+    collect_mets_download_tasks,
 )
 
 app = typer.Typer()
@@ -102,60 +103,46 @@ def show_filegrps(
 def download(
         mets: Annotated[str,
                         typer.Argument(
-                            exists=True,
-                            help="Path to METS XML file or url.",
-                            callback=validate_mets,),],
+                            help="Path to METS XML file or URL.",
+                            callback=validate_mets,)],
         strict: Annotated[bool, typer.Option(help="Do not allow parsing of unknown attributes and structures.")] = False,
         verbose: Annotated[bool, typer.Option(help="Print warnings to the terminal.")] = False,
         tag: Annotated[str, typer.Option(help="Filter FileGrp by USE or ID tag.")] = "",
         nametag: Annotated[str, typer.Option(help="Use the original filename or the USE or ID tag for filename. (default: all)")] = None,
         selection: Annotated[List[int], typer.Option(help="The documents that should be downloaded, e.g 0,1,3 .")] = None,
-        outputdir: Annotated[Path, typer.Option(help="Directory to save the files. If not specified, files will be saved in the same directory as the METS file.")] = None,
+        page_range: Annotated[Optional[str], typer.Option("--page-range", "-r", help="Page range to download, e.g., '1-5,7,9-12'.")] = None,
+        output_dir: Annotated[Optional[Path], typer.Option("--output-dir", "-o", help="Directory to save the files. If not specified, files will be saved in the same directory as the METS file.")] = None,
         batch_size: Annotated[int, typer.Option("--batch-size", help="Number of files to download in parallel.")] = 25,
         skip_existing: Annotated[bool, typer.Option("--skip-existing/--no-skip-existing", help="Skip images/files if they already exist on disk.")] = True):
     """
     Download files referenced in a METS XML document by <fileGrp>.
     """
-    if mets.startswith("http"):
-        output_path = get_url(mets, Path(outputdir).joinpath('mets.xml'))
-        if output_path:
-            mets = output_path
+    if mets.startswith(("http://", "https://")):
+        base_output = Path(output_dir) if output_dir is not None else Path(".")
+        base_output.mkdir(parents=True, exist_ok=True)
+        target_mets = base_output / "mets.xml"
+        if target_mets.exists():
+            print(f"ℹ️ METS XML already exists at: {target_mets}")
+            mets = str(target_mets)
         else:
-            raise typer.Exit(1)
+            output_path = get_url(mets, target_mets)
+            if output_path and Path(output_path).exists():
+                mets = str(output_path)
+            else:
+                raise typer.Exit(1)
+    else:
+        base_output = Path(mets).parent if output_dir is None else Path(output_dir)
+
     mets_files = parse_mets_xml_multiple_roots(mets, loose=not strict, verbose=verbose)
-    base_output = Path(mets).parent if outputdir is None else Path(outputdir)
 
-    # Use async downloads
-    download_tasks = []
-
-    for idx, doc in enumerate(mets_files):
-        if selection and idx + 1 not in selection:
-            continue
-        output_dir = base_output if len(mets_files) == 1 else base_output / f"{(idx + 1):03}"
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        for file_grp in doc.recursive_find(doc, "fileGrp"):
-            use = file_grp.attributes.get("USE")
-            grp_id = file_grp.attributes.get("ID")
-
-            if tag and tag not in {use, grp_id}:
-                continue
-
-            grp_folder = output_dir / (use or grp_id or "unknown")
-            grp_folder.mkdir(parents=True, exist_ok=True)
-
-            for child in file_grp.children:
-                if isinstance(child, FileGrp):
-                    nested_use = child.attributes.get("USE")
-                    nested_id = child.attributes.get("ID")
-                    nested_folder = grp_folder / (nested_use or nested_id or "nested")
-                    nested_folder.mkdir(parents=True, exist_ok=True)
-
-                    for file in child.children:
-                        if isinstance(file, File):
-                            download_tasks.append((file, nested_folder, nametag))
-                elif isinstance(child, File):
-                    download_tasks.append((child, grp_folder, nametag))
+    download_tasks = collect_mets_download_tasks(
+        mets_files=mets_files,
+        base_output=base_output,
+        tag=tag,
+        nametag=nametag,
+        selection=selection,
+        page_range=page_range,
+    )
 
     if download_tasks:
         stats = asyncio.run(download_files_async(download_tasks, batch_size, base_output, skip_existing=skip_existing))
@@ -166,6 +153,8 @@ def download(
         print(f"   ❌ Failed: {stats['failed']}")
         if base_output:
             print(f"   📄 Details saved to: {base_output / 'info.txt'}")
+    else:
+        print("No files to download matching the criteria.")
 
 
 @app.command()
@@ -234,18 +223,28 @@ def get_oai(
 @app.command()
 def get_url(url: Annotated[str, typer.Argument(help="URL to the METS XML file.")],
             output_path: Annotated[Path, typer.Option("--output-dir", "-o",
-                                                      help="Directory to save the METS XML file.")] = Path("."),
+                                                      help="Directory or file path to save the METS XML file.")] = Path("."),
             ):
     """
     Download a METS XML file directly from a URL and save to disk.
     """
+    headers = {
+        "User-Agent": os.getenv("PAGEPLUS_USER_AGENT", "PagePlus (https://github.com/berd-nfdi/PagePlus)")
+    }
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, timeout=20, headers=headers)
         response.raise_for_status()
-        output_path = output_path / "mets.xml" if output_path.is_dir() else output_path
-        output_path.write_text(response.text, encoding="utf-8")
-        print(f"✅ Downloaded METS XML to: {output_path}")
-        return output_path
+
+        if output_path.is_dir() or str(output_path).endswith(("/", "\\")) or output_path.suffix != ".xml":
+            output_path.mkdir(parents=True, exist_ok=True)
+            target_file = output_path / "mets.xml"
+        else:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            target_file = output_path
+
+        target_file.write_text(response.text, encoding="utf-8")
+        print(f"✅ Downloaded METS XML to: {target_file}")
+        return target_file
     except Exception as e:
         print(f"[red]❌ Failed to download METS XML: {e}[/red]")
         return None

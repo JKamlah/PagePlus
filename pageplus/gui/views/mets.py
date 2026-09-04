@@ -92,7 +92,7 @@ def show_filegrps_form(bridge: MetsBridge):
 
 def download_form(bridge: MetsBridge):
     """Show the form for downloading files."""
-    st.text_input("Path to METS XML file", key="mets_file_download")
+    st.text_input("Path or URL to METS XML file", key="mets_file_download")
     if st.button("Select File", key="select_mets_download"):
         selected_files = pick_files(initial_dir=get_loaded_workspace_dir(), filetypes=[("XML files", "*.xml")])
         if selected_files:
@@ -112,6 +112,7 @@ def download_form(bridge: MetsBridge):
         tag = st.text_input("Filter by USE or ID tag (optional)", key="mets_download_tag")
         nametag = st.text_input("Filename tag (optional, default: href)", help="Use the original filename or the USE or ID tag for filename.")
         selection_str = st.text_input("Filter by document number (e.g., 1, 2, 4)")
+        page_range = st.text_input("Page range (optional, e.g. 1-5, 7, 9-12)", key="page_range_mets", help="Page range to download, e.g., '1-5,7,9-12'.")
 
         st.markdown("##### Options")
         col_opts1, col_opts2, col_opts3, col_opts4 = st.columns(4)
@@ -134,7 +135,12 @@ def download_form(bridge: MetsBridge):
         submitted = st.form_submit_button("Download")
 
         if submitted:
-            if st.session_state.mets_file_download and Path(st.session_state.mets_file_download).exists() and st.session_state.output_dir_download:
+            mets_input = st.session_state.get("mets_file_download", "").strip()
+            out_dir_input = st.session_state.get("output_dir_download", "").strip()
+            is_url = mets_input.startswith(("http://", "https://"))
+            is_valid_local = Path(mets_input).exists() if (mets_input and not is_url) else False
+
+            if mets_input and (is_url or is_valid_local) and out_dir_input:
                 try:
                     selection = [int(s.strip()) for s in selection_str.split(',')] if selection_str else None
                     tags = [t.strip() for t in tag.split(',')] if tag else [tag.strip()]
@@ -160,13 +166,14 @@ def download_form(bridge: MetsBridge):
 
                         # Start download
                         result = bridge.download(
-                            mets=st.session_state.mets_file_download,
+                            mets=mets_input,
                             strict=strict_download,
                             verbose=verbose_download,
                             tag=tag_item,
                             nametag=nametag,
                             selection=selection,
-                            outputdir=Path(st.session_state.output_dir_download),
+                            page_range=page_range.strip() if page_range else None,
+                            output_dir=Path(out_dir_input),
                             batch_size=batch_size,
                             skip_existing=skip_existing_download,
                             progress_callback=update_progress
@@ -190,12 +197,12 @@ def download_form(bridge: MetsBridge):
                             error_msg = result.get("output", "An error occurred")
                             st.error(f"❌ {error_msg if isinstance(error_msg, str) else str(error_msg)}")
 
-                    st.info(f"📄 Download statistics saved to {Path(st.session_state.output_dir_download) / 'info.txt'}")
+                    st.info(f"📄 Download statistics saved to {Path(out_dir_input) / 'info.txt'}")
 
                 except ValueError:
                     st.error("Invalid format for 'Filter by document number'. Please use comma-separated numbers (e.g., 1, 2, 4).")
             else:
-                st.warning("Please provide a valid METS file path and an output directory.")
+                st.warning("Please provide a valid METS file path or URL and an output directory.")
 
 
 def oai_form(bridge: MetsBridge):

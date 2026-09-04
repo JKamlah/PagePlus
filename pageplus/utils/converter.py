@@ -53,6 +53,35 @@ def dict_to_custom(d):
     return " ".join(result)
 
 
+def parse_page_range(range_str: Optional[str | List[str]]) -> Optional[set[int]]:
+    """Parses a page range string like '1-3,5,7-9' or list of strings into a set of integers."""
+    if not range_str:
+        return None
+
+    if isinstance(range_str, (list, tuple)):
+        parts = list(range_str)
+    else:
+        parts = range_str.split(',')
+
+    pages = set()
+    for part in parts:
+        part = str(part).strip()
+        if not part:
+            continue
+        if '-' in part:
+            try:
+                start, end = part.split('-', 1)
+                pages.update(range(int(start.strip()), int(end.strip()) + 1))
+            except ValueError:
+                pass
+        else:
+            try:
+                pages.add(int(part))
+            except ValueError:
+                pass
+    return pages
+
+
 def parse_page_ranges(pages: List[str]) -> List[int]:
     """Parse a list of strings into a list of page numbers.
     Strings can be single numbers or ranges (e.g., '10-13').

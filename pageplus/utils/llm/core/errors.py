@@ -16,11 +16,13 @@ class OCRError(Exception):
     """Base class for OCR-related errors raised by any backend."""
 
     def __init__(self, message: str, *, provider: Optional[str] = None,
-                 model: Optional[str] = None, cause: Optional[BaseException] = None) -> None:
+                 model: Optional[str] = None, cause: Optional[BaseException] = None,
+                 raw_response: Optional[str] = None) -> None:
         super().__init__(message)
         self.provider = provider
         self.model = model
         self.cause = cause
+        self.raw_response = raw_response
 
     def __str__(self) -> str:  # pragma: no cover - trivial formatting
         base = super().__str__()

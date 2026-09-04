@@ -16,32 +16,31 @@
         "mappings": [
           {
             "to": "¬",
-            "from": "=$"
+            "from": "=\\s*$"
           },
           {
             "to": "¬",
-            "from": "₌$"
+            "from": "₌\\s*$"
           },
           {
             "to": "¬",
-            "from": "—$"
+            "from": "—\\s*$"
           },
           {
             "to": "¬",
-            "from": "-$"
+            "from": "-\\s*$"
           },
           {
             "to": "¬",
-            "from": "⸗$"
+            "from": "⸗\\s*$"
           }
         ]
       },
       "DoubleObliqueHyphen": {
-        "mode": "regex",
         "mappings": [
           {
             "to": "-",
-            "from": "⸗(?=.)"
+            "from": "⸗"
           }
         ]
       },
@@ -106,13 +105,27 @@
     }
   },
   "profiles": {
+    "GT4Hist": {
+      "description": "GT4Hist historical text normalization rules",
+      "rules": {
+        "deterministic": [
+          "LineSeparator",
+          "DoubleObliqueHyphen",
+          "LongS",
+          "RotundR",
+          "OldUmlaut"
+        ]
+      }
+    },
     "PagePlus-Normalization": {
       "description": "Historic GT normalization rules",
       "rules": {
         "deterministic": [
           "LineSeparator",
           "DoubleObliqueHyphen",
-          "LongS"
+          "LongS",
+          "RotundR",
+          "OldUmlaut"
         ]
       }
     }

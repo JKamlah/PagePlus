@@ -8,6 +8,7 @@ long-form module every time. New task modes add their own handlers via
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
@@ -300,7 +301,7 @@ def _extract_region_list(structured: Any) -> list[dict]:
 
 
 def _extract_text_field(entry: dict) -> Optional[str]:
-    for key in ("text_content", "corrected", "text", "unicode", "content"):
+    for key in ("text_content", "corrected", "text", "unicode", "content", "markdown"):
         if key in entry:
             value = entry[key]
             if isinstance(value, str):
@@ -569,6 +570,368 @@ def _table_html_to_xml(structured: Any, image_path: Path,
     return table_html_to_page(html_text or structured or "", image_path, **opts)
 
 
+def _clean_markdown_line(line: str) -> str:
+    """Clean markdown formatting and structural markers (e.g. '#', '##', '###', '>', list dashes)."""
+    if not line:
+        return ""
+    l = line.strip()
+    # Strip leading markdown headers: #, ##, ###, ####, #####, ######
+    l = re.sub(r'^\s*#{1,6}\s*', '', l)
+    # Strip leading blockquotes
+    l = re.sub(r'^\s*>\s*', '', l)
+    # Strip leading bullets/dashes (* text, + text, - text)
+    l = re.sub(r'^\s*[\*\+]\s+', '', l)
+    # Strip markdown bold / italic markers (**text** -> text, __text__ -> text)
+    l = re.sub(r'\*\*(.*?)\*\*', r'\1', l)
+    l = re.sub(r'__(.*?)__', r'\1', l)
+    return l.strip()
+
+
+def _extract_lines_from_payload(payload: Any, target_id: Optional[str] = None) -> list[str]:
+    """Extract a list of text lines from any payload (string, markdown, JSON string, dict, or list)."""
+    if payload is None:
+        return []
+
+    if isinstance(payload, str):
+        cleaned = payload.strip()
+        # Remove code fences
+        if cleaned.startswith("```"):
+            c_lines = cleaned.splitlines()
+            if c_lines and c_lines[0].startswith("```"):
+                c_lines = c_lines[1:]
+            if c_lines and c_lines[-1].strip() == "```":
+                c_lines = c_lines[:-1]
+            cleaned = "\n".join(c_lines).strip()
+
+        # Try to parse as JSON if it looks like JSON
+        if (cleaned.startswith("{") and cleaned.endswith("}")) or (cleaned.startswith("[") and cleaned.endswith("]")):
+            parsed = None
+            try:
+                import json
+                parsed = json.loads(cleaned)
+            except Exception:
+                try:
+                    import json_repair
+                    parsed = json_repair.repair_json(cleaned, return_objects=True)
+                except Exception:
+                    pass
+            if parsed is not None and not isinstance(parsed, str):
+                return _extract_lines_from_payload(parsed, target_id=target_id)
+
+        # Plain text / markdown lines
+        lines = []
+        for line in cleaned.splitlines():
+            cl = _clean_markdown_line(line)
+            if cl:
+                lines.append(cl)
+        return lines
+
+    if isinstance(payload, list):
+        lines = []
+        for item in payload:
+            if isinstance(item, str):
+                lines.extend(_extract_lines_from_payload(item, target_id=target_id))
+            elif isinstance(item, dict):
+                # If this item represents a region and target_id is specified
+                r_id = item.get("id")
+                if target_id and r_id and str(r_id) != str(target_id):
+                    continue
+                # Extract from textlines, lines, text, content, etc.
+                if "textlines" in item and isinstance(item["textlines"], list):
+                    for tl in item["textlines"]:
+                        if isinstance(tl, dict):
+                            t = _extract_text_field(tl)
+                            if t:
+                                cl = _clean_markdown_line(t)
+                                if cl:
+                                    lines.append(cl)
+                        elif isinstance(tl, str):
+                            cl = _clean_markdown_line(tl)
+                            if cl:
+                                lines.append(cl)
+                elif "lines" in item and isinstance(item["lines"], list):
+                    for l in item["lines"]:
+                        if isinstance(l, dict):
+                            t = _extract_text_field(l)
+                            if t:
+                                cl = _clean_markdown_line(t)
+                                if cl:
+                                    lines.append(cl)
+                        elif isinstance(l, str):
+                            cl = _clean_markdown_line(l)
+                            if cl:
+                                lines.append(cl)
+                else:
+                    t = _extract_text_field(item)
+                    if t:
+                        for l in t.splitlines():
+                            cl = _clean_markdown_line(l)
+                            if cl:
+                                lines.append(cl)
+            elif isinstance(item, list):
+                lines.extend(_extract_lines_from_payload(item, target_id=target_id))
+        return lines
+
+    if isinstance(payload, dict):
+        # 1. If target_id is given and payload has 'regions', search for the matching region
+        if "regions" in payload and isinstance(payload["regions"], list):
+            matching_regions = []
+            for r in payload["regions"]:
+                if isinstance(r, dict):
+                    r_id = r.get("id")
+                    if target_id is None or (r_id and str(r_id) == str(target_id)):
+                        matching_regions.append(r)
+            if matching_regions:
+                lines = []
+                for r in matching_regions:
+                    lines.extend(_extract_lines_from_payload(r, target_id=target_id))
+                return lines
+
+        # 1b. Check for 'pages' list (e.g. PaddleOCR / MistralOCR format)
+        if "pages" in payload and isinstance(payload["pages"], list):
+            lines = []
+            for pg in payload["pages"]:
+                if isinstance(pg, dict):
+                    md = pg.get("markdown") or _extract_text_field(pg)
+                    if md:
+                        for l in md.splitlines():
+                            cl = _clean_markdown_line(l)
+                            if cl:
+                                lines.append(cl)
+            if lines:
+                return lines
+
+        # 2. Check for 'textlines' list
+        if "textlines" in payload and isinstance(payload["textlines"], list):
+            lines = []
+            for tl in payload["textlines"]:
+                if isinstance(tl, dict):
+                    t = _extract_text_field(tl)
+                    if t:
+                        cl = _clean_markdown_line(t)
+                        if cl:
+                            lines.append(cl)
+                elif isinstance(tl, str):
+                    cl = _clean_markdown_line(tl)
+                    if cl:
+                        lines.append(cl)
+            if lines:
+                return lines
+
+        # 3. Check for 'lines' list
+        if "lines" in payload and isinstance(payload["lines"], list):
+            lines = []
+            for l in payload["lines"]:
+                if isinstance(l, dict):
+                    t = _extract_text_field(l)
+                    if t:
+                        cl = _clean_markdown_line(t)
+                        if cl:
+                            lines.append(cl)
+                elif isinstance(l, str):
+                    cl = _clean_markdown_line(l)
+                    if cl:
+                        lines.append(cl)
+            if lines:
+                return lines
+
+        # 4. Check for direct text fields
+        text_val = _extract_text_field(payload)
+        if text_val:
+            lines = []
+            for l in text_val.splitlines():
+                cl = _clean_markdown_line(l)
+                if cl:
+                    lines.append(cl)
+            return lines
+
+        # 5. Check if it's a dict of {line_id: text} or {line_id: {text: ...}}
+        lines = []
+        for k, v in payload.items():
+            if k in ("id", "type", "structure", "style", "box_2d", "coords", "baseline", "ro"):
+                continue
+            if isinstance(v, str) and v.strip():
+                cl = _clean_markdown_line(v)
+                if cl:
+                    lines.append(cl)
+            elif isinstance(v, dict):
+                t = _extract_text_field(v)
+                if t:
+                    cl = _clean_markdown_line(t)
+                    if cl:
+                        lines.append(cl)
+        if lines:
+            return lines
+
+    return []
+
+
+def _textregion_lines_apply(structured: Any, image_path: Path,
+                            page=None, **opts) -> Optional[str]:
+    """Map line-separated text (or structured JSON from LLM transcription) to TextLines with baselines.
+
+    Calculates proportional line heights based on character count:
+    - Lines with length <= mean character count get a standard 1.0 unit height.
+    - Lines with length > mean character count scale proportionally (length / mean).
+    """
+    if page is None:
+        logging.warning("textregion_lines_apply received no page; skipping merge")
+        return None
+
+    from pageplus.models.text_elements import Textline
+
+    def _apply_lines_to_region(target_region, lines: list[str]):
+        if not target_region or not lines:
+            return
+
+        cleaned_lines = []
+        for l in lines:
+            cl = _clean_markdown_line(l)
+            if cl:
+                cleaned_lines.append(cl)
+
+        if not cleaned_lines:
+            return
+
+        poly = target_region.get_coordinates(returntype="polygon")
+        if poly is None or poly.is_empty:
+            poly = target_region.get_coordinates(returntype="mrr")
+
+        if poly is not None and not poly.is_empty:
+            minx, miny, maxx, maxy = map(int, poly.bounds)
+        else:
+            coords_el = target_region.xml_element.find(f"{{{target_region.ns}}}Coords")
+            if coords_el is not None and "points" in coords_el.attrib:
+                pts = [tuple(map(float, p.split(","))) for p in coords_el.attrib["points"].strip().split() if "," in p]
+                if pts:
+                    xs = [p[0] for p in pts]
+                    ys = [p[1] for p in pts]
+                    minx, miny, maxx, maxy = int(min(xs)), int(min(ys)), int(max(xs)), int(max(ys))
+                else:
+                    logging.warning("textregion_lines_apply: invalid coordinates for TextRegion %s", target_region.get_id())
+                    return
+            else:
+                logging.warning("textregion_lines_apply: no Coords for TextRegion %s", target_region.get_id())
+                return
+
+        region_h = maxy - miny
+        if region_h <= 0:
+            region_h = 100
+
+        # Remove existing TextLine XML elements to ensure clean state
+        ns = getattr(target_region, "ns", "http://schema.primaresearch.org/PAGE/gts/pagecontent/2019-07-15")
+        for tl in list(target_region.xml_element.findall(f"{{{ns}}}TextLine")):
+            target_region.xml_element.remove(tl)
+        target_region.textlines = []
+
+        num_lines = len(cleaned_lines)
+        char_lens = [len(l) for l in cleaned_lines]
+        mean_chars = sum(char_lens) / num_lines if num_lines > 0 else 1.0
+
+        # Every line with <= mean has standard size (weight 1).
+        # For every multiplying of the mean value, increase line height by that multiple.
+        weights = []
+        for clen in char_lens:
+            if mean_chars <= 0 or clen <= mean_chars:
+                weights.append(1)
+            else:
+                weights.append(max(1, int(round(clen / mean_chars))))
+
+        total_weight = sum(weights)
+        unit_height = region_h / total_weight if total_weight > 0 else region_h / num_lines
+
+        tr_id = target_region.get_id()
+        current_y = float(miny)
+
+        for idx, (line_str, w) in enumerate(zip(cleaned_lines, weights)):
+            line_id = f"{tr_id}_l{idx + 1}"
+            h_line = w * unit_height
+            y_top = int(round(current_y))
+            y_bot = int(round(current_y + h_line))
+            current_y += h_line
+
+            y_top = max(miny, min(maxy - 1, y_top))
+            y_bot = max(y_top + 1, min(maxy, y_bot))
+
+            line_coords = [(minx, y_top), (maxx, y_top), (maxx, y_bot), (minx, y_bot)]
+            baseline = [(minx, y_bot), (maxx, y_bot)]
+            target_region.add_textline(line_id=line_id, coords=line_coords, baseline=baseline, text=line_str)
+
+        # Refresh textlines list
+        target_region.textlines = [
+            Textline(e, target_region.ns, parent=target_region)
+            for e in target_region.xml_element.findall(f"{{{target_region.ns}}}TextLine")
+        ]
+
+    element_id = opts.get("element_id")
+    raw_text = opts.get("text")
+    payload = structured if structured is not None else raw_text
+
+    # Check if this is a per-snippet call
+    if element_id or (isinstance(payload, str) and not payload.strip().startswith("{") and not payload.strip().startswith("[")):
+        target_region = None
+        if element_id:
+            if hasattr(page, "get_region_by_id"):
+                target_region = page.get_region_by_id(element_id)
+            if target_region is None and hasattr(page, "regions") and getattr(page.regions, "textregions", None):
+                for r in page.regions.textregions:
+                    if r.get_id() == element_id:
+                        target_region = r
+                        break
+        elif opts.get("region_filter") and hasattr(page, "regions") and getattr(page.regions, "textregions", None):
+            rf = opts.get("region_filter")
+            for r in page.regions.textregions:
+                try:
+                    if rf(r):
+                        target_region = r
+                        break
+                except Exception:
+                    pass
+
+        extracted_lines = _extract_lines_from_payload(payload if payload is not None else raw_text, target_id=element_id)
+        if not extracted_lines and raw_text:
+            extracted_lines = _extract_lines_from_payload(raw_text, target_id=element_id)
+
+        if target_region is not None and extracted_lines:
+            _apply_lines_to_region(target_region, extracted_lines)
+
+    # Handle batch dict or list with regions
+    if isinstance(payload, dict) and ("regions" in payload or "textregions" in payload):
+        regions_list = payload.get("regions") or payload.get("textregions") or []
+        for r_dict in regions_list:
+            if isinstance(r_dict, dict):
+                r_id = r_dict.get("id")
+                if r_id:
+                    tr = page.get_region_by_id(r_id) if hasattr(page, "get_region_by_id") else None
+                    if tr is None and hasattr(page, "regions") and getattr(page.regions, "textregions", None):
+                        for r in page.regions.textregions:
+                            if r.get_id() == r_id:
+                                tr = r
+                                break
+                    if tr is not None:
+                        lines = _extract_lines_from_payload(r_dict, target_id=r_id)
+                        if lines:
+                            _apply_lines_to_region(tr, lines)
+
+    elif isinstance(payload, dict):
+        # Handle dict mapping {region_id: content}
+        for r_id, r_content in payload.items():
+            if r_id in ("id", "type", "structure", "style", "box_2d", "coords", "baseline", "ro"):
+                continue
+            tr = page.get_region_by_id(r_id) if hasattr(page, "get_region_by_id") else None
+            if tr is None and hasattr(page, "regions") and getattr(page.regions, "textregions", None):
+                for r in page.regions.textregions:
+                    if r.get_id() == r_id:
+                        tr = r
+                        break
+            if tr is not None:
+                lines = _extract_lines_from_payload(r_content, target_id=r_id)
+                if lines:
+                    _apply_lines_to_region(tr, lines)
+
+    return None
+
+
 register_postprocessor("layout_and_text_to_xml", _layout_and_text_to_xml)
 register_postprocessor("gemini2d_to_page", _layout_and_text_to_xml)  # legacy alias
 register_postprocessor("layout_only_to_xml", _layout_only_to_xml)
@@ -581,6 +944,7 @@ register_postprocessor("table_html_to_page", _table_html_to_xml)
 register_postprocessor("markdown_to_page", _markdown_to_xml)
 register_postprocessor("text_only_apply", _text_only_apply)
 register_postprocessor("text_correction_apply", _text_correction_apply)
+register_postprocessor("textregion_lines_apply", _textregion_lines_apply)
 register_postprocessor("layout_correction_apply", _layout_correction_apply)
 register_postprocessor("field_tagging_apply", _field_tagging_apply)
 register_postprocessor("reading_order_apply", _reading_order_apply)

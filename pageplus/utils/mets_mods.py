@@ -11,6 +11,7 @@ from lxml.etree import Element, tostring
 
 from pageplus.utils.constants import MIME_IMAGE_EXTENSIONS
 from pageplus.utils.exceptions import MetsError, NotValidMetsException
+from pageplus.utils.converter import parse_page_range
 
 # Define METS namespaces.
 NSMAP = {
@@ -30,10 +31,19 @@ FALLBACK_NAMESPACE = "http://example.com/some/namespace"
 
 
 def validate_mets(ctx: typer.Context, param: typer.CallbackParam, value: str):
-    """ Validate xml """
-    if value.endswith('.xml') and Path(value).exists():
+    """Validate METS XML file path or URL."""
+    if not value:
+        raise NotValidMetsException(value)
+
+    if value.startswith(("http://", "https://")):
+        clean_url = value.split("?")[0].split("#")[0]
+        if clean_url.endswith(".xml"):
+            return value
+        raise NotValidMetsException(value, message="Invalid METS URL (must end with .xml)")
+
+    if value.endswith(".xml") and Path(value).exists():
         return value
-    raise NotValidMetsException
+    raise NotValidMetsException(value)
 
 
 def fix_missing_namespaces(xml_bytes: bytes) -> bytes:
@@ -1312,6 +1322,148 @@ def get_files_from_flocat(file: File, nametag: str = None):
         return href, filename
 
     return None, None
+
+
+def get_file_id_to_page_mapping(doc: Mets) -> dict[str, int]:
+    """
+    Build a mapping from FILEID to 1-based page order using structMap if available.
+    """
+    file_to_page: dict[str, int] = {}
+    struct_maps = doc.recursive_find(doc, "structMap")
+    if not struct_maps:
+        return file_to_page
+
+    # Prioritize PHYSICAL structMap, otherwise check any structMap
+    phys_maps = [sm for sm in struct_maps if (sm.attributes.get("TYPE") or "").upper() == "PHYSICAL"]
+    target_maps = phys_maps if phys_maps else struct_maps
+
+    for sm in target_maps:
+        divs = doc.recursive_find(sm, "div")
+        page_counter = 1
+        for div in divs:
+            div_type = (div.attributes.get("TYPE") or "").lower()
+            order_attr = div.attributes.get("ORDER")
+
+            # A div may represent a page if type is 'page' or order is present
+            if div_type == "page" or order_attr is not None:
+                current_order = None
+                if order_attr is not None:
+                    try:
+                        current_order = int(order_attr)
+                    except ValueError:
+                        pass
+                if current_order is None:
+                    current_order = page_counter
+
+                page_counter += 1
+
+                # Find all fptr under this div
+                fptrs = doc.recursive_find(div, "fptr")
+                for fptr in fptrs:
+                    fid = fptr.attributes.get("FILEID")
+                    if fid:
+                        file_to_page[fid] = current_order
+                    # Also check any children (e.g. area)
+                    for child in getattr(fptr, "children", []):
+                        if hasattr(child, "attributes") and child.attributes.get("FILEID"):
+                            file_to_page[child.attributes["FILEID"]] = current_order
+
+                # Also find any direct area elements under div
+                areas = doc.recursive_find(div, "area")
+                for area in areas:
+                    fid = area.attributes.get("FILEID")
+                    if fid:
+                        file_to_page[fid] = current_order
+
+    return file_to_page
+
+
+def _determine_page_number(file: File, sequence_idx: int, file_to_page: dict[str, int]) -> int:
+    """Determine the 1-based page number for a METS File element."""
+    file_id = file.attributes.get("ID")
+    if file_id and file_id in file_to_page:
+        return file_to_page[file_id]
+
+    seq_attr = file.attributes.get("SEQ")
+    if seq_attr is not None and str(seq_attr).isdigit():
+        return int(seq_attr)
+
+    return sequence_idx
+
+
+def collect_mets_download_tasks(
+    mets_files: List[Mets],
+    base_output: Path,
+    tag: str = "",
+    nametag: Optional[str] = None,
+    selection: Optional[List[int]] = None,
+    page_range: Optional[str | set[int] | List[int]] = None,
+) -> List[tuple[File, Path, Optional[str]]]:
+    """
+    Collect download tasks from a list of Mets document roots with selection and page-range filtering.
+
+    :param mets_files: List of parsed Mets root objects.
+    :param base_output: Base output directory where documents and file groups are saved.
+    :param tag: Filter by USE or ID attribute on fileGrp.
+    :param nametag: Attribute name on File to use as filename.
+    :param selection: List of 1-based document indices to include (e.g., [1, 2]).
+    :param page_range: Page range to download (e.g., '1-5,7' or a set of ints).
+    :return: List of tuples (File, output_folder, nametag).
+    """
+    allowed_pages: Optional[set[int]] = None
+    if isinstance(page_range, set):
+        allowed_pages = page_range
+    elif isinstance(page_range, (list, tuple)):
+        allowed_pages = set(page_range)
+    elif isinstance(page_range, str):
+        allowed_pages = parse_page_range(page_range)
+
+    download_tasks: List[tuple[File, Path, Optional[str]]] = []
+
+    for idx, doc in enumerate(mets_files):
+        doc_num = idx + 1
+        if selection and doc_num not in selection:
+            continue
+
+        output_dir = base_output if len(mets_files) == 1 else base_output / f"{doc_num:03}"
+        file_to_page = get_file_id_to_page_mapping(doc)
+
+        for file_grp in doc.recursive_find(doc, "fileGrp"):
+            use = file_grp.attributes.get("USE")
+            grp_id = file_grp.attributes.get("ID")
+
+            if tag and tag not in {use, grp_id}:
+                continue
+
+            grp_folder = output_dir / (use or grp_id or "unknown")
+
+            file_counter = 0
+            for child in file_grp.children:
+                if isinstance(child, FileGrp):
+                    nested_use = child.attributes.get("USE")
+                    nested_id = child.attributes.get("ID")
+                    nested_folder = grp_folder / (nested_use or nested_id or "nested")
+
+                    nested_file_counter = 0
+                    for file in child.children:
+                        if isinstance(file, File):
+                            nested_file_counter += 1
+                            if allowed_pages is not None:
+                                page_num = _determine_page_number(file, nested_file_counter, file_to_page)
+                                if page_num not in allowed_pages:
+                                    continue
+                            nested_folder.mkdir(parents=True, exist_ok=True)
+                            download_tasks.append((file, nested_folder, nametag))
+                elif isinstance(child, File):
+                    file_counter += 1
+                    if allowed_pages is not None:
+                        page_num = _determine_page_number(child, file_counter, file_to_page)
+                        if page_num not in allowed_pages:
+                            continue
+                    grp_folder.mkdir(parents=True, exist_ok=True)
+                    download_tasks.append((child, grp_folder, nametag))
+
+    return download_tasks
 
 
 def parse_mets_xml_multiple_roots(

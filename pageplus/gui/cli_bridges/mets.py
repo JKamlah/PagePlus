@@ -9,6 +9,11 @@ from pageplus.cli.mets import (
     get_url
 )
 from pageplus.gui.cli_bridges.base import CLIBridge
+from pageplus.utils.mets_mods import (
+    parse_mets_xml_multiple_roots,
+    collect_mets_download_tasks,
+)
+from pageplus.utils.download import download_files_async_with_progress
 
 
 class MetsBridge(CLIBridge):
@@ -33,65 +38,47 @@ class MetsBridge(CLIBridge):
     def download(
         self,
         mets: str,
-        strict: bool,
-        verbose: bool,
-        tag: str,
-        nametag: str,
-        selection: List[int],
-        outputdir: Path,
+        strict: bool = False,
+        verbose: bool = False,
+        tag: str = "",
+        nametag: Optional[str] = None,
+        selection: Optional[List[int]] = None,
+        outputdir: Optional[Path] = None,
+        output_dir: Optional[Path] = None,
+        page_range: Optional[str] = None,
         batch_size: int = 25,
         skip_existing: bool = True,
         progress_callback: Optional[Callable] = None
     ) -> dict:
         """Download files referenced in a METS XML document."""
         try:
-            from pageplus.utils.mets_mods import (
-                parse_mets_xml_multiple_roots,
-                FileGrp,
-                File
-            )
-            from pageplus.utils.download import download_files_async_with_progress
+            out_dir = output_dir if output_dir is not None else outputdir
 
-            if mets.startswith("http"):
-                output_path = get_url(mets, outputdir.joinpath('mets.xml'))
-                if output_path:
-                    mets = str(output_path)
+            if mets.startswith(("http://", "https://")):
+                base_output = Path(out_dir) if out_dir is not None else Path(".")
+                base_output.mkdir(parents=True, exist_ok=True)
+                target_mets = base_output / "mets.xml"
+                if target_mets.exists():
+                    mets = str(target_mets)
                 else:
-                    return {"success": False, "output": "Failed to download METS from URL"}
+                    output_path = get_url(mets, target_mets)
+                    if output_path and Path(output_path).exists():
+                        mets = str(output_path)
+                    else:
+                        return {"success": False, "output": f"Failed to download METS from URL: {mets}"}
+            else:
+                base_output = Path(mets).parent if out_dir is None else Path(out_dir)
 
             mets_files = parse_mets_xml_multiple_roots(mets, loose=not strict, verbose=verbose)
-            base_output = Path(mets).parent if outputdir is None else Path(outputdir)
 
-            # Collect download tasks
-            download_tasks = []
-            for idx, doc in enumerate(mets_files):
-                if selection and idx + 1 not in selection:
-                    continue
-                output_dir = base_output if len(mets_files) == 1 else base_output / f"{(idx + 1):03}"
-                output_dir.mkdir(parents=True, exist_ok=True)
-
-                for file_grp in doc.recursive_find(doc, "fileGrp"):
-                    use = file_grp.attributes.get("USE")
-                    grp_id = file_grp.attributes.get("ID")
-
-                    if tag and tag not in {use, grp_id}:
-                        continue
-
-                    grp_folder = output_dir / (use or grp_id or "unknown")
-                    grp_folder.mkdir(parents=True, exist_ok=True)
-
-                    for child in file_grp.children:
-                        if isinstance(child, FileGrp):
-                            nested_use = child.attributes.get("USE")
-                            nested_id = child.attributes.get("ID")
-                            nested_folder = grp_folder / (nested_use or nested_id or "nested")
-                            nested_folder.mkdir(parents=True, exist_ok=True)
-
-                            for file in child.children:
-                                if isinstance(file, File):
-                                    download_tasks.append((file, nested_folder, nametag))
-                        elif isinstance(child, File):
-                            download_tasks.append((child, grp_folder, nametag))
+            download_tasks = collect_mets_download_tasks(
+                mets_files=mets_files,
+                base_output=base_output,
+                tag=tag,
+                nametag=nametag,
+                selection=selection,
+                page_range=page_range,
+            )
 
             if download_tasks:
                 stats = asyncio.run(download_files_async_with_progress(download_tasks, batch_size, base_output, skip_existing, progress_callback))

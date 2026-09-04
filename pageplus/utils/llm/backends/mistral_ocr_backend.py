@@ -57,14 +57,15 @@ class MistralOCRBackend(OCRBackend):
             from pageplus.gui.utils.settings import Settings
             api_key = Settings().get("MISTRAL_API_KEY")
         
-        if not api_key:
-            raise ConfigurationError(
-                "MISTRAL_API_KEY is not set. Please configure your API key for Mistral OCR.",
-                provider=self.provider_name,
-                model=self.model_name,
-            )
-
         url = self._opts.api_base_url or "https://api.mistral.ai/v1/ocr"
+        if not api_key:
+            if "api.mistral.ai" in url:
+                raise ConfigurationError(
+                    "MISTRAL_API_KEY is not set. Please configure your API key for Mistral OCR.",
+                    provider=self.provider_name,
+                    model=self.model_name,
+                )
+            api_key = "EMPTY"
         logging.debug("[mistral_ocr_backend] OCR call: url=%r image=%s", url, ctx.image_path.name)
 
         # 1. Process image

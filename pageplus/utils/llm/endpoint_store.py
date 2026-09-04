@@ -95,6 +95,8 @@ def normalize_base_url(url: str, provider: str = "openai") -> str:
     if provider == "openai":
         if not low.endswith("/v1"):
             u = u + "/v1"
+    elif provider in ("mistral_ocr", "curl"):
+        pass
     else:
         if low.endswith("/v1"):
             u = u[: -len("/v1")].rstrip("/")

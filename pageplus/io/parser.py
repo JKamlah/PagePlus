@@ -15,6 +15,7 @@ def parse_xml(filepath: Path = '') -> Tuple[ET.Element, ET._ElementTree, str]:
     Tuple[ET.Element, ET.ElementTree, str]: A tuple containing the root element, the ElementTree object,
     and the XML namespace.
     """
+    filepath = Path(filepath)
     tree = ET.parse(str(filepath.absolute()))
     root = tree.getroot()
     # Extracting namespace from the root tag

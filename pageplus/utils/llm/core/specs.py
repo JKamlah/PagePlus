@@ -94,7 +94,7 @@ class OpenAICompatibleOptions:
     """Options for raw OpenAI-compatible endpoints (vLLM, Ollama's OpenAI shim, LM Studio)."""
     api_base_url: str = "http://localhost:8000/v1"
     api_key: Optional[str] = None
-    timeout: float = 60.0
+    timeout: float = 180.0
     calls_per_minute: int = 120
     max_image_size: Optional[int] = 1000
 

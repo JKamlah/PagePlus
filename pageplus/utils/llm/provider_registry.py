@@ -564,12 +564,35 @@ def spec_from_preset(
             options = OpenAICompatibleOptions(
                 api_base_url=api_base or preset.api_base_hint or "http://localhost:8000/v1",
                 api_key=api_key,
-                timeout=timeout if timeout is not None else 60.0,
+                timeout=timeout if timeout is not None else 180.0,
                 calls_per_minute=calls_per_minute,
                 max_image_size=max_image_size,
             )
             return OCRBackendSpec(
                 provider="openai_direct",
+                model=chosen_model,
+                options=options,
+                metadata={
+                    "preset_id": preset.id,
+                    "preset_display_name": preset.display_name,
+                    "preset_vision_capable": preset.vision_capable,
+                },
+            )
+        elif preset.litellm_prefix == "mistral_ocr":
+            from pageplus.utils.llm.core.specs import MistralOptions
+            chosen_model = model or preset.default_model or "paddleocr-vl"
+            options = MistralOptions(
+                api_key=api_key or "EMPTY",
+                api_base_url=api_base or preset.api_base_hint or "https://api.mistral.ai/v1/ocr",
+                model=chosen_model,
+                table_format="html",
+                include_blocks=True,
+                timeout=timeout if timeout is not None else 180.0,
+                calls_per_minute=calls_per_minute,
+                max_image_size=max_image_size,
+            )
+            return OCRBackendSpec(
+                provider="mistral_ocr",
                 model=chosen_model,
                 options=options,
                 metadata={

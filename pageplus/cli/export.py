@@ -495,7 +495,7 @@ def alto(
                             aggregated_text = []
                             for idx, word in enumerate(words):
                                 word = Textline(word, page.ns, line)
-                                word_text = word.get_text()
+                                word_text = word.get_text() or ""
                                 if idx < len(
                                         words) - 1 and word_text and word_text[-1] in HYPHEN_CHARS:
                                     # Remove trailing hyphen and add a HYP element.
@@ -522,7 +522,7 @@ def alto(
                         else:
                             # Use aggregated TextEquiv if no Word elements.
                             line_text = line.get_text()
-                            if line_text.strip():
+                            if line_text and line_text.strip():
                                 string_el = ET.SubElement(tl, "String")
                                 set_alto_id_from_page_id(string_el, line, "w0")
                                 set_alto_xywh_from_coords(string_el, line)

@@ -96,6 +96,7 @@ MAPPING_CHOICES: List[str] = [
     "pp_layout_extend_table_json_to_page",# PP-Layout Extend Table JSON -> fresh PAGE XML
     "mistral_ocr_to_page",   # Mistral OCR JSON (blocks + HTML tables) -> fresh PAGE XML
     "markdown_to_page",      # markdown text -> fresh PAGE XML
+    "textregion_lines_apply",# line-separated text -> calculate TextLines + baselines per TextRegion
     "text_only_apply",       # JSON text -> mutate existing Page
     "text_correction_apply",
     "layout_correction_apply",
@@ -108,7 +109,7 @@ MAPPING_CHOICES: List[str] = [
 TASK_LEVELS: List[str] = ["Page", "TableRegion", "TextRegion", "Textline"]
 
 # Mappings that consume plain text (markdown) instead of JSON.
-_TEXT_MAPPINGS = {"markdown_to_page"}
+_TEXT_MAPPINGS = {"markdown_to_page", "textregion_lines_apply"}
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +208,13 @@ MARKDOWN_OCR_PROMPT = (
     "and diacritics. Output only the Markdown, with no commentary or code fences."
 )
 
+TEXTREGION_LINES_PROMPT = (
+    "You are an expert OCR transcriber for historical documents. "
+    "Transcribe the text in the provided image snippet line by line. "
+    "Separate every line strictly with a newline ('\\n'). Preserve line breaks, original spelling, "
+    "and diacritics. Output only the transcribed lines with no commentary or markdown code fences."
+)
+
 
 # ---------------------------------------------------------------------------
 # Default presets (provider/model left blank: chosen at run time in the UI).
@@ -261,6 +269,12 @@ DEFAULT_PRESETS: List[Dict[str, Any]] = [
     _preset("textrec_region", "Text Recognition (Region)", "Textrecognition",
             task_level="TextRegion",
             description="(Re)OCR text per region on an existing layout."),
+    _preset("textrec_region_lines", "Text Recognition (Region -> Lines)", "Textrecognition",
+            task_mode="text_only",
+            task_level="TextRegion",
+            mapping="textregion_lines_apply",
+            system_prompt=TEXTREGION_LINES_PROMPT,
+            description="OCR text per TextRegion, split lines by '\\n', and calculate equidistant TextLines with baselines."),
     _preset("segmentation", "Segmentation", "Segmentation",
             system_prompt=SEGMENTATION_PROMPT,
             description="Detect regions + reading order from the image."),

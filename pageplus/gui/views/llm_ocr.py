@@ -181,7 +181,7 @@ def _custom_endpoints_block(bridge: LLMOcrBridge) -> None:
             }
             for ep in endpoints
         ]), width="stretch", hide_index=True)
-        provider_opts = ["openai", "gemini", "ollama", "ollama_chat", "curl"]
+        provider_opts = ["openai", "mistral_ocr", "gemini", "ollama", "ollama_chat", "curl"]
         for ep in endpoints:
             with st.expander(f"⚙️ {ep['name']}", expanded=False):
                 # --- Discover models from the server (exact installed names) ---
@@ -298,9 +298,9 @@ def _custom_endpoints_block(bridge: LLMOcrBridge) -> None:
             with c1:
                 name = st.text_input("Name", placeholder="e.g. spark")
                 key = st.text_input("API Key", value="EMPTY")
-                provider = st.selectbox("Provider", ["openai", "gemini", "ollama", "ollama_chat", "curl"], index=0,
-                                        help="openai = OpenAI-compatible (needs /v1). ollama_chat uses "
-                                             "Ollama's /api/chat. curl = Custom HTTP POST REST.")
+                provider = st.selectbox("Provider", ["openai", "mistral_ocr", "gemini", "ollama", "ollama_chat", "curl"], index=0,
+                                        help="openai = OpenAI-compatible (needs /v1). mistral_ocr = Document OCR (/v1/ocr). "
+                                             "ollama_chat uses Ollama's /api/chat. curl = Custom HTTP POST REST.")
                 image_key = st.text_input("Image JSON Key (Curl only)", value="image")
             with c2:
                 url = st.text_input("Base URL (or full POST URL for Curl)", placeholder="localhost:8000")

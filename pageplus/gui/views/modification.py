@@ -780,6 +780,124 @@ def show_modification(bridge: ModificationBridge) -> None:
                     else:
                         st.error(result["output"])
 
+            # Two-Column Sorting Algorithm
+            with st.expander("Two-Column Sorting Algorithm"):
+                st.write(
+                    "Specialized sorting for two-column newspapers and periodicals. "
+                    "The left column is read top-to-bottom through all paragraphs, then the right column. "
+                    "Centered topic headings across columns or major vertical gaps delineate sections. "
+                    "Headers and top page numbers are read first; footers and signature marks last."
+                )
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    two_col_baselines = st.checkbox(
+                        "Use mean baseline centroid",
+                        value=False,
+                        help="Sort based on mean baseline centroid instead of geometric centroid.",
+                        key="sort_two_col_baselines"
+                    )
+                    two_col_sort_lines = st.checkbox(
+                        "Sort textlines internally",
+                        value=True,
+                        help="Sort textlines inside each region from top to bottom.",
+                        key="sort_two_col_lines"
+                    )
+                    two_col_ro = st.checkbox(
+                        "Update <ReadingOrder> XML",
+                        value=True,
+                        help="Write/update the OrderedGroup ReadingOrder in the PAGE XML.",
+                        key="sort_two_col_ro"
+                    )
+                with col2:
+                    two_col_gap = st.number_input(
+                        "Gap Threshold (px, 0 = disabled)",
+                        min_value=0.0,
+                        value=0.0,
+                        step=10.0,
+                        help="Minimum vertical gap between clusters to trigger a section division.",
+                        key="sort_two_col_gap"
+                    )
+                    two_col_center_tol = st.slider(
+                        "Center Tolerance",
+                        min_value=0.05,
+                        max_value=0.35,
+                        value=0.15,
+                        step=0.01,
+                        help="Horizontal margin around page midpoint to detect centered spanning headings.",
+                        key="sort_two_col_center_tol"
+                    )
+                    two_col_span_ratio = st.slider(
+                        "Spanning Heading Width Ratio",
+                        min_value=0.3,
+                        max_value=0.9,
+                        value=0.6,
+                        step=0.05,
+                        help="Minimum width ratio relative to page width to treat a heading as spanning.",
+                        key="sort_two_col_span_ratio"
+                    )
+
+                two_col_dry_run = st.checkbox("Dry run", key="sort_two_col_dry_run")
+
+                if st.button("Apply Two-Column Sorting"):
+                    params = {
+                        "based_on_baselines": two_col_baselines,
+                        "gap_threshold": two_col_gap if two_col_gap > 0 else None,
+                        "center_tolerance": two_col_center_tol,
+                        "span_width_ratio": two_col_span_ratio,
+                        "sort_lines": two_col_sort_lines,
+                        "update_reading_order": two_col_ro,
+                        "dry_run": two_col_dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("sort_two_column", **params)
+                    with st.spinner("Applying Two-Column Sorting Algorithm...", show_time=True):
+                        result = bridge.sort_two_column(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
+
+            # Update Reading Order Indices
+            with st.expander("Update Reading Order Indices"):
+                st.write(
+                    "Synchronizes the `custom=\"readingOrder {index:X;}\"` attributes on all elements "
+                    "with the `<ReadingOrder>` element in the PAGE XML."
+                )
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    sync_reorder_dom = st.checkbox(
+                        "Reorder XML elements to match ReadingOrder",
+                        value=True,
+                        help="Physically reorder XML elements in the DOM to match the reading order sequence.",
+                        key="sync_ro_reorder_dom"
+                    )
+                with col2:
+                    sync_sort_lines = st.checkbox(
+                        "Sort textlines internally",
+                        value=False,
+                        help="Sort textlines inside regions from top to bottom and update line indices.",
+                        key="sync_ro_sort_lines"
+                    )
+
+                sync_dry_run = st.checkbox("Dry run", key="sync_ro_dry_run")
+
+                if st.button("Update Reading Order Indices"):
+                    params = {
+                        "reorder_dom": sync_reorder_dom,
+                        "sort_lines": sync_sort_lines,
+                        "dry_run": sync_dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("update_reading_order_index", **params)
+                    with st.spinner("Updating reading order indices...", show_time=True):
+                        result = bridge.update_reading_order_index(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
+
             # Match Textlines to Region
             with st.expander("Match Textlines to Region"):
                 st.write(
@@ -1114,6 +1232,53 @@ def show_modification(bridge: ModificationBridge) -> None:
                         st.success(result["output"])
                     else:
                         st.error(result["output"])
+
+            # Text Mapping
+            with st.expander("Text Mapping"):
+                st.write("Apply guideline-based text/character mapping profile to the PAGE XML files.")
+
+                mapping_profiles = bridge.get_mapping_profiles()
+                if not mapping_profiles:
+                    from pageplus.gui.views.export import get_mapping_profiles
+                    mapping_profiles = get_mapping_profiles()
+
+                selected_profile = st.selectbox(
+                    "Mapping Profile",
+                    options=mapping_profiles if mapping_profiles else ["GT4Hist"],
+                    index=0,
+                    key="text_mapping_profile"
+                )
+
+                norm_options = ["NFC", "NFD", "NFKC", "NFKD", "None"]
+                selected_norm = st.selectbox(
+                    "Unicode Normalization",
+                    options=norm_options,
+                    index=0,
+                    key="text_mapping_normalization"
+                )
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    report = st.checkbox("Generate report", key="text_mapping_report")
+                with col2:
+                    dry_run = st.checkbox("Dry run", key="text_mapping_dry_run")
+
+                if st.button("Run Text Mapping"):
+                    params = {
+                        "mapping_profile": selected_profile,
+                        "textnormalization": selected_norm if selected_norm != "None" else "None",
+                        "report": report,
+                        "dry_run": dry_run,
+                        "outputdir": st.session_state.get('modification_dir')
+                    }
+                    record_operation("text_mapping", **params)
+                    with st.spinner("Applying text mapping...", show_time=True):
+                        result = bridge.text_mapping(files=selected_files, **params)
+                    if result["success"]:
+                        st.success(result["output"])
+                    else:
+                        st.error(result["output"])
+
 
         with tabs[4]:
             st.subheader("Repair Operations")

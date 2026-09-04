@@ -1089,12 +1089,15 @@ def sort_regions(
         sorted_top_regs = sort_region_list(top_regs)
         for root_r in sorted_top_regs:
             add_with_children(root_r)
-        # 4) XML-Reorder wie gehabt ...
+        ordered_region_objects = [page.regions.textregions[r.idx] for r in full_order]
         for r in full_order:
             region_el = page.regions.textregions[r.idx].xml_element
             parent = region_el.getparent()
             parent.remove(region_el)
             parent.append(region_el)
+
+        page.regions.textregions = ordered_region_objects
+        page._update_reading_order_xml(ordered_region_objects)
 
         preview = ", ".join(r.id for r in full_order[:20])
         more = "" if len(
@@ -2656,5 +2659,241 @@ def merge_table_rowspan_cells(
     return modified_count
 
 
+@app.command(name="text-mapping")
+@app.command(name="mapping-text")
+def text_mapping(
+    inputs: Annotated[List[str], typer.Argument(
+        exists=True,
+        help="Paths or workspace to the PAGE XML files to be processed.",
+        callback=transform_inputs
+    )] = None,
+    outputdir: Annotated[Optional[str], typer.Option(
+        help="Filename of the output directory. If not specified, input files will be overwritten.",
+        callback=transform_output
+    )] = None,
+    mapping_profile: Annotated[str, typer.Option(
+        "--mapping-profile", "-p", "-g", "--guideline",
+        help="Mapping profile name to apply to the text (from mappings.json, e.g. 'GT4Hist', 'DTA')."
+    )] = "GT4Hist",
+    textnormalization: Annotated[str, typer.Option(
+        "--textnormalization", "-t",
+        help="Unicode text normalization: 'NFC', 'NFD', 'NFKC', 'NFKD', or 'None'."
+    )] = "NFC",
+    mode: Annotated[str, typer.Option(
+        "--mode", "-m",
+        help="Mapping mode in guideline profile (default: 'deterministic')."
+    )] = "deterministic",
+    report: Annotated[bool, typer.Option(
+        "--report", "-r",
+        help="If True, print a summary report of replacements."
+    )] = False,
+    dry_run: Annotated[bool, typer.Option(
+        "--dry-run",
+        help="If True, the function will not write any files."
+    )] = False
+) -> None:
+    """
+    Applies guideline-based text/character mapping profiles (e.g. GT4Hist, DTA)
+    directly to PAGE XML files.
+    """
+    from pageplus.utils.guidelines.lib.processhandler import Mappinghandler
+
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError('No XML files found in the input paths.')
+
+    handler = Mappinghandler(
+        fnames=[str(p) for p in xml_files],
+        guideline=mapping_profile,
+        textnormalization=textnormalization
+    )
+
+    total_modified_files = 0
+    total_modified_lines = 0
+
+    for xml_file in track(xml_files, description=f"Applying text mapping [{mapping_profile}]..."):
+        filename = xml_file.name
+        logging.info(f'Processing file: {filename}')
+        page = Page(xml_file)
+
+        is_modified, count, _ = page.apply_text_mapping(
+            handler=handler,
+            mapping_profile=mapping_profile,
+            textnormalization=textnormalization,
+            mode=mode,
+            filename=filename
+        )
+
+        if is_modified:
+            total_modified_files += 1
+            total_modified_lines += count
+            if not dry_run:
+                fout = xml_file if outputdir is None else determine_output_path(
+                    xml_file, outputdir, filename)
+                logging.info(f'Wrote modified xml file to output directory: {fout}')
+                page.save_xml(fout)
+            else:
+                logging.info(f'[DRY RUN] Would write modified xml file to: {xml_file}')
+        else:
+            if outputdir is not None and not dry_run:
+                import shutil
+                fout = determine_output_path(xml_file, outputdir, filename)
+                shutil.copy(xml_file, fout)
+
+    if report:
+        print("\n--- Mapping Summary ---")
+        if not handler.replacement_counts:
+            print("No replacements were made.")
+        else:
+            table = Table(title=f"Text Mapping Summary ({mapping_profile})")
+            table.add_column("Rule", style="cyan")
+            table.add_column("Replacements", style="magenta", justify="right")
+
+            total_rule_counts = Counter()
+            for fname, rules in handler.replacement_counts.items():
+                for rule, line_counts in rules.items():
+                    total_rule_counts[rule] += sum(line_counts.values())
+
+            for rule, cnt in sorted(total_rule_counts.items(), key=lambda x: -x[1]):
+                table.add_row(rule, str(cnt))
+
+            print(table)
+            print(f"Total modified files: {total_modified_files}/{len(xml_files)} ({total_modified_lines} textlines updated)")
+
+
+mapping_text = text_mapping
+
+
+@app.command(name="sort-two-column")
+@app.command(name="two-column-sorting")
+def sort_two_column(
+    inputs: Annotated[List[str], typer.Argument(
+        exists=True,
+        help="Paths/workspace to PAGE XML files.",
+        callback=transform_inputs
+    )] = None,
+    outputdir: Annotated[Optional[str], typer.Option(
+        help="Output directory (default: overwrite input).",
+        callback=transform_output
+    )] = None,
+    based_on_baselines: Annotated[bool, typer.Option(
+        help="Use mean baseline centroid instead of polygon centroid."
+    )] = False,
+    gap_threshold: Annotated[Optional[float], typer.Option(
+        help="Minimum vertical gap (pixels) to divide into new horizontal bands across both columns."
+    )] = None,
+    center_tolerance: Annotated[float, typer.Option(
+        help="Tolerance ratio (relative to page width) to detect centered spanning topic headings."
+    )] = 0.15,
+    span_width_ratio: Annotated[float, typer.Option(
+        help="Minimum width ratio to classify a region as a multi-column spanning heading."
+    )] = 0.6,
+    sort_lines: Annotated[bool, typer.Option(
+        help="Sort textlines internally within each region."
+    )] = True,
+    update_reading_order: Annotated[bool, typer.Option(
+        help="Update or create <ReadingOrder> XML element."
+    )] = True,
+    dry_run: Annotated[bool, typer.Option(
+        help="Compute and preview without writing files."
+    )] = False,
+):
+    """
+    Two-Column Sorting Algorithm for newspapers and periodicals:
+      1. Top headers and top page numbers are read first (top-to-bottom).
+      2. Body is segmented by spanning / centered topic headings and major vertical gaps.
+         - Within each section, the left column is read top-to-bottom, then the right column top-to-bottom.
+         - Spanning topic headings separate sections in reading order.
+      3. Footers, signature marks, and bottom page numbers are read last.
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError("No XML files found in the input paths.")
+
+    for xml_file in track(xml_files, description="Applying Two-Column Sorting Algorithm..."):
+        filename = xml_file.name
+        logging.info(f"Processing {filename}")
+        try:
+            page = Page(xml_file)
+        except Exception as e:
+            logging.error(f"Failed to open {xml_file}: {e}")
+            continue
+
+        sorted_regions = page.sort_two_column(
+            based_on_baselines=based_on_baselines,
+            update_reading_order=update_reading_order,
+            gap_threshold=gap_threshold,
+            center_tolerance=center_tolerance,
+            span_width_ratio=span_width_ratio,
+            sort_lines_internally=sort_lines,
+        )
+
+        preview = ", ".join(r.get_id() for r in sorted_regions[:15] if r.get_id())
+        more = "..." if len(sorted_regions) > 15 else ""
+        logging.info(f"Sorted {len(sorted_regions)} regions: {preview}{more}")
+
+        if not dry_run:
+            fout = xml_file if outputdir is None else determine_output_path(xml_file, outputdir, filename)
+            logging.info(f"Wrote modified xml file to: {fout}")
+            page.save_xml(fout)
+        else:
+            logging.info(f"[DRY RUN] Would write sorted xml file to: {xml_file}")
+
+
+two_column_sorting = sort_two_column
+
+
+@app.command(name="update-reading-order-index")
+@app.command(name="update-reading-order")
+def update_reading_order_index(
+    inputs: Annotated[List[str], typer.Argument(
+        exists=True,
+        help="Paths/workspace to PAGE XML files.",
+        callback=transform_inputs
+    )] = None,
+    outputdir: Annotated[Optional[str], typer.Option(
+        help="Output directory (default: overwrite input).",
+        callback=transform_output
+    )] = None,
+    reorder_dom: Annotated[bool, typer.Option(
+        help="Physically reorder XML elements to match the ReadingOrder element."
+    )] = True,
+    sort_lines: Annotated[bool, typer.Option(
+        help="Sort textlines inside regions from top to bottom."
+    )] = False,
+    dry_run: Annotated[bool, typer.Option(
+        help="Compute and preview without writing files."
+    )] = False,
+):
+    """
+    Updates element custom attributes (readingOrder {index:X;}) according to the <ReadingOrder> element.
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError("No XML files found in the input paths.")
+
+    for xml_file in track(xml_files, description="Updating reading order indices..."):
+        filename = xml_file.name
+        logging.info(f"Processing {filename}")
+        try:
+            page = Page(xml_file)
+        except Exception as e:
+            logging.error(f"Failed to open {xml_file}: {e}")
+            continue
+
+        count = page.update_reading_order_indices(reorder_dom=reorder_dom, sort_lines=sort_lines)
+        logging.info(f"Updated reading order indices for {count} regions in {filename}")
+
+        if not dry_run:
+            fout = xml_file if outputdir is None else determine_output_path(xml_file, outputdir, filename)
+            logging.info(f"Wrote modified xml file to: {fout}")
+            page.save_xml(fout)
+        else:
+            logging.info(f"[DRY RUN] Would write updated xml file to: {xml_file}")
+
+
 if __name__ == "__main__":
     app()
+
+
+

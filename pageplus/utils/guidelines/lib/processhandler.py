@@ -112,12 +112,21 @@ class Mappinghandler(Handler):
 
         profile = self.guidelines.get(self.guideline)
         if not profile:
+            for name, prof in self.guidelines.items():
+                if name.lower() == str(self.guideline).lower():
+                    profile = prof
+                    break
+        if not profile and self.guidelines:
+            first_key = next(iter(self.guidelines))
+            profile = self.guidelines[first_key]
+
+        if not profile:
             return text
+
         for rule_name, rule_data in profile.get(mode, {}).items():
             for rule_mode, mappings in rule_data.items():
                 for mapping in mappings:
                     try:
-                        print(mapping)
                         if mapping['from'] == mapping['to']:
                             continue
                         if rule_mode == 'regex':
