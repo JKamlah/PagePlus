@@ -1,6 +1,6 @@
 """Direct OpenAI-compatible OCR backend.
 
-Uses the ``openai`` Python library directly (no LiteLLM), matching the exact
+Uses the ``openai`` Python library directly, matching the exact
 call pattern that works with vLLM, TGI, LM Studio, and any other server that
 implements the OpenAI ``/v1/chat/completions`` API.
 
@@ -291,3 +291,4 @@ def _factory(spec: OCRBackendSpec) -> OpenAIDirectBackend:
 
 if _OPENAI_AVAILABLE:
     register_backend("openai_direct", _factory)
+    register_backend("openai", _factory)

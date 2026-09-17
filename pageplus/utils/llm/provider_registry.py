@@ -1,9 +1,9 @@
-"""Registry of LiteLLM provider presets (a.k.a. "provider templates").
+"""Registry of provider presets (a.k.a. "provider templates").
 
-LiteLLM lets PagePlus talk to dozens of upstream LLM providers using a single
-client. Each provider, however, needs a slightly different prefix, environment
-variable, base URL, and preferred vision-capable model. This registry encodes
-those per-provider defaults as :class:`LiteLLMProviderPreset` entries so that
+PagePlus talks directly to upstream LLM providers (Google Gemini, OpenAI,
+Mistral, Ollama, custom OpenAI/Curl endpoints). Each provider needs a slightly
+different protocol, environment variable, base URL, and preferred vision-capable model.
+This registry encodes those per-provider defaults as :class:`ProviderPreset` entries so that
 CLI / GUI code can:
 
 - list every preset that is configured on the current machine
@@ -13,7 +13,7 @@ CLI / GUI code can:
 - pick a sensible vision-capable default model for each preset.
 
 The registry intentionally stays *declarative*. Adding a new provider is a
-matter of appending one more :class:`LiteLLMProviderPreset`, no code changes
+matter of appending one more :class:`ProviderPreset`, no code changes
 elsewhere.
 
 Env-var lookup order (first match wins):
@@ -38,19 +38,18 @@ from pageplus.utils.llm.core.specs import (
 
 
 @dataclass(frozen=True)
-class LiteLLMProviderPreset:
-    """Declarative description of a LiteLLM-routable provider.
+class ProviderPreset:
+    """Declarative description of a provider preset.
 
-    :param id: stable short identifier (``"openai"``, ``"azure_openai"``, ...).
+    :param id: stable short identifier (``"openai"``, ``"gemini"``, ...).
     :param display_name: human-readable label shown in CLIs/GUIs.
-    :param litellm_prefix: prefix prepended to ``model`` when calling
-        ``litellm.completion`` (``"openai"``, ``"azure"``, ``"anthropic"`` ...).
+    :param protocol: upstream protocol/driver (``"openai"``, ``"gemini"``, ``"mistral_ocr"``, ``"curl"`` ...).
     :param env_api_key: environment variable (or ``.env`` key) holding the API key.
     :param env_api_base: optional env var for the custom API base URL.
     :param default_model: vision-capable model used as a sensible default.
     :param alt_models: extra suggested model names to surface in UIs.
     :param api_base_hint: informational hint for the expected base URL.
-    :param requires_base_url: when ``True``, a base URL is mandatory (Ollama, Azure).
+    :param requires_base_url: when ``True``, a base URL is mandatory (Ollama, local endpoints).
     :param vision_capable: whether this provider can run image-conditioned OCR.
     :param supports_json_schema: whether the provider honours
         ``response_format={"type": "json_schema"}``; if ``False`` we fall back
@@ -62,7 +61,7 @@ class LiteLLMProviderPreset:
 
     id: str
     display_name: str
-    litellm_prefix: str
+    protocol: str = "openai"
     env_api_key: Optional[str] = None
     env_api_base: Optional[str] = None
     default_model: Optional[str] = None
@@ -74,6 +73,11 @@ class LiteLLMProviderPreset:
     task_modes: Tuple[TaskMode, ...] = field(default_factory=lambda: tuple(TaskMode))
     image_key: str = "image"
     prompt_key: str = "prompt"
+
+    @property
+    def litellm_prefix(self) -> str:
+        """Backward-compatibility alias for protocol."""
+        return self.protocol
 
     # ------------------------------------------------------------------
 
@@ -99,7 +103,7 @@ class LiteLLMProviderPreset:
         return api_key, api_base
 
     def model_string(self, model: Optional[str] = None) -> str:
-        """Return the ``<prefix>/<model>`` identifier LiteLLM expects."""
+        """Return the ``<protocol>/<model>`` or ``<model>`` identifier."""
         chosen = model or self.default_model
         if not chosen:
             raise ValueError(f"Preset '{self.id}' has no default model; pass model=...")
@@ -116,7 +120,7 @@ class LiteLLMProviderPreset:
 
         if has_prefix:
             return chosen
-        return f"{self.litellm_prefix}/{chosen}"
+        return f"{self.protocol}/{chosen}"
 
     @staticmethod
     def _get_env(name: Optional[str]) -> Optional[str]:
@@ -137,115 +141,56 @@ class LiteLLMProviderPreset:
         return None
 
 
+# Backward-compatibility alias
+LiteLLMProviderPreset = ProviderPreset
+
+
 # ---------------------------------------------------------------------------
 # Built-in presets
 # ---------------------------------------------------------------------------
 
 
-_BUILTINS: Tuple[LiteLLMProviderPreset, ...] = (
-    LiteLLMProviderPreset(
+_BUILTINS: Tuple[ProviderPreset, ...] = (
+    ProviderPreset(
+        id="gemini",
+        display_name="Google Gemini (Official API)",
+        protocol="gemini",
+        env_api_key="GEMINI_API_KEY",
+        default_model="gemini-2.5-pro",
+        alt_models=("gemini-3.5-flash", "gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"),
+    ),
+    ProviderPreset(
         id="openai",
         display_name="OpenAI",
-        litellm_prefix="openai",
+        protocol="openai",
         env_api_key="OPENAI_API_KEY",
         default_model="gpt-4o",
         alt_models=("gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini", "o4-mini"),
         api_base_hint="https://api.openai.com/v1",
     ),
-    LiteLLMProviderPreset(
-        id="azure_openai",
-        display_name="Azure OpenAI",
-        litellm_prefix="azure",
-        env_api_key="AZURE_API_KEY",
-        env_api_base="AZURE_API_BASE",
-        default_model="gpt-4o",
-        alt_models=("gpt-4o-mini", "gpt-4.1"),
-        requires_base_url=True,
-    ),
-    LiteLLMProviderPreset(
-        id="anthropic",
-        display_name="Anthropic Claude",
-        litellm_prefix="anthropic",
-        env_api_key="ANTHROPIC_API_KEY",
-        default_model="claude-sonnet-4-5-20250929",
-        alt_models=(
-            "claude-3-7-sonnet-20250219",
-            "claude-3-5-sonnet-20241022",
-            "claude-3-5-haiku-20241022",
-        ),
-    ),
-    LiteLLMProviderPreset(
-        id="mistral",
-        display_name="Mistral (Pixtral via LiteLLM)",
-        litellm_prefix="mistral",
-        env_api_key="MISTRAL_API_KEY",
-        default_model="pixtral-large-latest",
-        alt_models=("pixtral-12b-2409", "mistral-large-latest"),
-    ),
-    LiteLLMProviderPreset(
+    ProviderPreset(
         id="mistral_ocr",
         display_name="Mistral Document OCR",
-        litellm_prefix="mistral_ocr",
+        protocol="mistral_ocr",
         env_api_key="MISTRAL_API_KEY",
         default_model="mistral-ocr-latest",
         alt_models=("mistral-ocr-2512", "mistral-ocr-4-0"),
         api_base_hint="https://api.mistral.ai/v1/ocr",
     ),
-    LiteLLMProviderPreset(
-        id="gemini",
-        display_name="Google Gemini (Official API)",
-        litellm_prefix="gemini",
-        env_api_key="GEMINI_API_KEY",
-        default_model="gemini-2.5-pro",
-        alt_models=("gemini-3.5-flash", "gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"),
+    ProviderPreset(
+        id="openai_compatible",
+        display_name="OpenAI-compatible server (vLLM, TGI, LM Studio, ...)",
+        protocol="openai",
+        env_api_key="OPENAI_COMPATIBLE_API_KEY",
+        env_api_base="OPENAI_COMPATIBLE_API_BASE",
+        default_model=None,
+        requires_base_url=True,
+        api_base_hint="http://localhost:8000/v1",
     ),
-    LiteLLMProviderPreset(
-        id="gemini_litellm",
-        display_name="Google Gemini (via LiteLLM)",
-        litellm_prefix="gemini",
-        env_api_key="GEMINI_API_KEY",
-        default_model="gemini-2.5-pro",
-        alt_models=("gemini-3.5-flash", "gemini-2.5-flash", "gemini-1.5-pro", "gemini-1.5-flash"),
-    ),
-    LiteLLMProviderPreset(
-        id="vertex_ai",
-        display_name="Google Vertex AI",
-        litellm_prefix="vertex_ai",
-        env_api_key="GOOGLE_APPLICATION_CREDENTIALS",
-        default_model="gemini-2.5-pro",
-        alt_models=("gemini-2.5-flash",),
-    ),
-    LiteLLMProviderPreset(
-        id="groq",
-        display_name="Groq",
-        litellm_prefix="groq",
-        env_api_key="GROQ_API_KEY",
-        default_model="llama-3.2-90b-vision-preview",
-        alt_models=("llama-3.2-11b-vision-preview",),
-    ),
-    LiteLLMProviderPreset(
-        id="deepseek",
-        display_name="DeepSeek",
-        litellm_prefix="deepseek",
-        env_api_key="DEEPSEEK_API_KEY",
-        default_model="deepseek-chat",
-        alt_models=("deepseek-reasoner",),
-        vision_capable=False,
-        task_modes=(TaskMode.TEXT_ONLY, TaskMode.TEXT_CORRECTION),
-    ),
-    LiteLLMProviderPreset(
-        id="cohere",
-        display_name="Cohere",
-        litellm_prefix="cohere",
-        env_api_key="COHERE_API_KEY",
-        default_model="command-r-plus",
-        vision_capable=False,
-        task_modes=(TaskMode.TEXT_ONLY, TaskMode.TEXT_CORRECTION),
-    ),
-    LiteLLMProviderPreset(
+    ProviderPreset(
         id="ollama",
         display_name="Ollama (local)",
-        litellm_prefix="ollama",
+        protocol="ollama",
         env_api_base="OLLAMA_API_BASE",
         default_model="llama3.2-vision",
         alt_models=("llava", "minicpm-v"),
@@ -253,42 +198,10 @@ _BUILTINS: Tuple[LiteLLMProviderPreset, ...] = (
         api_base_hint="http://localhost:11434",
         supports_json_schema=False,
     ),
-    LiteLLMProviderPreset(
-        id="openai_compatible",
-        display_name="OpenAI-compatible server (vLLM, TGI, LM Studio, ...)",
-        litellm_prefix="openai",
-        env_api_key="OPENAI_COMPATIBLE_API_KEY",
-        env_api_base="OPENAI_COMPATIBLE_API_BASE",
-        default_model=None,
-        requires_base_url=True,
-        api_base_hint="http://localhost:8000/v1",
-    ),
-    LiteLLMProviderPreset(
-        id="huggingface",
-        display_name="Hugging Face Inference API",
-        litellm_prefix="huggingface",
-        env_api_key="HF_TOKEN",
-        default_model="meta-llama/Meta-Llama-3.1-8B-Instruct",
-        alt_models=("HuggingFaceM4/idefics2-8b",),
-    ),
-    LiteLLMProviderPreset(
-        id="bedrock",
-        display_name="AWS Bedrock",
-        litellm_prefix="bedrock",
-        env_api_key="AWS_ACCESS_KEY_ID",
-        default_model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    ),
-    LiteLLMProviderPreset(
-        id="sagemaker",
-        display_name="AWS SageMaker",
-        litellm_prefix="sagemaker",
-        env_api_key="AWS_ACCESS_KEY_ID",
-        default_model=None,
-    ),
-    LiteLLMProviderPreset(
+    ProviderPreset(
         id="transformers",
         display_name="Local transformers (direct, scaffold)",
-        litellm_prefix="transformers",
+        protocol="transformers",
         env_api_key=None,
         default_model=None,
         api_base_hint="(in-process HuggingFace model id)",
@@ -297,7 +210,7 @@ _BUILTINS: Tuple[LiteLLMProviderPreset, ...] = (
 )
 
 
-_REGISTRY: Dict[str, LiteLLMProviderPreset] = {p.id: p for p in _BUILTINS}
+_REGISTRY: Dict[str, ProviderPreset] = {p.id: p for p in _BUILTINS}
 
 
 # ---------------------------------------------------------------------------
@@ -305,29 +218,37 @@ _REGISTRY: Dict[str, LiteLLMProviderPreset] = {p.id: p for p in _BUILTINS}
 # ---------------------------------------------------------------------------
 
 
-def register_preset(preset: LiteLLMProviderPreset) -> None:
+def register_preset(preset: ProviderPreset) -> None:
     """Add or override a preset in the registry."""
     _REGISTRY[preset.id] = preset
 
 
-def get_preset(preset_id: str) -> LiteLLMProviderPreset:
+def get_preset(preset_id: str) -> ProviderPreset:
+    if preset_id not in _REGISTRY and preset_id.startswith("custom_"):
+        register_custom_endpoints()
     try:
         return _REGISTRY[preset_id]
     except KeyError:
+        known = ", ".join(sorted(_REGISTRY.keys()))
         raise KeyError(
-            f"Unknown LiteLLM provider preset '{preset_id}'. "
-            f"Known: {sorted(_REGISTRY)}"
+            f"Unknown LLM provider preset '{preset_id}'. Known presets: {known}"
         )
 
 
-def list_providers() -> List[LiteLLMProviderPreset]:
-    """Return every registered preset, regardless of configuration status."""
-    return list(_REGISTRY.values())
+def list_presets() -> Tuple[ProviderPreset, ...]:
+    """Return all known presets, with custom endpoints appended."""
+    register_custom_endpoints()
+    return tuple(_REGISTRY.values())
 
 
-def available_providers() -> List[LiteLLMProviderPreset]:
-    """Return every preset whose required credentials are present in the env."""
-    return [p for p in _REGISTRY.values() if p.is_configured()]
+def list_providers() -> Tuple[ProviderPreset, ...]:
+    """Alias for :func:`list_presets`."""
+    return list_presets()
+
+
+def available_providers() -> Tuple[ProviderPreset, ...]:
+    """Return presets that have the required env credentials set."""
+    return tuple(p for p in list_presets() if p.is_configured())
 
 
 def register_custom_endpoints() -> List[str]:
@@ -337,7 +258,7 @@ def register_custom_endpoints() -> List[str]:
     registered custom presets are updated in place.
 
     Custom endpoints inject their credentials directly into ``os.environ``
-    so that :meth:`LiteLLMProviderPreset.resolve_credentials` picks them up
+    so that :meth:`ProviderPreset.resolve_credentials` picks them up
     without needing ``.env`` entries.
     """
     from pageplus.utils.llm.endpoint_store import load_endpoints, normalize_base_url  # local to avoid circular
@@ -357,10 +278,10 @@ def register_custom_endpoints() -> List[str]:
         os.environ[env_key_var] = ep.api_key or "EMPTY"
         os.environ[env_base_var] = base_url
 
-        preset = LiteLLMProviderPreset(
+        preset = ProviderPreset(
             id=preset_id,
             display_name=f"Custom: {ep.name}",
-            litellm_prefix=getattr(ep, "provider", "openai"),
+            protocol=getattr(ep, "provider", "openai"),
             env_api_key=env_key_var,
             env_api_base=env_base_var,
             default_model=ep.default_model or None,
@@ -415,7 +336,7 @@ def spec_from_preset(
     )
 
     # --- Transformers / HuggingFace backend -------------------------------
-    if preset.litellm_prefix == "transformers" or preset_id == "transformers":
+    if preset.protocol == "transformers" or preset_id == "transformers":
         from pageplus.utils.llm.core.specs import HuggingFaceOptions
 
         chosen_model = model or preset.default_model
@@ -436,7 +357,7 @@ def spec_from_preset(
         )
 
     # --- Curl REST backend (direct REST POST) -----------------------------
-    if preset.litellm_prefix == "curl" or preset_id == "curl":
+    if preset.protocol == "curl" or preset_id == "curl":
         from pageplus.utils.llm.core.specs import CurlHTTPOptions
 
         chosen_model = model or preset.default_model or "curl-default"
@@ -464,7 +385,7 @@ def spec_from_preset(
         )
 
     # --- Mistral OCR backend (direct Document AI API) ---------------------
-    if preset.litellm_prefix == "mistral_ocr" or preset_id == "mistral_ocr":
+    if preset.protocol == "mistral_ocr" or preset_id == "mistral_ocr":
         from pageplus.utils.llm.core.specs import MistralOptions
 
         chosen_model = model or preset.default_model or "mistral-ocr-latest"
@@ -489,34 +410,8 @@ def spec_from_preset(
             },
         )
 
-    # --- Gemini via LiteLLM backend --------------------------------------
-    if preset_id == "gemini_litellm":
-        from pageplus.utils.llm.core.specs import LiteLLMTransportConfig
-
-        chosen_model = model or preset.default_model or "gemini-2.5-pro"
-        model_str = preset.model_string(chosen_model)
-        options = LiteLLMTransportConfig(
-            api_key=api_key,
-            api_base_url=api_base,
-            timeout=timeout if timeout is not None else 300.0,
-            provider_prefix="gemini",
-            calls_per_minute=calls_per_minute,
-            max_image_size=max_image_size,
-            json_object_mode=True,
-        )
-        return OCRBackendSpec(
-            provider="litellm",
-            model=model_str,
-            options=options,
-            metadata={
-                "preset_id": preset.id,
-                "preset_display_name": preset.display_name,
-                "preset_vision_capable": preset.vision_capable,
-            },
-        )
-
-    # --- Native Gemini SDK backend (google-genai official API) ----------
-    if preset_id in ("gemini", "gemini_official") or (preset.litellm_prefix == "gemini" and preset_id != "gemini_litellm"):
+    # --- Gemini backend (google-genai official API) ---------------------
+    if preset_id in ("gemini", "gemini_official") or preset.protocol == "gemini":
         from pageplus.utils.llm.core.specs import GeminiOptions, GeminiBatchOptions
 
         chosen_model = model or preset.default_model or "gemini-2.5-flash"
@@ -547,38 +442,36 @@ def spec_from_preset(
             },
         )
 
-    # --- Custom endpoints → direct OpenAI library or LiteLLM --------------
+    # --- OpenAI & OpenAI-compatible backends (direct openai SDK) --------
+    if preset_id in ("openai", "ollama") or preset.protocol == "openai":
+        from pageplus.utils.llm.core.specs import OpenAICompatibleOptions
+
+        chosen_model = model or preset.default_model or "gpt-4o"
+        if "/" in chosen_model and not chosen_model.startswith("http"):
+            chosen_model = chosen_model.split("/", 1)[1]
+
+        default_base = "http://localhost:11434/v1" if preset_id == "ollama" else "https://api.openai.com/v1"
+        options = OpenAICompatibleOptions(
+            api_base_url=api_base or preset.api_base_hint or default_base,
+            api_key=api_key or ("EMPTY" if preset_id == "ollama" else None),
+            timeout=timeout if timeout is not None else 180.0,
+            calls_per_minute=calls_per_minute,
+            max_image_size=max_image_size,
+        )
+        return OCRBackendSpec(
+            provider="openai_direct",
+            model=chosen_model,
+            options=options,
+            metadata={
+                "preset_id": preset.id,
+                "preset_display_name": preset.display_name,
+                "preset_vision_capable": preset.vision_capable,
+            },
+        )
+
+    # --- Custom endpoints → direct OpenAI library or Mistral OCR --------
     if preset_id.startswith("custom_"):
-        if preset.litellm_prefix == "openai":
-            from pageplus.utils.llm.core.specs import OpenAICompatibleOptions
-
-            # For the direct OpenAI backend, the model name is sent as-is to the
-            # server (no litellm prefix).  Use the caller's override, the preset
-            # default, or raise if neither is set.
-            chosen_model = model or preset.default_model
-            if not chosen_model:
-                raise ValueError(
-                    f"Preset '{preset.id}' has no default model; pass model=..."
-                )
-
-            options = OpenAICompatibleOptions(
-                api_base_url=api_base or preset.api_base_hint or "http://localhost:8000/v1",
-                api_key=api_key,
-                timeout=timeout if timeout is not None else 180.0,
-                calls_per_minute=calls_per_minute,
-                max_image_size=max_image_size,
-            )
-            return OCRBackendSpec(
-                provider="openai_direct",
-                model=chosen_model,
-                options=options,
-                metadata={
-                    "preset_id": preset.id,
-                    "preset_display_name": preset.display_name,
-                    "preset_vision_capable": preset.vision_capable,
-                },
-            )
-        elif preset.litellm_prefix == "mistral_ocr":
+        if preset.protocol == "mistral_ocr":
             from pageplus.utils.llm.core.specs import MistralOptions
             chosen_model = model or preset.default_model or "paddleocr-vl"
             options = MistralOptions(
@@ -602,24 +495,23 @@ def spec_from_preset(
                 },
             )
         else:
-            resolved_json_object_mode = (
-                json_object_mode if json_object_mode is not None else not preset.supports_json_schema
-            )
+            from pageplus.utils.llm.core.specs import OpenAICompatibleOptions
 
-            transport = LiteLLMTransportConfig(
-                api_base_url=api_base,
+            chosen_model = model or preset.default_model or "custom-model"
+            if "/" in chosen_model and not chosen_model.startswith("http"):
+                chosen_model = chosen_model.split("/", 1)[1]
+
+            options = OpenAICompatibleOptions(
+                api_base_url=api_base or preset.api_base_hint or "http://localhost:8000/v1",
                 api_key=api_key,
-                timeout=timeout if timeout is not None else 60.0,
-                provider_prefix=preset.litellm_prefix,
+                timeout=timeout if timeout is not None else 180.0,
                 calls_per_minute=calls_per_minute,
-                json_object_mode=resolved_json_object_mode,
                 max_image_size=max_image_size,
             )
-
             return OCRBackendSpec(
-                provider="litellm",
-                model=preset.model_string(model),
-                options=transport,
+                provider="openai_direct",
+                model=chosen_model,
+                options=options,
                 metadata={
                     "preset_id": preset.id,
                     "preset_display_name": preset.display_name,
@@ -627,29 +519,9 @@ def spec_from_preset(
                 },
             )
 
-    # --- Built-in presets → LiteLLM ---------------------------------------
-    resolved_json_object_mode = (
-        json_object_mode if json_object_mode is not None else not preset.supports_json_schema
-    )
-
-    transport = LiteLLMTransportConfig(
-        api_base_url=api_base,
-        api_key=api_key,
-        timeout=timeout if timeout is not None else 60.0,
-        provider_prefix=preset.litellm_prefix,
-        calls_per_minute=calls_per_minute,
-        json_object_mode=resolved_json_object_mode,
-        max_image_size=max_image_size,
-    )
-
-    return OCRBackendSpec(
-        provider="litellm",
-        model=preset.model_string(model),
-        options=transport,
-        metadata={
-            "preset_id": preset.id,
-            "preset_display_name": preset.display_name,
-            "preset_vision_capable": preset.vision_capable,
-        },
+    raise ValueError(
+        f"Provider preset '{preset.id}' ({preset.display_name}) requires a direct backend. "
+        f"Native backends are available for Gemini, OpenAI, Ollama, Curl, and Mistral OCR. "
+        f"For other providers, please configure a custom OpenAI-compatible endpoint under Endpoints."
     )
 

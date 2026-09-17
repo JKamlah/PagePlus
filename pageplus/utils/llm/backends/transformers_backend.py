@@ -55,7 +55,7 @@ class TransformersBackend(OCRBackend):
             "The direct 'transformers' backend is scaffolded but inference is "
             "not implemented yet. Use an OpenAI-compatible server (e.g. vLLM "
             "serving the same model) via a custom endpoint, or the Gemini / "
-            "LiteLLM providers, until the in-process transformers path lands.",
+            "OpenAI providers, until the in-process transformers path lands.",
             provider=self.provider_name, model=self.model_name,
         )
 

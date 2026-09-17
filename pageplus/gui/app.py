@@ -439,7 +439,6 @@ def show_home():
     🤖 LLM: Perform different tasks on PAGE-XML files with LLMs  
     🌟 Gemini: Use Gemini to process images and validate PAGE-XML output  
     🤖 LLM-OCR: Unified OCR via local/SSH, OpenAI-compatible, Gemini-compatible & (scaffolded) transformer models, driven by rich presets  
-    🔀 Flow Editor: Build complex workflows with visual node editor  
     🔤 Tesseract OCR: Do OCR on PAGE-XML files with Tesseract (if activated)  
     🐙 Kraken OCR: Do OCR on PAGE-XML files with Kraken (if activated)  
     📤 Export: Export PAGE-XML files to different formats (ALTO, PDF, Text)  

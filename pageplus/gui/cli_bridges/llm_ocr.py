@@ -38,19 +38,18 @@ from pageplus.utils.llm.ocr_presets import (
 from pageplus.utils.llm.pipeline_store import EXECUTION_MODES, LLMOCRPipelineStore
 
 
-def _litellm_available() -> bool:
+def _ocr_backends_available() -> bool:
     from importlib import util
-    try:
-        if util.find_spec("litellm") is not None:
-            return True
-    except Exception:
-        pass
-    try:
-        import google.genai
-        return True
-    except ImportError:
-        pass
+    for mod in ("google", "openai", "requests"):
+        try:
+            if util.find_spec(mod) is not None:
+                return True
+        except Exception:
+            pass
     return False
+
+
+_litellm_available = _ocr_backends_available  # Backwards-compatibility alias
 
 
 def _normalize_usage(usage: Dict[str, Any]) -> Dict[str, int]:
@@ -94,13 +93,12 @@ class LLMOcrBridge:
     # ------------------------------------------------------------------
 
     def is_available(self) -> dict:
-        if _litellm_available():
-            return {"success": True, "output": "LiteLLM is installed."}
+        if _ocr_backends_available():
+            return {"success": True, "output": "LLM OCR backends are available."}
         return {
             "success": False,
             "output": (
-                "LiteLLM is not installed. Run `pageplus llm-ocr install` "
-                "or `pip install litellm json-repair`."
+                "No LLM OCR backend is installed. Please install google-genai or openai."
             ),
         }
 
@@ -119,7 +117,7 @@ class LLMOcrBridge:
         }
 
     # ------------------------------------------------------------------
-    # Provider presets (LiteLLM-routable + custom + transformers)
+    # Provider presets (native direct + custom + transformers)
     # ------------------------------------------------------------------
 
     def list_providers(self, only_configured: bool = False) -> dict:
@@ -131,10 +129,12 @@ class LLMOcrBridge:
             providers = available_providers() if only_configured else list_providers()
             rows: List[Dict[str, Any]] = []
             for p in providers:
+                protocol = getattr(p, "protocol", getattr(p, "litellm_prefix", ""))
                 rows.append({
                     "id": p.id,
                     "display_name": p.display_name,
-                    "litellm_prefix": p.litellm_prefix,
+                    "protocol": protocol,
+                    "litellm_prefix": protocol,
                     "default_model": p.default_model,
                     "alt_models": list(p.alt_models),
                     "env_api_key": p.env_api_key,
@@ -155,13 +155,15 @@ class LLMOcrBridge:
             from pageplus.utils.llm.provider_registry import get_preset
             preset = get_preset(provider_id)
             api_key, api_base = preset.resolve_credentials()
+            protocol = getattr(preset, "protocol", getattr(preset, "litellm_prefix", ""))
             return {
                 "success": True,
                 "output": preset.display_name,
                 "provider": {
                     "id": preset.id,
                     "display_name": preset.display_name,
-                    "litellm_prefix": preset.litellm_prefix,
+                    "protocol": protocol,
+                    "litellm_prefix": protocol,
                     "default_model": preset.default_model,
                     "alt_models": list(preset.alt_models),
                     "env_api_key": preset.env_api_key,
@@ -278,7 +280,7 @@ class LLMOcrBridge:
         level / mapping / prompts / filters; any explicit argument overrides it.
         ``provider_id`` selects the provider preset / custom endpoint to call.
         """
-        if not _litellm_available():
+        if not _ocr_backends_available():
             return self.is_available()
 
         try:
@@ -669,7 +671,7 @@ class LLMOcrBridge:
         steps mutate that XML. If the pipeline has no fresh step it operates on
         the provided ``xml_files`` (ReOCR).
         """
-        if not _litellm_available():
+        if not _ocr_backends_available():
             return self.is_available()
         if not tasks:
             return {"success": False, "output": "Pipeline has no tasks."}

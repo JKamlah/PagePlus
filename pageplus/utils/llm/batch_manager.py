@@ -1,7 +1,7 @@
 """Batch Processing Manager & Persistent Job Store.
 
 Manages creation, execution, status monitoring, duration tracking, and persistence
-for LLM batch jobs across OpenAI, Gemini, Mistral, LiteLLM, and custom endpoints.
+for LLM batch jobs across OpenAI, Gemini, Mistral, and custom endpoints.
 
 Standard Batch Status Lifecycle:
   * validating  - Input files and configuration are being checked before submission.

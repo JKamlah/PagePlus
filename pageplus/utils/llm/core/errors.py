@@ -2,7 +2,7 @@
 
 All backends translate their native exceptions into this hierarchy, so the
 pipeline can implement a single retry / surfacing policy without having to know
-about LiteLLM, google.genai, or any other provider SDK.
+about openai, google.genai, or any other provider SDK.
 
 Hierarchy and classification are inspired by Churro's error taxonomy, adapted
 to PagePlus's style; there is no runtime dependency on ``churro-ocr``.

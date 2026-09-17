@@ -59,7 +59,7 @@ def show_batches(bridge: BatchBridge) -> None:
     st.title("📊 LLM Batch Jobs")
     st.caption(
         "Monitor and manage asynchronous LLM batch processing jobs across "
-        "OpenAI, Gemini, Mistral, LiteLLM, and local/SSH custom endpoints. "
+        "OpenAI, Gemini, Mistral, and local/SSH custom endpoints. "
         "Running batches automatically refresh and save PAGE-XML results."
     )
 

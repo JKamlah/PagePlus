@@ -1,11 +1,10 @@
-"""Small helper that wraps the env-var-based settings previously mixed into
-``LITELLMAPI`` / ``GEMINIAPI``.
+"""Small helper that wraps the env-var-based settings for LLM providers.
 
 Separating settings from the backend protocol keeps credentials + model
 selection orthogonal to how the model is actually invoked. Typer CLI commands
 (``set-api-key``, ``show-settings``, ``show-models`` …) continue to work on
 this class; the pipeline consumes a :class:`~pageplus.utils.llm.core.OCRBackendSpec`
-that *may* be built from these settings via :func:`spec_from_litellm_settings`
+that *may* be built from these settings via :func:`spec_from_openai_settings`
 and :func:`spec_from_gemini_settings`.
 """
 from __future__ import annotations
@@ -53,7 +52,7 @@ class LLMSettings(API):
 
     @property
     def model_with_prefix(self) -> str:
-        """LiteLLM-style ``<provider>/<model>`` string; empty when no model is set."""
+        """Provider-qualified ``<provider>/<model>`` string; empty when no model is set."""
         if not self.model:
             return ''
         return f"{self.llmprovider.name.lower()}/{self.model}"
@@ -82,27 +81,45 @@ class LLMSettings(API):
     # ---- Provider-agnostic checks ---------------------------------------
 
     def check_valid_key(self) -> bool:
-        """Best-effort API key validation. Uses LiteLLM when available,
-        falls back to a simple models endpoint probe for plain OpenAI-compatible
-        servers. Gemini overrides this."""
+        """Best-effort API key validation. Uses Gemini check for Gemini,
+        and OpenAI / HTTP models endpoint probe for OpenAI-compatible servers."""
         if self.environment == Environments.GEMINI:
             return self._gemini_check_valid_key()
-        if util.find_spec('litellm') is not None:
-            import litellm  # noqa: WPS433
-            try:
-                ok = litellm.check_valid_key(self.model_with_prefix, self.api_key)
-            except Exception as exc:  # pragma: no cover - best-effort
-                print(f"[red]Key check raised: {exc}[/red]")
-                return False
-            print("[green]Valid API key[green]" if ok else "[red]Not a valid API key[red]")
-            return bool(ok)
-        print("[red]litellm not installed; cannot validate key.[/red]")
-        return False
+
+        # Try direct OpenAI client check
+        try:
+            from openai import OpenAI
+            client_kwargs = {}
+            if self.api_key:
+                client_kwargs["api_key"] = self.api_key
+            if self.api_base_url:
+                client_kwargs["base_url"] = self.api_base_url
+            client = OpenAI(**client_kwargs)
+            client.models.list()
+            print("[green]Valid API key[/green]")
+            return True
+        except Exception:
+            pass
+
+        # Fallback HTTP probe to /models
+        base = self.api_base_url or "https://api.openai.com/v1"
+        try:
+            resp = requests.get(
+                f"{base.rstrip('/')}/models",
+                headers={"Authorization": f"Bearer {self.api_key}"} if self.api_key else {},
+                timeout=10.0,
+            )
+            ok = resp.status_code == 200
+            print("[green]Valid API key[/green]" if ok else f"[red]Invalid API key (status {resp.status_code})[/red]")
+            return ok
+        except Exception as e:
+            print(f"[red]Key check error: {e}[/red]")
+            return False
 
     def check_model(self, modelname: str) -> bool:
         if self.environment == Environments.GEMINI:
             return self._gemini_check_model(modelname)
-        # LiteLLM/OpenAI-compatible path: probe the provider's /models endpoint.
+        # OpenAI-compatible path: probe the provider's /models endpoint.
         if not self.api_base_url:
             # No endpoint to probe; accept optimistically.
             return True
@@ -227,24 +244,30 @@ class LLMSettings(API):
 # settings layer and the backend layer.
 # ---------------------------------------------------------------------------
 
-def spec_from_litellm_settings(
+def spec_from_openai_settings(
     settings: LLMSettings,
     *,
     json_object_mode: bool = False,
     timeout: Optional[float] = None,
 ) -> OCRBackendSpec:
-    transport = LiteLLMTransportConfig(
-        api_base_url=settings.api_base_url,
+    from pageplus.utils.llm.core.specs import OpenAICompatibleOptions
+    options = OpenAICompatibleOptions(
+        api_base_url=settings.api_base_url or "https://api.openai.com/v1",
         api_key=settings.api_key,
         timeout=timeout if timeout is not None else settings.keep_alive_time,
-        provider_prefix=settings.llmprovider.name.lower() if settings.provider else None,
-        json_object_mode=json_object_mode,
     )
+    chosen_model = settings.model or "gpt-4o"
+    if "/" in chosen_model and not chosen_model.startswith("http"):
+        chosen_model = chosen_model.split("/", 1)[1]
     return OCRBackendSpec(
-        provider="litellm",
-        model=settings.model_with_prefix or settings.model,
-        options=transport,
+        provider="openai_direct",
+        model=chosen_model,
+        options=options,
     )
+
+
+# Backward-compatibility alias
+spec_from_litellm_settings = spec_from_openai_settings
 
 
 def spec_from_gemini_settings(

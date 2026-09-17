@@ -232,10 +232,12 @@ for _mode, _default_name in [
     register_profile(_clone(_base, name=f"gemini_{_mode.value}"),
                      provider="gemini", model="*")
 
-# LiteLLM: same template family, but the backend uses json_schema strict mode
-# when the provider supports it -- the profile's schema is already set above.
+# OpenAI-compatible direct backends (and litellm compatibility fallback)
 for _mode in TaskMode:
     _base = next(p for p in _BUILTINS if p.task_mode == _mode)
+    register_profile(_clone(_base, name=f"openai_{_mode.value}"),
+                     provider="openai_direct", model="*")
     register_profile(_clone(_base, name=f"litellm_{_mode.value}"),
                      provider="litellm", model="*")
+
 

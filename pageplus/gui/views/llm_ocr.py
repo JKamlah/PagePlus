@@ -10,7 +10,7 @@ Tabs:
     * **⚙️ Settings** — provider presets + credentials, custom endpoints + SSH
       controls, and token-cost settings for the usage report.
     * **🧬 Presets** — define/edit the rich LLM-OCR presets.
-    * **📁 I/O** — the same image queue as the Gemini/LiteLLM pages.
+    * **📁 I/O** — the same image queue as the Gemini and OCR pages.
     * **🔬 Process** — pick a provider + preset, set task level and "Process only
       Tags", then run OCR (fresh) or ReOCR (correction) with a live terminal and
       token report.
@@ -104,8 +104,8 @@ def _token_settings(settings: Settings) -> None:
 def _providers_block(bridge: LLMOcrBridge) -> None:
     st.subheader("Providers")
     st.caption(
-        "Local/SSH (OpenAI-compatible), OpenAI-compatible, Gemini-compatible "
-        "(via LiteLLM), and the scaffolded local `transformers` backend. "
+        "Direct OCR providers (Google Gemini, OpenAI, Ollama, OpenAI-compatible servers, Mistral Document OCR), "
+        "custom endpoints (OpenAI / Curl), and the scaffolded local `transformers` backend. "
         "Credentials live in your PagePlus `.env`."
     )
     only_configured = st.checkbox("Show only configured", value=False, key="llmocr_only_configured")
@@ -120,7 +120,8 @@ def _providers_block(bridge: LLMOcrBridge) -> None:
 
     st.dataframe(pd.DataFrame([
         {
-            "id": p["id"], "Name": p["display_name"], "Prefix": p["litellm_prefix"],
+            "id": p["id"], "Name": p["display_name"],
+            "Protocol": p.get("protocol") or p.get("litellm_prefix", "-"),
             "Default model": p["default_model"] or "-",
             "Configured?": "✅" if p["configured"] else "❌",
         }
@@ -538,7 +539,7 @@ def _presets_tab(bridge: LLMOcrBridge) -> None:
 
 def _io_tab() -> None:
     st.caption(
-        "Same I/O flow as Gemini/LiteLLM: pick images here (used for fresh OCR), "
+        "Same I/O flow as Gemini: pick images here (used for fresh OCR), "
         "and load PAGE-XML on the main **Input** page for ReOCR (correction steps)."
     )
     input_type = st.radio("Input type", ["Directory", "Files"], horizontal=True, key="llmocr_input_type")
@@ -872,7 +873,7 @@ def _process_tab(bridge: LLMOcrBridge, settings: Settings) -> None:
             )
     verbose = st.checkbox("🐞 Verbose LLM debug (log the exact upstream request: URL + payload)",
                           value=False, key="llmocr_verbose",
-                          help="Prints LiteLLM's raw request/curl to the terminal so you can see "
+                          help="Prints the raw request/curl to the terminal so you can see "
                                "exactly what is called. Takes effect on the next run.")
 
     first_family = step_family(tasks[0].get("step", "All-in-One"), tasks[0].get("task_mode"))

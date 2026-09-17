@@ -18,9 +18,6 @@ from pageplus.utils.llm.backends import base  # noqa: F401
 if _util.find_spec("google") is not None and _util.find_spec("google.genai") is not None:
     from pageplus.utils.llm.backends import gemini_backend  # noqa: F401
 
-if _util.find_spec("litellm") is not None:
-    from pageplus.utils.llm.backends import litellm_backend  # noqa: F401
-
 if _util.find_spec("openai") is not None:
     from pageplus.utils.llm.backends import openai_direct_backend  # noqa: F401
 

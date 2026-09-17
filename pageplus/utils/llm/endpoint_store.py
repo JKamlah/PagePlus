@@ -51,7 +51,7 @@ class SavedEndpoint:
     ``ssh -N -L 8082:localhost:8082 root@spark01.bib.uni-mannheim.de``)."""
 
     provider: str = "openai"
-    """Upstream provider protocol/prefix for LiteLLM (e.g. ``openai``, ``gemini``, ``ollama``, ``curl``)."""
+    """Upstream provider protocol (e.g. ``openai``, ``gemini``, ``ollama``, ``curl``)."""
 
     image_key: str = "image"
     """The JSON payload key for the base64-encoded image (used when provider='curl')."""
@@ -69,9 +69,7 @@ def normalize_base_url(url: str, provider: str = "openai") -> str:
     """Return a base URL in the shape the upstream provider expects.
 
     * Ensures an ``http(s)://`` scheme and strips trailing slashes (a trailing
-      slash makes LiteLLM build ``http://host//api/generate`` for Ollama, which
-      triggers a redirect that downgrades POST→GET and yields ``405 method not
-      allowed``).
+      slash can cause HTTP 301/308 redirects that downgrade POST→GET).
     * ``openai`` servers (vLLM, TGI, ollama's OpenAI-compat port, …) need the
       ``/v1`` suffix; native ``ollama`` / ``gemini`` endpoints must NOT have it
       (they use ``/api/...`` resp. their own routes off the server root).
