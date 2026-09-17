@@ -199,10 +199,10 @@ class LiteLLMBackend(OCRBackend):
         ctx.metadata["original_height"] = h
         ctx.metadata["rescaled_width"] = w
         ctx.metadata["rescaled_height"] = h
-        if self._transport.max_image_size:
+        max_size = self._transport.max_image_size or 1500
+        if max_size:
             from PIL import Image
             w, h = image.size
-            max_size = self._transport.max_image_size
             if w > max_size or h > max_size:
                 if w >= h:
                     new_w = max_size
@@ -215,13 +215,14 @@ class LiteLLMBackend(OCRBackend):
                 image = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
                 ctx.metadata["rescaled_width"] = new_w
                 ctx.metadata["rescaled_height"] = new_h
-        image_b64 = image_to_base64(image)
+
+        image_b64 = image_to_base64(image, format="JPEG", quality=85)
         user_content: list = [
             {"type": "text", "text": prompt.user},
             {
                 "type": "image_url",
                 "image_url": {
-                    "url": f"data:image/{image_format.lower()};base64,{image_b64}",
+                    "url": f"data:image/jpeg;base64,{image_b64}",
                     "detail": prompt.extra.get("detail", "high"),
                 },
             },

@@ -562,7 +562,16 @@ def parse_html_table_grid(html_str: str) -> List[Dict[str, Any]]:
                 except ValueError:
                     colspan = 1
 
-                cell_text = cell.text_content().strip()
+                # Convert <br> tags to newlines in tail
+                for br in cell.xpath(".//br"):
+                    br.tail = "\n" + (br.tail or "")
+                for block_el in cell.xpath(".//p | .//div"):
+                    block_el.tail = "\n" + (block_el.tail or "")
+
+                raw_text = cell.text_content()
+                lines = [line.strip() for line in raw_text.splitlines()]
+                non_empty = [line for line in lines if line]
+                cell_text = "\n".join(non_empty)
                 for r in range(rowspan):
                     for c in range(colspan):
                         grid[(r_idx + r, c_idx + c)] = True
@@ -600,6 +609,8 @@ def parse_html_table_grid(html_str: str) -> List[Dict[str, Any]]:
                     "text": [],
                 }
                 self.current_row.append(self.current_cell)
+            elif tag.lower() in ("br", "p", "div") and self.current_cell is not None:
+                self.current_cell["text"].append("\n")
 
         def handle_data(self, data):
             if self.current_cell is not None:
@@ -620,7 +631,10 @@ def parse_html_table_grid(html_str: str) -> List[Dict[str, Any]]:
                 c_idx += 1
             rowspan = cell["rowspan"]
             colspan = cell["colspan"]
-            cell_text = "".join(cell["text"]).strip()
+            cell_raw = "".join(cell["text"])
+            lines = [line.strip() for line in cell_raw.splitlines()]
+            non_empty = [l for l in lines if l]
+            cell_text = "\n".join(non_empty)
             for r in range(rowspan):
                 for c in range(colspan):
                     grid[(r_idx + r, c_idx + c)] = True
@@ -817,9 +831,11 @@ def mistral_ocr_to_page(
                     for l_idx, line_str in enumerate(cell_lines):
                         cleaned_line = clean_markdown_line(line_str)
                         ly1 = cell_y1 + (l_idx * cline_h)
-                        ly2 = ly1 + cline_h
-                        lbase = int(ly2 - cline_h * 0.2)
-                        l_coords = f"{int(cell_x1)},{int(ly1)} {int(cell_x2)},{int(ly1)} {int(cell_x2)},{int(ly2)} {int(cell_x1)},{int(ly2)}"
+                        ly2 = cell_y2 if l_idx == num_clines - 1 else (ly1 + cline_h)
+                        ly1_int = int(cell_y1) if l_idx == 0 else int(round(ly1))
+                        ly2_int = int(cell_y2) if l_idx == num_clines - 1 else int(round(ly2))
+                        lbase = int(round(ly2_int - (ly2_int - ly1_int) * 0.2))
+                        l_coords = f"{int(cell_x1)},{ly1_int} {int(cell_x2)},{ly1_int} {int(cell_x2)},{ly2_int} {int(cell_x1)},{ly2_int}"
                         l_base_coords = f"{int(cell_x1)},{lbase} {int(cell_x2)},{lbase}"
                         line_id = f"{cell_id}_l{l_idx + 1}"
 

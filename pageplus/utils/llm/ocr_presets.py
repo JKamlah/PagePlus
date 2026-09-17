@@ -89,6 +89,8 @@ MAPPING_CHOICES: List[str] = [
     "table_json_to_page",    # JSON tables -> fresh PAGE XML
     "table_correction_apply",# Crop table XML+image -> detect merged cells & proportions -> replace by ID
     "table_html_correction_apply", # HTML table -> correct structure & text -> replace by ID
+    "table_html_coords_apply",     # HTML table with % coords -> update coordinates -> replace by ID
+    "table_cells_bbox_apply",      # JSON cell bounding boxes (bbox_2d) -> update coordinates -> replace by ID
     "table2html_apply",
     "table_html_to_page",    # HTML table -> fresh PAGE XML
     "pp_layout_json_to_page",# PP-Layout JSON (PaddleOCR) -> fresh PAGE XML
@@ -201,6 +203,28 @@ TABLE_HTML_CORRECTION_PROMPT = (
     "4. Output only valid HTML <table> elements with no commentary or markdown code fences outside the table."
 )
 
+TABLE_HTML_COORDS_PROMPT = (
+    "You are an expert document table layout and geometry analysis AI.\n"
+    "You receive a cropped table image along with an HTML table representation containing its existing rows, columns, cells, text content, and initial percentage coordinates (0.0% - 100.0% relative to the image).\n\n"
+    "Your tasks are:\n"
+    "1. Inspect the cropped table image and determine the exact visual boundaries of every column, row, and table cell.\n"
+    "2. Update the percentage coordinates for each column (<col x=\"...%\" width=\"...%\">), row (<tr y=\"...%\" height=\"...%\">), and cell (<td x=\"...%\" y=\"...%\" width=\"...%\" height=\"...%\">):\n"
+    "   - 'x' is horizontal offset from the left edge (0.0% to 100.0%).\n"
+    "   - 'y' is vertical offset from the top edge (0.0% to 100.0%).\n"
+    "   - 'width' is the horizontal span in percentage.\n"
+    "   - 'height' is the vertical span in percentage.\n"
+    "3. Align all coordinates precisely with the visual grid lines, borders, and column/row separations in the image.\n"
+    "4. CRITICAL: DO NOT modify, rephrase, or transcribe any text content inside <td>...</td>! Preserve all cell text exactly identical to the input. Only update the coordinate attributes.\n"
+    "5. Output ONLY the updated HTML <table>...</table> element with no commentary or markdown code fences."
+)
+
+TABLE_CELLS_BBOX_PROMPT = (
+    "You are an expert document table layout analysis AI.\n"
+    "Identify the precise bounding boxes ('bbox_2d' as [xmin, ymin, xmax, ymax] normalized to 0-1000) for every cell in the table shown in the image snippet.\n"
+    "Align the bounding boxes accurately with the visual boundaries and text in the image.\n"
+    "Output ONLY the JSON list of cell objects with 'bbox_2d' and 'text'."
+)
+
 MARKDOWN_OCR_PROMPT = (
     "You are an expert OCR transcriber for historical documents. Transcribe the entire "
     "page to GitHub-flavoured Markdown: use '#'/'##' for headings, blank lines between "
@@ -291,6 +315,20 @@ DEFAULT_PRESETS: List[Dict[str, Any]] = [
             task_mode="layout_correction",
             mapping="table_html_correction_apply",
             description="Crop table regions, parse table XML to HTML <table>, correct HTML structure and text via LLM, and update PAGE-XML table structure."),
+    _preset("table_html_coords", "Table Layout Coordinate Update (Qwen 3.8 Maki)", "TableRecognition",
+            provider_preset="custom_maki", model="qwen3.8-27b",
+            system_prompt=TABLE_HTML_COORDS_PROMPT,
+            task_mode="layout_correction",
+            task_level="TableRegion",
+            mapping="table_html_coords_apply",
+            description="Crop table regions, serialize to HTML with row, col, and cell percentage coordinates, query Qwen 3.8 on Maki to update layout boundaries without changing text, and convert back to PAGE-XML coordinates."),
+    _preset("table_cells_bbox", "Table Cell Bounding Boxes (Qwen 3.8 Maki)", "TableRecognition",
+            provider_preset="custom_maki", model="qwen3.8-27b",
+            system_prompt=TABLE_CELLS_BBOX_PROMPT,
+            task_mode="layout_correction",
+            task_level="TableRegion",
+            mapping="table_cells_bbox_apply",
+            description="Crop table regions, generate structured overview of rows and columns, query Qwen 3.8 on Maki for cell bounding boxes ('bbox_2d'), and update PAGE-XML coordinates."),
     _preset("table2html", "Table Recognition (HTML Table Output)", "TableRecognition",
             system_prompt=TABLE_HTML_CORRECTION_PROMPT,
             mapping="table_html_to_page",

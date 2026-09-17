@@ -151,19 +151,48 @@ def crop_image_by_polygon(image: Image, polygon: Polygon,
     return snippet, bbox
 
 
-def image_to_base64(image):
+def image_to_base64(
+    image,
+    format: str = "JPEG",
+    quality: int = 85,
+    max_bytes: int = 3 * 1024 * 1024,
+) -> str:
     """
-        Convert an image file to a Base64-encoded string.
+    Convert a PIL Image object to a Base64-encoded string.
 
-        :param image: Image object
-        :return: Base64 encoded string of the image
+    Uses JPEG compression by default to keep HTTP request payloads compact and prevent
+    'request body too large' (HTTP 413) errors when sending images to LLM APIs.
     """
+    from PIL import Image
 
-    # Convert to bytes and then Base64
+    fmt = (format or "JPEG").upper()
+    current_img = image
+
+    # JPEG requires RGB or L mode
+    if fmt in ("JPEG", "JPG"):
+        fmt = "JPEG"
+        if current_img.mode in ("RGBA", "LA", "P", "1"):
+            current_img = current_img.convert("RGB")
+    elif current_img.mode not in ("RGB", "RGBA", "L"):
+        current_img = current_img.convert("RGB")
+
     buffered = BytesIO()
-    image.save(buffered, format='PNG')
-    img_bytes = buffered.getvalue()
-    img_base64 = base64.b64encode(img_bytes).decode(
-        'utf-8')  # Encode to Base64
+    if fmt == "JPEG":
+        current_img.save(buffered, format="JPEG", quality=quality, optimize=True)
+    else:
+        current_img.save(buffered, format=fmt)
 
-    return img_base64
+    img_bytes = buffered.getvalue()
+
+    # Progressively downscale if exceeding max_bytes (default 3MB)
+    cur_quality = quality
+    while len(img_bytes) > max_bytes and cur_quality > 35:
+        buffered = BytesIO()
+        cur_quality -= 15
+        nw = max(1, int(current_img.width * 0.75))
+        nh = max(1, int(current_img.height * 0.75))
+        current_img = current_img.resize((nw, nh), Image.Resampling.LANCZOS)
+        current_img.save(buffered, format="JPEG", quality=cur_quality, optimize=True)
+        img_bytes = buffered.getvalue()
+
+    return base64.b64encode(img_bytes).decode("utf-8")

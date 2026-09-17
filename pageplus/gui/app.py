@@ -101,7 +101,6 @@ from pageplus.gui.views import (
     llm_ocr as llm_ocr_view,
     batches as batches_view,
 )
-from pageplus.gui.views import flow_editor
 from pageplus.gui.cli_bridges.gemini import GeminiBridge
 from pageplus.gui.cli_bridges.llm_ocr import LLMOcrBridge
 from pageplus.gui.cli_bridges.batch import BatchBridge
@@ -273,7 +272,7 @@ def main():
     kraken_configured = get_kraken_python_path() is not None
 
     main_pages = ["✨ Home", "🗂️ Workspace", "📂 Input", "🖼️ Viewer", "🔍 Analytics", "📝 Guidelines", "✅ Validation",
-                  "📊 Evaluation", "🛠️ Modification", "🌟 Gemini", "🤖 LLM-OCR", "🔀 Flow Editor", "📤 Export",
+                  "📊 Evaluation", "🛠️ Modification", "🌟 Gemini", "🤖 LLM-OCR", "📤 Export",
                   "⚙️ Settings"]
 
 
@@ -351,9 +350,6 @@ def main():
         gemini.show_gemini(st.session_state.bridges['gemini'])
     elif page == "🤖 LLM-OCR":
         llm_ocr_view.show_llm_ocr(st.session_state.bridges['llm_ocr'])
-    elif page == "🔀 Flow Editor":
-
-        flow_editor.flow_editor_view()
     elif page == "📤 Export":
         if not st.session_state.loaded_files:
             st.warning("Please load files first in the 'Input' page.")

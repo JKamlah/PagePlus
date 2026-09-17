@@ -24,6 +24,7 @@ from pageplus.utils.fs import (collect_xml_files,
                                transform_substitutions,
                                open_folder_default,
                                find_image,
+                               resolve_image_path,
                                apply_mapping_to_files)
 from pageplus.utils.image import get_image, crop_image_by_polygon
 from pageplus.utils.io import (setxml, set_alto_id_from_page_id,
@@ -47,6 +48,42 @@ class ReadingOrderMode(str, Enum):
     auto = "auto"
     document = "document"
     rog = "reading-order-group"
+    reading_order = "reading_order"
+
+
+DEFAULT_FULLTEXT_SEPARATOR = "-- Page {page-number}: {page-name} --"
+
+
+def format_fulltext_separator(sep: Optional[str], page_num: int, filename: str, stem: str) -> str:
+    """
+    Format a separator string between pages in a combined export.
+    Supports placeholders:
+      {page-number}, {page-nr}, {ppage-nr}, {page_number}, {page_nr}, {page}, {index} -> page_num
+      {page-name}, {page_name}, {stem} -> stem
+      {filename} -> filename
+      '..' -> page_num
+    """
+    if not sep:
+        return ""
+    formatted = sep
+    replacements = {
+        "{page-number}": str(page_num),
+        "{page-nr}": str(page_num),
+        "{ppage-nr}": str(page_num),
+        "{page_number}": str(page_num),
+        "{page_nr}": str(page_num),
+        "{page}": str(page_num),
+        "{index}": str(page_num),
+        "{page-name}": stem,
+        "{page_name}": stem,
+        "{stem}": stem,
+        "{filename}": filename,
+    }
+    for k, v in replacements.items():
+        formatted = formatted.replace(k, v)
+    if ".." in formatted and "{" not in sep:
+        formatted = formatted.replace("..", str(page_num))
+    return formatted
 
 
 @app.command()
@@ -197,6 +234,13 @@ def fulltext(
                  "reading-order-group (only) or document (only)",
             case_sensitive=False)] = ReadingOrderMode.auto,
         mapping_profile: Annotated[Optional[str], typer.Option(help="Mapping profile to apply to the text before exporting.")] = None,
+        exclude_tags: Annotated[Optional[List[str]], typer.Option(help="Tags to exclude from export (e.g. 'header', 'footer').")] = None,
+        single_file: Annotated[bool, typer.Option(
+            help="Combine all extracted text into a single document instead of separate files.")] = False,
+        single_file_name: Annotated[str, typer.Option(
+            help="Filename for the combined document when single_file is enabled.")] = "fulltext_combined.txt",
+        separator: Annotated[str, typer.Option(
+            help="Chooseable separator between pages in the combined document. Supports {page-number}, {page-name}, or '..'")] = DEFAULT_FULLTEXT_SEPARATOR,
         open_folder: Annotated[bool, typer.Option(help="Opens the folder with the results after processing.")] = open_folder_default()):
     """
     Extracts full text from PAGE XML files and saves it as text files.
@@ -210,6 +254,12 @@ def fulltext(
         dehyphenate: If True, dehyphenates the text lines in the output.
         ro: If True, use the region reading order instead of the Textline document order
         ro_mode: Set mode how to calculate the region reading order
+        mapping_profile: Mapping profile to apply to the text before exporting.
+        exclude_tags: Tags to exclude from export.
+        single_file: If True, combines all extracted text into one file.
+        single_file_name: Filename for the combined file.
+        separator: Separator string between pages in the combined file.
+        open_folder: Opens the folder with the results after processing.
     """
     # Collect XML files from the input paths
     xml_files = collect_xml_files(map(Path, inputs))
@@ -218,29 +268,174 @@ def fulltext(
 
     files_to_process = [(f, f) for f in xml_files]
     temp_dir = None
-    if mapping_profile:
-        mapped_files, temp_dir = apply_mapping_to_files(xml_files, mapping_profile)
+    if mapping_profile or exclude_tags:
+        mapped_files, temp_dir = apply_mapping_to_files(xml_files, mapping_profile=mapping_profile, exclude_tags=exclude_tags)
         files_to_process = mapped_files
 
+    output_files = []
+    combined_parts = []
     try:
         text_output_path = None
-        for xml_file, original_xml_file in track(files_to_process, description="Extracting fulltext.."):
+        for idx, (xml_file, original_xml_file) in enumerate(track(files_to_process, description="Extracting fulltext.."), start=1):
             filename = original_xml_file.stem  # Extracts the filename without the extension
             logging.info(f'Processing file: {filename}')
 
-            # Determine the output file path
-            text_output_path = Path(f"{original_xml_file.parent}/Fulltext/{original_xml_file.with_suffix('.txt').name}") if outputdir is None\
-                else Path(outputdir).joinpath(filename).with_suffix('.txt')
-            text_output_path.parent.mkdir(parents=True, exist_ok=True)
-            logging.info(f'Writing text file to: {text_output_path}')
+            extracted_text = Page(xml_file).extract_fulltext(
+                reading_order=ro, reading_order_mode=ro_mode.value, dehyphenate=dehyphenate, exclude_tags=exclude_tags)
 
-            # Extract and write full text to the output file
+            if single_file:
+                page_sep = format_fulltext_separator(separator, page_num=idx, filename=original_xml_file.name, stem=filename)
+                if page_sep:
+                    part = f"{page_sep}\n{extracted_text}" if extracted_text else page_sep
+                else:
+                    part = extracted_text
+                combined_parts.append(part)
+            else:
+                # Determine the output file path
+                text_output_path = Path(f"{original_xml_file.parent}/Fulltext/{original_xml_file.with_suffix('.txt').name}") if outputdir is None\
+                    else Path(outputdir).joinpath(filename).with_suffix('.txt')
+                text_output_path.parent.mkdir(parents=True, exist_ok=True)
+                logging.info(f'Writing text file to: {text_output_path}')
+
+                # Extract and write full text to the output file
+                with open(text_output_path, 'w') as fout:
+                    fout.write(extracted_text)
+                output_files.append(text_output_path)
+
+        if single_file and files_to_process:
+            first_orig = files_to_process[0][1]
+            text_output_path = Path(f"{first_orig.parent}/Fulltext/{single_file_name}") if outputdir is None\
+                else Path(outputdir).joinpath(single_file_name)
+            text_output_path.parent.mkdir(parents=True, exist_ok=True)
+            logging.info(f'Writing combined text file to: {text_output_path}')
             with open(text_output_path, 'w') as fout:
-                extracted_text = Page(xml_file).extract_fulltext(
-                    reading_order=ro, reading_order_mode=ro_mode.value, dehyphenate=dehyphenate)
-                fout.write(extracted_text)
-        if text_output_path:
-            fs.open_folder(text_output_path.parent) if open_folder else None
+                fout.write("\n\n".join(combined_parts))
+            output_files.append(text_output_path)
+
+        if text_output_path and open_folder:
+            fs.open_folder(text_output_path.parent)
+
+        return output_files
+    finally:
+        if temp_dir:
+            temp_dir.cleanup()
+
+
+@app.command(name="markdown")
+def markdown(
+        inputs: Annotated[List[str], typer.Argument(exists=True,
+                                                    help="Iterable of paths to the PAGE XML files or workspaces.",
+                                                    callback=transform_inputs)] = None,
+        outputdir: Annotated[Optional[str], typer.Option(
+            help="Path to the output directory where the markdown files will be saved. "
+                 "If not specified, an output directory named Markdown will be created "
+                 "in each input file's parent directory.")] = None,
+        image_folder: Annotated[str, typer.Option(
+            help="Folder containing page images relative to page-xml (default same as input)")] = '.',
+        snippet_folder: Annotated[str, typer.Option(
+            help="Subfolder name for cropped table and image snippets (default 'images')")] = 'images',
+        export_table_snippets: Annotated[bool, typer.Option(
+            help="Export cropped image snippets for TableRegions")] = True,
+        export_image_snippets: Annotated[bool, typer.Option(
+            help="Export cropped image snippets for ImageRegions")] = True,
+        dehyphenate: Annotated[bool, typer.Option(
+            help="Dehyphenate the textlines")] = False,
+        ro: Annotated[bool, typer.Option(
+            help="Use the region reading order (default: True)")] = True,
+        ro_mode: Annotated[ReadingOrderMode, typer.Option(
+            help="Choose the reading order mode: auto, document, or reading-order-group",
+            case_sensitive=False)] = ReadingOrderMode.auto,
+        mapping_profile: Annotated[Optional[str], typer.Option(
+            help="Mapping profile to apply to the text before exporting.")] = None,
+        exclude_tags: Annotated[Optional[List[str]], typer.Option(
+            help="Tags to exclude from export (e.g. 'header', 'footer').")] = None,
+        single_file: Annotated[bool, typer.Option(
+            help="Combine all extracted markdown into a single document instead of separate files.")] = False,
+        single_file_name: Annotated[str, typer.Option(
+            help="Filename for the combined document when single_file is enabled.")] = "document_combined.md",
+        separator: Annotated[str, typer.Option(
+            help="Separator between pages in the combined document. Supports {page-number}, {page-name}, or '..'")] = DEFAULT_FULLTEXT_SEPARATOR,
+        open_folder: Annotated[bool, typer.Option(
+            help="Opens the folder with the results after processing.")] = open_folder_default()) -> List[Path]:
+    """
+    Extracts text, tables, and image snippets from PAGE XML files and saves them as Markdown (.md) files.
+    """
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError('No XML files found in the input directory.')
+
+    files_to_process = [(f, f) for f in xml_files]
+    temp_dir = None
+    if mapping_profile or exclude_tags:
+        mapped_files, temp_dir = apply_mapping_to_files(xml_files, mapping_profile=mapping_profile, exclude_tags=exclude_tags)
+        files_to_process = mapped_files
+
+    output_files = []
+    combined_parts = []
+    try:
+        md_output_path = None
+        for idx, (xml_file, original_xml_file) in enumerate(track(files_to_process, description="Exporting Markdown.."), start=1):
+            filename = original_xml_file.stem
+            logging.info(f'Processing file: {filename}')
+
+            page = Page(xml_file)
+
+            if single_file and files_to_process:
+                first_orig = files_to_process[0][1]
+                md_dir = Path(f"{first_orig.parent}/Markdown") if outputdir is None else Path(outputdir)
+            else:
+                md_dir = Path(f"{original_xml_file.parent}/Markdown") if outputdir is None else Path(outputdir)
+
+            snippet_dir = md_dir / snippet_folder
+
+            image_path = resolve_image_path(
+                original_xml_file,
+                page.imageFilename() if hasattr(page, "imageFilename") else None,
+                image_folder=image_folder
+            )
+
+            extracted_md = page.extract_markdown(
+                dehyphenate=dehyphenate,
+                reading_order=ro,
+                reading_order_mode=ro_mode.value,
+                exclude_tags=exclude_tags,
+                image_path=image_path,
+                snippet_dir=snippet_dir,
+                image_rel_prefix=snippet_folder,
+                file_stem=filename,
+                export_table_snippets=export_table_snippets,
+                export_image_snippets=export_image_snippets
+            )
+
+            if single_file:
+                page_sep = format_fulltext_separator(separator, page_num=idx, filename=original_xml_file.name, stem=filename)
+                if page_sep:
+                    part = f"{page_sep}\n{extracted_md}" if extracted_md else page_sep
+                else:
+                    part = extracted_md
+                combined_parts.append(part)
+            else:
+                md_output_path = md_dir.joinpath(filename).with_suffix('.md')
+                md_output_path.parent.mkdir(parents=True, exist_ok=True)
+                logging.info(f'Writing markdown file to: {md_output_path}')
+                with open(md_output_path, 'w', encoding='utf-8') as fout:
+                    fout.write(extracted_md)
+                output_files.append(md_output_path)
+
+        if single_file and files_to_process:
+            first_orig = files_to_process[0][1]
+            md_output_path = Path(f"{first_orig.parent}/Markdown/{single_file_name}") if outputdir is None\
+                else Path(outputdir).joinpath(single_file_name)
+            md_output_path.parent.mkdir(parents=True, exist_ok=True)
+            logging.info(f'Writing combined markdown file to: {md_output_path}')
+            with open(md_output_path, 'w', encoding='utf-8') as fout:
+                fout.write("\n\n".join(combined_parts))
+            output_files.append(md_output_path)
+
+        if md_output_path and open_folder:
+            fs.open_folder(md_output_path.parent)
+
+        return output_files
     finally:
         if temp_dir:
             temp_dir.cleanup()
@@ -257,6 +452,7 @@ def dsv(
         delimiter: Annotated[str, typer.Option(help="Delimiter to use for separating values")] = '\t',
         dehyphenate: Annotated[bool, typer.Option(help="Dehyphenate the textlines (no impact on coordinates)")] = False,
         mapping_profile: Annotated[Optional[str], typer.Option(help="Mapping profile to apply to the text before exporting.")] = None,
+        exclude_tags: Annotated[Optional[List[str]], typer.Option(help="Tags to exclude from export (e.g. 'header', 'footer').")] = None,
         open_folder: Annotated[bool, typer.Option(help="Opens the folder with the results after processing.")] = open_folder_default):
     """
     Extracts text and coordinates from PAGE XML files and saves them as delimiter-separated values (DSV) files.
@@ -277,8 +473,8 @@ def dsv(
 
     files_to_process = [(f, f) for f in xml_files]
     temp_dir = None
-    if mapping_profile:
-        mapped_files, temp_dir = apply_mapping_to_files(xml_files, mapping_profile)
+    if mapping_profile or exclude_tags:
+        mapped_files, temp_dir = apply_mapping_to_files(xml_files, mapping_profile=mapping_profile, exclude_tags=exclude_tags)
         files_to_process = mapped_files
 
     try:
@@ -365,7 +561,8 @@ def alto(
             help="Path to the output directory where the text files will be saved. "
                  "If not specified, an output directory named Fulltext will be created "
                  "in each input file's parent directory.")] = None,
-        mapping_profile: Annotated[Optional[str], typer.Option(help="Mapping profile to apply to the text before exporting.")] = None) -> None:
+        mapping_profile: Annotated[Optional[str], typer.Option(help="Mapping profile to apply to the text before exporting.")] = None,
+        exclude_tags: Annotated[Optional[List[str]], typer.Option(help="Tags to exclude from export (e.g. 'header', 'footer').")] = None) -> None:
     """
     Converts PAGE XML files to ALTO XML files. (experimental)
 
@@ -382,8 +579,8 @@ def alto(
 
     files_to_process = [(f, f) for f in xml_files]
     temp_dir = None
-    if mapping_profile:
-        mapped_files, temp_dir = apply_mapping_to_files(xml_files, mapping_profile)
+    if mapping_profile or exclude_tags:
+        mapped_files, temp_dir = apply_mapping_to_files(xml_files, mapping_profile=mapping_profile, exclude_tags=exclude_tags)
         files_to_process = mapped_files
 
     try:
@@ -663,6 +860,7 @@ else:
             substitutions: Annotated[List[str], typer.Option(
                 help="Regex substitutions with pattern==>replacement,...]", callback=transform_substitutions)] = None,
             mapping_profile: Annotated[Optional[str], typer.Option(help="Mapping profile to apply to the text before exporting.")] = None,
+            exclude_tags: Annotated[Optional[List[str]], typer.Option(help="Tags to exclude from export (e.g. 'header', 'footer').")] = None,
             output_filename: Annotated[str, typer.Option(help="Name of the output file.")] = 'PagePlus') -> None:
         """
         Creates a PDF file without word level
@@ -676,8 +874,8 @@ else:
 
         files_to_process = [(f, f) for f in xml_files]
         temp_dir = None
-        if mapping_profile:
-            mapped_files, temp_dir = apply_mapping_to_files(xml_files, mapping_profile)
+        if mapping_profile or exclude_tags:
+            mapped_files, temp_dir = apply_mapping_to_files(xml_files, mapping_profile=mapping_profile, exclude_tags=exclude_tags)
             files_to_process = mapped_files
 
         try:
@@ -749,6 +947,8 @@ def tei_fsl(
         editor: Annotated[str, typer.Option(help="Name of the editor/transcriber")] = "",
         who: Annotated[str, typer.Option(help="Abbreviation/ID of the editor/transcriber (for who attribute)")] = "",
         status: Annotated[str, typer.Option(help="Status of the transcription (e.g. work_in_progress, done)")] = "work_in_progress",
+        mapping_profile: Annotated[Optional[str], typer.Option(help="Mapping profile to apply to the text before exporting.")] = None,
+        exclude_tags: Annotated[Optional[List[str]], typer.Option(help="Tags to exclude from export (e.g. 'header', 'footer').")] = None,
         open_folder: Annotated[bool, typer.Option(help="Opens the folder with the results after processing.")] = open_folder_default()) -> List[Path]:
     """
     Converts PAGE XML files to TEI XML layout region format.
@@ -759,31 +959,41 @@ def tei_fsl(
     if not xml_files:
         raise FileNotFoundError('No XML files found in the input directory.')
 
-    exported_paths = []
-    for xml_file in track(xml_files, description="Converting to TEI FSL.."):
-        filename = xml_file.stem
-        logging.info(f'Processing file: {filename}')
+    files_to_process = [(f, f) for f in xml_files]
+    temp_dir = None
+    if mapping_profile or exclude_tags:
+        mapped_files, temp_dir = apply_mapping_to_files(xml_files, mapping_profile=mapping_profile, exclude_tags=exclude_tags)
+        files_to_process = mapped_files
 
-        # Determine the output file path
-        output_path = Path(f"{xml_file.parent}/TEI_FSL/{xml_file.with_suffix('.xml').name}") if outputdir is None \
-            else Path(outputdir).joinpath(filename).with_suffix('.xml')
-        
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        logging.info(f'Writing TEI XML file to: {output_path}')
+    try:
+        exported_paths = []
+        for xml_file, original_xml_file in track(files_to_process, description="Converting to TEI FSL.."):
+            filename = original_xml_file.stem
+            logging.info(f'Processing file: {filename}')
 
-        tree = convert_pagexml_to_tei_fsl(xml_file, werkteil=werkteil, editor=editor, who=who, status=status)
-        tree.write(
-            str(output_path),
-            pretty_print=True,
-            xml_declaration=True,
-            encoding="UTF-8"
-        )
-        exported_paths.append(output_path)
+            # Determine the output file path
+            output_path = Path(f"{original_xml_file.parent}/TEI_FSL/{original_xml_file.with_suffix('.xml').name}") if outputdir is None \
+                else Path(outputdir).joinpath(filename).with_suffix('.xml')
+            
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            logging.info(f'Writing TEI XML file to: {output_path}')
 
-    if exported_paths and open_folder:
-        fs.open_folder(exported_paths[0].parent)
+            tree = convert_pagexml_to_tei_fsl(xml_file, werkteil=werkteil, editor=editor, who=who, status=status)
+            tree.write(
+                str(output_path),
+                pretty_print=True,
+                xml_declaration=True,
+                encoding="UTF-8"
+            )
+            exported_paths.append(output_path)
 
-    return exported_paths
+        if exported_paths and open_folder:
+            fs.open_folder(exported_paths[0].parent)
+
+        return exported_paths
+    finally:
+        if temp_dir:
+            temp_dir.cleanup()
 
 
 if __name__ == "__main__":

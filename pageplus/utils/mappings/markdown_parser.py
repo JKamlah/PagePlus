@@ -85,6 +85,20 @@ def strip_markdown_inline(text: str) -> str:
     res = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", res)
     res = re.sub(r"\[([^\]]+)\]\[[^\]]*\]", r"\1", res)
 
+    # LaTeX formatting escapes and spacing
+    res = re.sub(r'\\[,;! ]', ' ', res)
+    res = re.sub(r'\\(?:quad|qquad|enspace|thinspace)', ' ', res)
+
+    # Iteratively unwrap LaTeX text/font/style commands like \underline{...}, \text{...}
+    _latex_cmd_re = re.compile(
+        r'\\(?:underline|text(?:bf|it|rm|sc|sf|tt)?|mathrm|mathbf|mathit|mathsf|mathtt|mbox|overline|emph)\s*\{([^{}]+)\}'
+    )
+    for _ in range(10):
+        new_res = _latex_cmd_re.sub(r'\1', res)
+        if new_res == res:
+            break
+        res = new_res
+
     # Math blocks/spans: $$math$$ -> math, $math$ -> math
     res = re.sub(r"\$\$([^\$]+)\$\$", r"\1", res)
     res = re.sub(r"\$([^\$]+)\$", r"\1", res)

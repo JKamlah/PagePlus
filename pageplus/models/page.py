@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections import Counter, defaultdict
 from datetime import datetime
 from dataclasses import dataclass, field
@@ -26,6 +27,99 @@ from typing import Dict, Any
 class Regions:
     textregions: Optional[List[TextRegion]] = field(default=None)
     tableregions: Optional[List[TableRegion]] = field(default=None)
+    imageregions: Optional[List[Region]] = field(default=None)
+
+
+def table_to_markdown(region) -> str:
+    """
+    Converts a TableRegion element/model into a Markdown table representation.
+    """
+    tablecells = getattr(region, "tablecells", None)
+    if not tablecells and hasattr(region, "xml_element"):
+        ns = getattr(region, "ns", "")
+        cells_xml = region.xml_element.iter(f"{{{ns}}}TableCell") if ns else region.xml_element.iter("TableCell")
+        from pageplus.models.table_elements import TableCell
+        tablecells = [TableCell(ele, ns, parent=region) for ele in cells_xml]
+
+    if not tablecells:
+        lines = [tl.get_text() for tl in getattr(region, "textlines", []) if tl.get_text()]
+        if not lines and hasattr(region, "get_text"):
+            t = region.get_text()
+            if t:
+                lines = [t]
+        return "\n".join(lines).strip()
+
+    cell_data = []
+    has_row_col = False
+    for tc in tablecells:
+        elem = tc.xml_element if hasattr(tc, "xml_element") else None
+        r_attr = elem.attrib.get("row") if elem is not None else None
+        c_attr = elem.attrib.get("col") if elem is not None else None
+        row_span = int(elem.attrib.get("rowSpan", 1)) if elem is not None else 1
+        col_span = int(elem.attrib.get("colSpan", 1)) if elem is not None else 1
+
+        lines = [tl.get_text() for tl in getattr(tc, "textlines", []) if tl.get_text()]
+        if not lines and hasattr(tc, "get_text"):
+            t = tc.get_text()
+            if t:
+                lines = [t]
+        cleaned_parts = [l.strip() for l in lines if l.strip()]
+        cell_text = "<br>".join(cleaned_parts).replace("|", "\\|")
+
+        if r_attr is not None and c_attr is not None:
+            try:
+                r = int(r_attr)
+                c = int(c_attr)
+                has_row_col = True
+                cell_data.append((r, c, row_span, col_span, cell_text))
+                continue
+            except (ValueError, TypeError):
+                pass
+
+        cell_data.append((None, None, row_span, col_span, cell_text))
+
+    if has_row_col:
+        grid: Dict[Tuple[int, int], str] = {}
+        all_r = set()
+        all_c = set()
+        for r, c, rs, cs, text in cell_data:
+            if r is not None and c is not None:
+                for dr in range(rs):
+                    for dc in range(cs):
+                        curr_r = r + dr
+                        curr_c = c + dc
+                        grid[(curr_r, curr_c)] = text if (dr == 0 and dc == 0) else ""
+                        all_r.add(curr_r)
+                        all_c.add(curr_c)
+        if all_r and all_c:
+            sorted_rows = sorted(all_r)
+            sorted_cols = sorted(all_c)
+            table_rows = []
+            for r in sorted_rows:
+                row_cells = [grid.get((r, c), "") for c in sorted_cols]
+                table_rows.append(row_cells)
+
+            if table_rows:
+                header = table_rows[0]
+                sep = ["---"] * len(sorted_cols)
+                lines = [
+                    "| " + " | ".join(header) + " |",
+                    "| " + " | ".join(sep) + " |"
+                ]
+                for row_cells in table_rows[1:]:
+                    lines.append("| " + " | ".join(row_cells) + " |")
+                return "\n".join(lines)
+
+    if cell_data:
+        rows = [t[-1] for t in cell_data if t[-1]]
+        if rows:
+            lines = [
+                "| Content |",
+                "| --- |"
+            ] + [f"| {r} |" for r in rows]
+            return "\n".join(lines)
+
+    return ""
 
 
 @dataclass
@@ -186,12 +280,20 @@ class Page:
                 self.ns,
                 parent=self) for ele in self.root.iter(table_region_xpath)]
 
+        image_region_xpath = f"{{{self.ns}}}ImageRegion"
+        self.regions.imageregions = [
+            Region(
+                ele,
+                self.ns,
+                parent=self) for ele in self.root.iter(image_region_xpath)]
+
     def get_region_reading_order_ids(
             self,
             mode: str = 'auto',
-            region_types=('TableRegion,TextRegion')):
+            region_types=('TableRegion,TextRegion,ImageRegion')):
         ro_ids = []
-        if mode in ['auto', 'reading_order']:
+        seen = set()
+        if mode in ['auto', 'reading_order', 'reading-order-group', 'rog']:
             reading_order = self.tree.find(f".//{{{self.ns}}}ReadingOrder")
             if reading_order is not None:
                 # Process each group in the reading order
@@ -200,16 +302,20 @@ class Page:
                     if ET.QName(group.tag).localname == 'OrderedGroup':
                         # Find all 'RegionRefIndexed' elements and sort them by
                         # index
-                        ro_ids += [ref.attrib['regionRef'] for ref in
-                                   sorted(group.findall(f"./{{{self.ns}}}RegionRefIndexed"),
-                                          key=lambda r: int(r.attrib['index']))]
-        if mode == 'document' or (not ro_ids and mode == 'auto'):
+                        for ref in sorted(group.findall(f"./{{{self.ns}}}RegionRefIndexed"),
+                                          key=lambda r: int(r.attrib['index'])):
+                            r_id = ref.attrib.get('regionRef')
+                            if r_id and r_id not in seen:
+                                seen.add(r_id)
+                                ro_ids.append(r_id)
+        if mode == 'document' or (not ro_ids and mode in ['auto', 'reading_order', 'reading-order-group', 'rog']):
             for region in self.root.findall(f".//{{{self.ns}}}*"):
                 region_type = ET.QName(region.tag).localname
                 if region_type in region_types:
                     region_id = region.attrib.get(
                         'id', None)  # Get the ID attribute
-                    if region_id:
+                    if region_id and region_id not in seen:
+                        seen.add(region_id)
                         ro_ids.append(region_id)
         # Return the collected text from regions
         return ro_ids
@@ -217,7 +323,7 @@ class Page:
     def get_ordered_regions(
             self,
             mode: str = 'auto',
-            region_types=('TableRegion,TextRegion')) -> List:
+            region_types=('TableRegion,TextRegion,ImageRegion')) -> List:
         ordered_regions = []
         for ro_ids in self.get_region_reading_order_ids(mode, region_types):
             region = self.root.find(f'.//*[@id="{ro_ids}"]')
@@ -240,7 +346,8 @@ class Page:
         return ordered_regions
 
     def get_region_by_id(self, id) -> Region:
-        for region in self.regions.textregions + self.regions.tableregions:
+        all_regions = (self.regions.textregions or []) + (self.regions.tableregions or []) + (getattr(self.regions, "imageregions", None) or [])
+        for region in all_regions:
             if region.get_id() == id:
                 return region
         return None
@@ -248,7 +355,7 @@ class Page:
     def valid_region_id(self, id):
         region = self.root.find(f".//{{{self.ns}}}*[@id='r{id}']")
         return not region or ET.QName(region.tag).localname in [
-            'TableRegion', 'TextRegion']
+            'TableRegion', 'TextRegion', 'ImageRegion']
 
     def __reassign_id(self, element, ele, tag, id):
         for child in ele.iter(f"{{{self.ns}}}{tag}"):
@@ -395,25 +502,204 @@ class Page:
             level="textline",
             dehyphenate=False,
             reading_order=True,
-            reading_order_mode='reading_order',
-            delimiter='\n') -> str:
+            reading_order_mode='auto',
+            delimiter='\n',
+            exclude_tags: Optional[List[str]] = None) -> str:
         """
         Extracts the full text from the PAGE XML file.
         """
         fulltext = []
         if reading_order:
-            for ro_ids in self.get_region_reading_order_ids():
+            for ro_ids in self.get_region_reading_order_ids(mode=reading_order_mode):
                 region = self.root.find(f'.//*[@id="{ro_ids}"]')
-                fulltext = [unicode_ele.text for textline in region.iterfind(f".//{{{self.ns}}}TextLine")
-                            for unicode_ele in textline.iterfind(f'.//{{{self.ns}}}Unicode') if unicode_ele.text]
+                if region is not None:
+                    reg_obj = self.get_region_by_id(ro_ids)
+                    r_tag = reg_obj.get_tag() if reg_obj else region.attrib.get('type', '')
+                    if exclude_tags and r_tag in exclude_tags:
+                        continue
+                    lines = []
+                    for textline in region.iterfind(f".//{{{self.ns}}}TextLine"):
+                        l_tag = textline.attrib.get('type', '')
+                        if exclude_tags and l_tag in exclude_tags:
+                            continue
+                        for unicode_ele in textline.iterfind(f'.//{{{self.ns}}}Unicode'):
+                            if unicode_ele.text:
+                                lines.append(unicode_ele.text)
+                    if not lines and not (exclude_tags and r_tag in exclude_tags):
+                        lines = [unicode_ele.text for unicode_ele in region.iterfind(f"./{{{self.ns}}}TextEquiv/{{{self.ns}}}Unicode") if unicode_ele.text]
+                    fulltext.extend(lines)
         else:
-            fulltext = [unicode_ele.text for textline in self.root.iterfind(f'.//{{{self.ns}}}TextLine')
-                        for unicode_ele in textline.iterfind(f'.//{{{self.ns}}}Unicode') if unicode_ele.text]
+            for textline in self.root.iterfind(f'.//{{{self.ns}}}TextLine'):
+                l_tag = textline.attrib.get('type', '')
+                parent_region = textline.getparent()
+                p_tag = parent_region.attrib.get('type', '') if parent_region is not None else ''
+                if exclude_tags and (l_tag in exclude_tags or p_tag in exclude_tags):
+                    continue
+                for unicode_ele in textline.iterfind(f'.//{{{self.ns}}}Unicode'):
+                    if unicode_ele.text:
+                        fulltext.append(unicode_ele.text)
 
         if dehyphenate and fulltext:
             fulltext = self.dehyphe(fulltext)
 
         return delimiter.join(fulltext)
+
+    def extract_markdown(
+            self,
+            dehyphenate: bool = False,
+            reading_order: bool = True,
+            reading_order_mode: str = 'auto',
+            exclude_tags: Optional[List[str]] = None,
+            image_path: Optional[Path] = None,
+            snippet_dir: Optional[Path] = None,
+            image_rel_prefix: str = "images",
+            file_stem: Optional[str] = None,
+            export_table_snippets: bool = True,
+            export_image_snippets: bool = True) -> str:
+        """
+        Extracts document content formatted as Markdown.
+        - Formats 'Header' regions as '# <text>'
+        - Formats 'Heading' regions as '## <text>'
+        - Formats TableRegions as Markdown tables (and optionally exports table image snippets)
+        - Crops and embeds ImageRegion snippets as '![<id>](images/<snippet>.png)'
+        """
+        from pageplus.utils.image import get_image, crop_image_by_polygon
+
+        stem = file_stem or (Path(self.imageFilename()).stem if (hasattr(self, "imageFilename") and self.imageFilename()) else (self.filename.stem if hasattr(self, "filename") and self.filename else "page"))
+
+        # Auto-discover image if not passed
+        if image_path is None and hasattr(self, "filename") and self.filename:
+            from pageplus.utils.fs import resolve_image_path
+            image_path = resolve_image_path(
+                Path(self.filename),
+                self.imageFilename() if hasattr(self, "imageFilename") else None
+            )
+
+        img = None
+        if image_path and Path(image_path).exists():
+            try:
+                img, _ = get_image(Path(image_path))
+            except Exception as e:
+                logging.warning(f"Could not load image for markdown snippet export: {e}")
+
+        if snippet_dir:
+            snippet_dir = Path(snippet_dir)
+
+        all_regions = (self.regions.textregions or []) + (self.regions.tableregions or []) + (getattr(self.regions, "imageregions", None) or [])
+
+        if reading_order:
+            ro_ids = self.get_region_reading_order_ids(mode=reading_order_mode, region_types=('TableRegion,TextRegion,ImageRegion'))
+            # Include unindexed regions at the end
+            indexed_set = set(ro_ids)
+            for r in all_regions:
+                r_id = r.get_id()
+                if r_id and r_id not in indexed_set:
+                    ro_ids.append(r_id)
+                    indexed_set.add(r_id)
+        else:
+            ro_ids = [r.get_id() for r in all_regions if r.get_id()]
+
+        md_parts = []
+        for r_id in ro_ids:
+            region = self.get_region_by_id(r_id)
+            if not region:
+                continue
+
+            tag = (region.get_tag() or "").strip()
+            tag_lower = tag.lower()
+
+            if exclude_tags and tag in exclude_tags:
+                continue
+
+            is_image = region in (getattr(self.regions, "imageregions", None) or []) or ET.QName(region.xml_element.tag).localname == 'ImageRegion'
+            is_table = region in (self.regions.tableregions or []) or ET.QName(region.xml_element.tag).localname == 'TableRegion'
+
+            if is_image:
+                if export_image_snippets and img and snippet_dir:
+                    poly = region.get_coordinates(returntype='mrr') or region.get_coordinates(returntype='polygon')
+                    if poly is not None:
+                        snippet_name = f"{stem}_{r_id}"
+                        try:
+                            crop_image_by_polygon(img, poly, save_snippet=True, snippet_dir=snippet_dir, snippet_name=snippet_name)
+                            md_parts.append(f"![{r_id}]({image_rel_prefix}/{snippet_name}.png)")
+                        except Exception as e:
+                            logging.warning(f"Failed to crop image snippet for {r_id}: {e}")
+                else:
+                    md_parts.append(f"<!-- ImageRegion {r_id} -->")
+
+            elif is_table:
+                # Optionally crop table snippet
+                if export_table_snippets and img and snippet_dir:
+                    poly = region.get_coordinates(returntype='mrr') or region.get_coordinates(returntype='polygon')
+                    if poly is not None:
+                        snippet_name = f"{stem}_{r_id}"
+                        try:
+                            crop_image_by_polygon(img, poly, save_snippet=True, snippet_dir=snippet_dir, snippet_name=snippet_name)
+                            md_parts.append(f"![Table {r_id}]({image_rel_prefix}/{snippet_name}.png)")
+                        except Exception as e:
+                            logging.warning(f"Failed to crop table snippet for {r_id}: {e}")
+
+                table_md = table_to_markdown(region)
+                if table_md:
+                    md_parts.append(table_md)
+
+            else:
+                # TextRegion
+                lines = []
+                for tl in region.textlines:
+                    t = tl.get_text()
+                    if not t:
+                        continue
+                    if exclude_tags and tl.get_tag() in exclude_tags:
+                        continue
+                    lines.append(t)
+
+                if not lines:
+                    t = region.get_text()
+                    if t:
+                        lines = [t]
+
+                if not lines:
+                    continue
+
+                if dehyphenate:
+                    lines = self.dehyphe(lines)
+
+                text = "\n".join(lines).strip()
+                if not text:
+                    continue
+
+                if tag_lower == 'header':
+                    md_parts.append(f"# {text}" if not text.startswith("#") else text)
+                elif tag_lower == 'heading':
+                    md_parts.append(f"## {text}" if not text.startswith("#") else text)
+                else:
+                    # Check if individual textlines inside the region have header or heading tags
+                    formatted_lines = []
+                    any_tagged_line = False
+                    for idx, tl in enumerate(region.textlines):
+                        if idx < len(lines):
+                            t = lines[idx]
+                        else:
+                            t = tl.get_text()
+                        if not t:
+                            continue
+                        ltag = (tl.get_tag() or "").strip().lower()
+                        if ltag == 'header':
+                            any_tagged_line = True
+                            formatted_lines.append(f"# {t}" if not t.startswith("#") else t)
+                        elif ltag == 'heading':
+                            any_tagged_line = True
+                            formatted_lines.append(f"## {t}" if not t.startswith("#") else t)
+                        else:
+                            formatted_lines.append(t)
+
+                    if any_tagged_line and formatted_lines:
+                        md_parts.append("\n".join(formatted_lines).strip())
+                    else:
+                        md_parts.append(text)
+
+        return "\n\n".join(md_parts)
 
     def get_id(self):
         if "pcGtsId" in self.root.attrib:

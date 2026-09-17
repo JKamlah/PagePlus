@@ -69,10 +69,10 @@ class CurlHTTPBackend(OCRBackend):
         ctx.metadata["original_height"] = h
         ctx.metadata["rescaled_width"] = w
         ctx.metadata["rescaled_height"] = h
-        if self._opts.max_image_size:
+        max_size = self._opts.max_image_size or 1500
+        if max_size:
             from PIL import Image
             w, h = image.size
-            max_size = self._opts.max_image_size
             if w > max_size or h > max_size:
                 if w >= h:
                     new_w = max_size
@@ -85,7 +85,7 @@ class CurlHTTPBackend(OCRBackend):
                 image = image.resize((new_w, new_h), Image.Resampling.LANCZOS)
                 ctx.metadata["rescaled_width"] = new_w
                 ctx.metadata["rescaled_height"] = new_h
-        image_b64 = image_to_base64(image)
+        image_b64 = image_to_base64(image, format="JPEG", quality=85)
 
         # 2. Build combined prompt text (system + user)
         combined_parts = []

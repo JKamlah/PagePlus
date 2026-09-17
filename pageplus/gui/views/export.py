@@ -10,6 +10,7 @@ import streamlit as st
 from pageplus.cli.export import ReadingOrderMode
 from pageplus.gui.utils.picker import pick_directory
 from pageplus.gui.views.load_files import get_loaded_workspace_dir
+from pageplus.models.page import Page
 from pageplus.utils.guidelines.lib.settings import load_profiles
 from pageplus.utils.constants import GUIDELINES_DIR
 
@@ -93,7 +94,45 @@ def show_export(bridge):
         index=0
     )
 
-    tab_dsv, tab_alto, tab_fulltext, tab_pdf, tab_tei = st.tabs(["💾 DSV", "💾 ALTO", "📝 Fulltext", "📕 PDF", "💾 TEI"])
+    # Tag filtering option
+    if "export_available_tags" not in st.session_state:
+        st.session_state.export_available_tags = []
+    if "export_selected_tags" not in st.session_state:
+        st.session_state.export_selected_tags = []
+
+    c_tag1, c_tag2 = st.columns([1, 4])
+    with c_tag1:
+        if st.button("Update Tags", help="Scan loaded files to show all structure tags in a list view"):
+            all_tags = set()
+            for f in st.session_state.loaded_files:
+                try:
+                    all_tags.update(Page(Path(f)).get_tags(levels=['TextRegion', 'Textline', 'TableRegion']))
+                except Exception:
+                    pass
+            cleaned_tags = sorted([t for t in all_tags if t and t.strip()])
+            st.session_state.export_available_tags = cleaned_tags
+            st.session_state.export_selected_tags = list(cleaned_tags)
+            st.rerun()
+
+    excluded_tags = []
+    if st.session_state.export_available_tags:
+        with c_tag2:
+            st.caption("Remove tags with 'x' that you do not want in the export (e.g. 'header', 'footer'):")
+        selected_tags = st.multiselect(
+            "Tags to Export",
+            options=st.session_state.export_available_tags,
+            default=st.session_state.export_selected_tags,
+            key="export_tags_multiselect",
+            help="Active tags for export. Click 'x' on any tag to exclude it."
+        )
+        excluded_tags = [t for t in st.session_state.export_available_tags if t not in selected_tags]
+        if excluded_tags:
+            st.info(f"🚫 Excluded from export: {', '.join(excluded_tags)}")
+    else:
+        with c_tag2:
+            st.caption("Press 'Update Tags' to scan loaded files for structure tags to include/exclude (e.g. 'header', 'footer').")
+
+    tab_dsv, tab_alto, tab_fulltext, tab_markdown, tab_pdf, tab_tei = st.tabs(["💾 DSV", "💾 ALTO", "📝 Fulltext", "📝 Markdown", "📕 PDF", "💾 TEI"])
 
     with tab_tei:
         st.header("TEI Export")
@@ -128,6 +167,7 @@ def show_export(bridge):
                         "status": status_val,
                         "open_folder": open_folder,
                         "mapping_profile": selected_profile if selected_profile != "None" else None,
+                        "exclude_tags": excluded_tags if excluded_tags else None,
                         "tei_format": "fsl"
                     }
                     bridge.export_files(
@@ -155,6 +195,7 @@ def show_export(bridge):
                     "dehyphenate": dehyphenate,
                     "open_folder": open_folder,
                     "mapping_profile": selected_profile if selected_profile != "None" else None,
+                    "exclude_tags": excluded_tags if excluded_tags else None,
                 }
                 bridge.export_files(
                     files=st.session_state.loaded_files, format="DSV", output_dir=Path(
@@ -173,6 +214,7 @@ def show_export(bridge):
             try:
                 kwargs = {
                     "mapping_profile": selected_profile if selected_profile != "None" else None,
+                    "exclude_tags": excluded_tags if excluded_tags else None,
                 }
                 bridge.export_files(
                     files=st.session_state.loaded_files, format="ALTO", output_dir=Path(
@@ -184,12 +226,34 @@ def show_export(bridge):
     with tab_fulltext:
         st.header("Fulltext Export")
         dehyphenate = st.checkbox("Dehyphenate Text", value=False, key="ft_dehyphenate")
-        ro = st.checkbox("Use Reading Order", value=False)
+        ro = st.checkbox("Use Reading Order", value=True, key="ft_ro")
         ro_mode = st.selectbox(
             "Reading Order Mode",
-            options=["auto", "reading_order", "document"],
-            index=0
+            options=["auto", "document", "reading-order-group"],
+            index=0,
+            key="ft_ro_mode"
         )
+        single_file = st.checkbox(
+            "Combine all pages into one document",
+            value=False,
+            key="ft_single_file"
+        )
+        if single_file:
+            single_file_name = st.text_input(
+                "Combined Document Filename",
+                value="fulltext_combined.txt",
+                key="ft_single_file_name"
+            )
+            separator = st.text_input(
+                "Page Separator",
+                value="-- Page {page-number}: {page-name} --",
+                help="Separator between pages. Supported placeholders: {page-number}, {page-name}, or '..'",
+                key="ft_separator"
+            )
+        else:
+            single_file_name = "fulltext_combined.txt"
+            separator = "-- Page {page-number}: {page-name} --"
+
         open_folder = st.checkbox("Open Folder After Export", value=True, key="ft_open_folder")
         if st.button("Export to Fulltext"):
             if 'export_dir' not in st.session_state:
@@ -199,13 +263,138 @@ def show_export(bridge):
                     "dehyphenate": dehyphenate,
                     "ro": ro,
                     "ro_mode": ro_mode,
+                    "single_file": single_file,
+                    "single_file_name": single_file_name,
+                    "separator": separator,
                     "open_folder": open_folder,
                     "mapping_profile": selected_profile if selected_profile != "None" else None,
+                    "exclude_tags": excluded_tags if excluded_tags else None,
                 }
-                bridge.export_files(
+                exported_files = bridge.export_files(
                     files=st.session_state.loaded_files, format="Fulltext", output_dir=Path(
                         st.session_state.export_dir) if st.session_state.export_dir else None, **kwargs)
-                st.success("Files exported successfully!")
+                if exported_files:
+                    st.success(f"Successfully exported {len(exported_files)} file(s)!")
+                else:
+                    st.success("Files exported successfully!")
+            except Exception as e:
+                st.error(f"Error during export: {str(e)}")
+
+    with tab_markdown:
+        st.header("Markdown Export")
+        dehyphenate = st.checkbox("Dehyphenate Text", value=False, key="md_dehyphenate")
+        ro = st.checkbox("Use Reading Order", value=True, key="md_ro")
+        ro_mode = st.selectbox(
+            "Reading Order Mode",
+            options=["auto", "document", "reading-order-group"],
+            index=0,
+            key="md_ro_mode"
+        )
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            export_table_snippets = st.checkbox(
+                "Export Table Snippets",
+                value=True,
+                key="md_table_snippets",
+                help="Crop and export image snippets for TableRegions"
+            )
+        with col_m2:
+            export_image_snippets = st.checkbox(
+                "Export Image Snippets",
+                value=True,
+                key="md_image_snippets",
+                help="Crop and export image snippets for ImageRegions"
+            )
+
+        single_file = st.checkbox(
+            "Combine all pages into one document",
+            value=False,
+            key="md_single_file"
+        )
+        if single_file:
+            single_file_name = st.text_input(
+                "Combined Document Filename",
+                value="document_combined.md",
+                key="md_single_file_name"
+            )
+            separator = st.text_input(
+                "Page Separator",
+                value="-- Page {page-number}: {page-name} --",
+                help="Separator between pages in combined markdown. Supported placeholders: {page-number}, {page-name}, or '..'",
+                key="md_separator"
+            )
+        else:
+            single_file_name = "document_combined.md"
+            separator = "-- Page {page-number}: {page-name} --"
+
+        snippet_folder = st.text_input(
+            "Snippets Subfolder",
+            value="images",
+            key="md_snippet_folder",
+            help="Subfolder name for cropped table and image snippets (relative to markdown file)"
+        )
+
+        st.write("##### 🖼️ Image Source Directory")
+        if "md_image_dir" not in st.session_state:
+            # Auto-detect default: check if parent or parent.parent has images
+            detected_dir = ""
+            if st.session_state.get("loaded_files"):
+                first_f = Path(st.session_state.loaded_files[0])
+                if any(first_f.parent.glob("*.png")) or any(first_f.parent.glob("*.jpg")):
+                    detected_dir = str(first_f.parent)
+                elif any(first_f.parent.parent.glob("*.png")) or any(first_f.parent.parent.glob("*.jpg")):
+                    detected_dir = str(first_f.parent.parent)
+            st.session_state.md_image_dir = detected_dir
+
+        c_dir_btn, c_dir_txt = st.columns([1, 3])
+        with c_dir_btn:
+            if st.button("Select Image Directory", key="select_md_image_dir_btn"):
+                chosen = pick_directory(initial_dir=st.session_state.md_image_dir or get_loaded_workspace_dir())
+                if chosen:
+                    st.session_state.md_image_dir = str(chosen)
+                    st.rerun()
+        with c_dir_txt:
+            img_dir_val = st.text_input(
+                "Image Directory",
+                value=st.session_state.md_image_dir,
+                key="md_image_dir_input",
+                help="Folder where the page images are located (for cropping table and image snippets)."
+            )
+            st.session_state.md_image_dir = img_dir_val
+
+        if st.session_state.md_image_dir and Path(st.session_state.md_image_dir).is_dir():
+            img_count = len([f for f in Path(st.session_state.md_image_dir).glob("*") if f.suffix.lower() in ('.png', '.jpg', '.jpeg', '.tif', '.tiff', '.webp', '.bmp')])
+            st.caption(f"📁 Image Directory: `{st.session_state.md_image_dir}` ({img_count} image(s) found)")
+        elif st.session_state.md_image_dir:
+            st.warning(f"⚠️ Directory does not exist: `{st.session_state.md_image_dir}`")
+
+        open_folder = st.checkbox("Open Folder After Export", value=True, key="md_open_folder")
+        if st.button("Export to Markdown"):
+            if 'export_dir' not in st.session_state:
+                st.session_state.export_dir = None
+            try:
+                kwargs = {
+                    "image_folder": st.session_state.md_image_dir if st.session_state.md_image_dir else None,
+                    "dehyphenate": dehyphenate,
+                    "ro": ro,
+                    "ro_mode": ro_mode,
+                    "export_table_snippets": export_table_snippets,
+                    "export_image_snippets": export_image_snippets,
+                    "snippet_folder": snippet_folder,
+                    "single_file": single_file,
+                    "single_file_name": single_file_name,
+                    "separator": separator,
+                    "open_folder": open_folder,
+                    "mapping_profile": selected_profile if selected_profile != "None" else None,
+                    "exclude_tags": excluded_tags if excluded_tags else None,
+                }
+                exported_files = bridge.export_files(
+                    files=st.session_state.loaded_files, format="Markdown", output_dir=Path(
+                        st.session_state.export_dir) if st.session_state.export_dir else None, **kwargs)
+                if exported_files:
+                    st.success(f"Successfully exported {len(exported_files)} file(s)!")
+                else:
+                    st.success("Files exported successfully!")
             except Exception as e:
                 st.error(f"Error during export: {str(e)}")
 
@@ -309,6 +498,7 @@ def show_export(bridge):
                         "line_thickness": line_thickness,
                         "output_filename": output_filename,
                         "mapping_profile": selected_profile if selected_profile != "None" else None,
+                        "exclude_tags": excluded_tags if excluded_tags else None,
                     }
                     bridge.export_files(
                         files=st.session_state.loaded_files, format="PDF", output_dir=Path(

@@ -214,6 +214,66 @@ def find_image(imageFilename: str, imageFolder: Path):
     return None
 
 
+def resolve_image_path(
+    xml_path: Path,
+    image_filename: Optional[str] = None,
+    image_folder: Optional[Any] = None
+) -> Optional[Path]:
+    """
+    Resolves the source image file for a PAGE XML file across user-specified or standard directories.
+    Handles:
+      - Absolute or relative image_folder paths
+      - Same directory as XML
+      - Parent directory of XML (standard PAGE-XML structure where XML is in /page)
+      - Subdirectories like images/
+      - Exact image_filename match, or stem match with common image extensions.
+    """
+    extensions = ['.png', '.jpg', '.jpeg', '.tif', '.tiff', '.webp', '.bmp']
+    stem = xml_path.stem
+    candidate_dirs = []
+
+    if image_folder and str(image_folder).strip():
+        p_folder = Path(image_folder)
+        if p_folder.is_absolute():
+            candidate_dirs.append(p_folder)
+        else:
+            candidate_dirs.append(xml_path.parent / p_folder)
+            candidate_dirs.append(xml_path.parent.parent / p_folder)
+
+    # Standard candidate directories:
+    candidate_dirs.append(xml_path.parent)
+    candidate_dirs.append(xml_path.parent.parent)
+    candidate_dirs.append(xml_path.parent / "images")
+    candidate_dirs.append(xml_path.parent.parent / "images")
+
+    seen_dirs = set()
+    for d in candidate_dirs:
+        try:
+            d_resolved = d.resolve()
+        except Exception:
+            continue
+        if d_resolved in seen_dirs or not d.exists() or not d.is_dir():
+            continue
+        seen_dirs.add(d_resolved)
+
+        if image_filename:
+            candidate = d / image_filename
+            if candidate.is_file():
+                return candidate
+            img_stem = Path(image_filename).stem
+            for ext in extensions:
+                cand = d / f"{img_stem}{ext}"
+                if cand.is_file():
+                    return cand
+
+        for ext in extensions:
+            cand = d / f"{stem}{ext}"
+            if cand.is_file():
+                return cand
+
+    return None
+
+
 def collect_xml_files_by_mets(mets: Path) -> List[Path]:
     """
     Read METS and return the existing xml-files in correct order
@@ -485,9 +545,14 @@ def get_modified_pagexml_path(page_path: Path) -> Path | None:
         return None
 
 
-def apply_mapping_to_files(xml_files: List[Path], mapping_profile: str, textnormalization: str = "NFC") -> Tuple[List[Tuple[Path, Path]], Any]:
+def apply_mapping_to_files(
+    xml_files: List[Path],
+    mapping_profile: Optional[str] = None,
+    textnormalization: str = "NFC",
+    exclude_tags: Optional[List[str]] = None
+) -> Tuple[List[Tuple[Path, Path]], Any]:
     """
-    Applies a mapping profile to a list of XML files and returns temporary files with their original paths.
+    Applies a mapping profile and/or tag filtering to a list of XML files and returns temporary files with their original paths.
     """
     import tempfile
     import unicodedata
@@ -499,26 +564,46 @@ def apply_mapping_to_files(xml_files: List[Path], mapping_profile: str, textnorm
     temp_dir_path = Path(temp_dir.name)
     temp_files_with_originals = []
 
-    handler = Mappinghandler(fnames=[str(p) for p in xml_files], guideline=mapping_profile, textnormalization=textnormalization)
+    handler = None
+    if mapping_profile and mapping_profile != "None":
+        handler = Mappinghandler(fnames=[str(p) for p in xml_files], guideline=mapping_profile, textnormalization=textnormalization)
 
     for xml_path in xml_files:
         page = Page(xml_path)
         is_modified = False
-        for region in page.regions.textregions:
-            for line in region.textlines:
-                original_text = line.get_text()
-                if not original_text:
-                    continue
 
-                unicode_normalized_text = unicodedata.normalize(textnormalization, original_text)
-
-                guideline_normalized_text = handler.mapping_by_guideline(
-                    unicode_normalized_text, line.get_id(), xml_path.name, mode='deterministic'
-                )
-
-                if original_text != guideline_normalized_text:
-                    line.update_text(guideline_normalized_text)
+        if exclude_tags:
+            for region in list(page.regions.textregions):
+                if region.get_tag() in exclude_tags:
+                    page.delete_element(region.xml_element)
                     is_modified = True
+            for tableregion in list(page.regions.tableregions):
+                if tableregion.get_tag() in exclude_tags:
+                    page.delete_element(tableregion.xml_element)
+                    is_modified = True
+            page.load_regions()
+            for region in page.regions.textregions:
+                for line in list(region.textlines):
+                    if line.get_tag() in exclude_tags:
+                        page.delete_element(line.xml_element)
+                        is_modified = True
+
+        if handler:
+            for region in page.regions.textregions:
+                for line in region.textlines:
+                    original_text = line.get_text()
+                    if not original_text:
+                        continue
+
+                    unicode_normalized_text = unicodedata.normalize(textnormalization, original_text)
+
+                    guideline_normalized_text = handler.mapping_by_guideline(
+                        unicode_normalized_text, line.get_id(), xml_path.name, mode='deterministic'
+                    )
+
+                    if original_text != guideline_normalized_text:
+                        line.update_text(guideline_normalized_text)
+                        is_modified = True
 
         temp_file_path = temp_dir_path / xml_path.name
         if is_modified:

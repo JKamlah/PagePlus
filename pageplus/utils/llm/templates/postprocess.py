@@ -12,6 +12,8 @@ import re
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
 
+import lxml.etree as ET
+
 from pageplus.io.logger import logging
 
 
@@ -226,6 +228,17 @@ def _apply_text_updates(structured: Any, page, *, overwrite_tags: bool) -> None:
         region = page.get_region_by_id(region_id) if hasattr(page, "get_region_by_id") else None
         if region is None:
             continue
+        table_html = _extract_html_table(updated_region)
+        if table_html and _try_apply_html_table_to_region(page, region, table_html):
+            continue
+        non_image_lines = []
+        for updated_line in updated_region.get("textlines", []) or []:
+            t = _extract_text_field(updated_line)
+            if t and not _has_image_tag(t):
+                non_image_lines.append(t)
+        if _has_image_tag(updated_region) and not non_image_lines:
+            _convert_to_image_region(page, region)
+            continue
         if overwrite_tags and updated_region.get("type"):
             if hasattr(region, "set_tag"):
                 try:
@@ -241,6 +254,8 @@ def _apply_text_updates(structured: Any, page, *, overwrite_tags: bool) -> None:
                 continue
             text = _extract_text_field(updated_line)
             if text is not None and len(text) <= 500:
+                if _has_image_tag(text):
+                    continue
                 textline.update_text(text)
             if overwrite_tags and updated_line.get("type"):
                 if hasattr(textline, "set_tag"):
@@ -560,6 +575,160 @@ def _table_html_correction_apply(structured: Any, image_path: Path,
     return None
 
 
+def _table_html_coords_apply(structured: Any, image_path: Path,
+                            page=None, **opts) -> Optional[str]:
+    """Applies HTML <table> updates with percentage coordinates to matching <TableRegion> in PAGE-XML in-place.
+    """
+    import re
+    import json
+    from pageplus.utils.mappings.table_json import replace_table_region_from_html_coords, table_html_to_page
+
+    html_tables: List[str] = []
+
+    def _extract_tables(obj: Any):
+        if isinstance(obj, str):
+            s_clean = obj.strip()
+            if (s_clean.startswith("{") or s_clean.startswith("[")) and not s_clean.startswith("<table"):
+                try:
+                    parsed = json.loads(s_clean)
+                    _extract_tables(parsed)
+                    return
+                except Exception:
+                    pass
+            matches = re.findall(r"(<table.*?>.*?</table>)", obj, re.DOTALL | re.IGNORECASE)
+            if matches:
+                html_tables.extend(matches)
+            elif "<tr" in obj.lower():
+                html_tables.append(obj)
+        elif isinstance(obj, dict):
+            if "html" in obj and isinstance(obj["html"], str):
+                _extract_tables(obj["html"])
+            elif "tables" in obj and isinstance(obj["tables"], list):
+                for item in obj["tables"]:
+                    _extract_tables(item)
+            elif "content" in obj and isinstance(obj["content"], str):
+                _extract_tables(obj["content"])
+            else:
+                for v in obj.values():
+                    if isinstance(v, (dict, list, str)):
+                        _extract_tables(v)
+        elif isinstance(obj, list):
+            for item in obj:
+                _extract_tables(item)
+
+    _extract_tables(structured)
+    text_opt = opts.get("text")
+    if text_opt and not html_tables:
+        _extract_tables(text_opt)
+
+    if page is None:
+        combined_html = "\n\n".join(html_tables) if html_tables else (structured if isinstance(structured, str) else "")
+        return table_html_to_page(combined_html, image_path, **opts)
+
+    offset = opts.get("offset", (0, 0))
+    snippet_dim = opts.get("snippet_dim")
+
+    if not html_tables:
+        logging.warning("No HTML tables found in model output for table coordinate update.")
+        return None
+
+    element_id = opts.get("element_id")
+    region_filter = opts.get("region_filter")
+
+    ns = getattr(page, "ns", "http://schema.primaresearch.org/PAGE/gts/pagecontent/2019-07-15")
+    table_ids_in_page = []
+    if hasattr(page, "root") and page.root is not None:
+        for tr in page.root.iter(f"{{{ns}}}TableRegion"):
+            t_id = tr.get("id")
+            if t_id:
+                table_ids_in_page.append(t_id)
+
+    for idx, h_str in enumerate(html_tables):
+        table_id = None
+        m_id = re.search(r'<table[^>]*\bid=["\']([^"\']+)["\']', h_str, re.IGNORECASE)
+        if m_id:
+            table_id = m_id.group(1)
+
+        target_id = None
+        if table_id and table_id in table_ids_in_page:
+            target_id = table_id
+        elif element_id and element_id in table_ids_in_page:
+            target_id = element_id
+        elif region_filter is not None:
+            if hasattr(page, "regions") and getattr(page.regions, "tableregions", None):
+                for tr in page.regions.tableregions:
+                    try:
+                        if region_filter(tr):
+                            target_id = tr.get_id()
+                            break
+                    except Exception:
+                        pass
+        if not target_id:
+            if idx < len(table_ids_in_page):
+                target_id = table_ids_in_page[idx]
+            elif table_ids_in_page:
+                target_id = table_ids_in_page[0]
+            else:
+                target_id = table_id or "t0"
+
+        replace_table_region_from_html_coords(page, target_id, h_str, offset=offset, snippet_dim=snippet_dim)
+
+    return None
+
+
+def _table_cells_bbox_apply(structured: Any, image_path: Path,
+                            page=None, **opts) -> Optional[str]:
+    """Applies JSON cell bounding box updates to matching <TableRegion> in PAGE-XML in-place.
+    """
+    import json
+    import re
+    from pageplus.utils.mappings.table_json import replace_table_region_from_cells_bbox
+
+    if page is None:
+        logging.warning("No Page object provided for table cells bbox postprocess.")
+        return None
+
+    offset = opts.get("offset", (0, 0))
+    snippet_dim = opts.get("snippet_dim")
+    element_id = opts.get("element_id")
+    region_filter = opts.get("region_filter")
+
+    ns = getattr(page, "ns", "http://schema.primaresearch.org/PAGE/gts/pagecontent/2019-07-15")
+    table_ids_in_page = []
+    if hasattr(page, "root") and page.root is not None:
+        for tr in page.root.iter(f"{{{ns}}}TableRegion"):
+            t_id = tr.get("id")
+            if t_id:
+                table_ids_in_page.append(t_id)
+
+    target_id = None
+    if element_id and element_id in table_ids_in_page:
+        target_id = element_id
+    elif table_ids_in_page:
+        target_id = table_ids_in_page[0]
+
+    if not target_id:
+        logging.warning("No target TableRegion ID identified for table_cells_bbox_apply.")
+        return None
+
+    data_payload = structured
+    if not data_payload and opts.get("text"):
+        data_payload = opts.get("text")
+
+    ok = replace_table_region_from_cells_bbox(
+        page,
+        target_id,
+        data_payload,
+        offset=offset,
+        snippet_dim=snippet_dim,
+    )
+    if ok:
+        import lxml.etree as ET
+        return ET.tostring(page.root, encoding="utf-8").decode("utf-8")
+    return None
+
+
+
 def _table_html_to_xml(structured: Any, image_path: Path,
                       page=None, **opts) -> str:
     """HTML <table> string -> fresh PAGE XML string."""
@@ -570,8 +739,56 @@ def _table_html_to_xml(structured: Any, image_path: Path,
     return table_html_to_page(html_text or structured or "", image_path, **opts)
 
 
+_OCR_NOISE_LINE_RE = re.compile(
+    r'^(?:'
+    r'paddleocr(?:[-_ ]?vl)?|'
+    r'paddle[-_ ]?ocr|'
+    r'ocr|'
+    r'transcription|'
+    r'text recognition'
+    r')[:\s]*$',
+    re.IGNORECASE,
+)
+
+_HTML_WRAPPER_TAG_RE = re.compile(
+    r'^\s*</?(?:div|p|span|center|table|tbody|thead|tr|td|th|br|hr)\b[^>]*>\s*$',
+    re.IGNORECASE,
+)
+
+
+_LATEX_CMD_RE = re.compile(
+    r'\\(?:underline|text(?:bf|it|rm|sc|sf|tt)?|mathrm|mathbf|mathit|mathsf|mathtt|mbox|overline|emph)\s*\{([^{}]+)\}'
+)
+
+
+def _clean_latex_text_formatting(text: str) -> str:
+    """Clean LaTeX text formatting artifacts (e.g. '$ \\underline{\\text{ALAIN JUILLET}} $' -> 'ALAIN JUILLET')."""
+    if not text or ("\\" not in text and "$" not in text):
+        return text
+
+    res = text
+    # Replace LaTeX non-breaking space and spacing escapes
+    res = re.sub(r'\\[,;! ]', ' ', res)
+    res = re.sub(r'\\(?:quad|qquad|enspace|thinspace)', ' ', res)
+
+    # Iteratively unwrap LaTeX text/font/style commands like \underline{...}, \text{...}, \textbf{...}
+    for _ in range(10):
+        new_res = _LATEX_CMD_RE.sub(r'\1', res)
+        if new_res == res:
+            break
+        res = new_res
+
+    # Strip inline and block math delimiters wrapping text ($...$, $$...$$)
+    res = re.sub(r'\$\$\s*([^$]+?)\s*\$\$', r'\1', res)
+    res = re.sub(r'\$\s*([^$]+?)\s*\$', r'\1', res)
+
+    # Collapse multiple spaces
+    res = re.sub(r'[ \t]{2,}', ' ', res)
+    return res.strip()
+
+
 def _clean_markdown_line(line: str) -> str:
-    """Clean markdown formatting and structural markers (e.g. '#', '##', '###', '>', list dashes)."""
+    """Clean markdown formatting, structural markers, OCR artifacts, and HTML wrappers."""
     if not line:
         return ""
     l = line.strip()
@@ -584,7 +801,134 @@ def _clean_markdown_line(line: str) -> str:
     # Strip markdown bold / italic markers (**text** -> text, __text__ -> text)
     l = re.sub(r'\*\*(.*?)\*\*', r'\1', l)
     l = re.sub(r'__(.*?)__', r'\1', l)
+
+    # Clean LaTeX text/math formatting (e.g. '$ \underline{\text{ALAIN JUILLET}} $' -> 'ALAIN JUILLET')
+    l = _clean_latex_text_formatting(l)
+
+    # Filter out standalone HTML wrappers e.g. <div style="...">, </div>, <p>, </p>
+    if _HTML_WRAPPER_TAG_RE.match(l):
+        return ""
+
+    # Filter out lines containing image tags (HTML or Markdown)
+    if re.search(r'<img\b[^>]*>', l, re.IGNORECASE) or re.search(r'!\[.*?\]\([^\)]+\)', l):
+        return ""
+
+    # Filter out model task echo / OCR noise tokens (paddleocr-vl, ocr, etc.)
+    stripped_token = l.strip("[](): \t")
+    if _OCR_NOISE_LINE_RE.match(stripped_token) or re.match(r'^<\|?[a-zA-Z0-9_\-]+(?:\|?>|>)$', l):
+        return ""
+
     return l.strip()
+
+
+def _has_image_tag(payload: Any) -> bool:
+    """Check if content contains an HTML or Markdown image tag."""
+    if payload is None:
+        return False
+    if isinstance(payload, str):
+        if re.search(r'<img\b[^>]*>', payload, re.IGNORECASE):
+            return True
+        if re.search(r'!\[.*?\]\([^\)]+\)', payload):
+            return True
+        return False
+    if isinstance(payload, list):
+        return any(_has_image_tag(item) for item in payload)
+    if isinstance(payload, dict):
+        if str(payload.get("type", "")).lower() in ("image", "imageregion", "figure", "illustration"):
+            return True
+        for k, v in payload.items():
+            if _has_image_tag(v):
+                return True
+        return False
+    return False
+
+
+def _extract_html_table(payload: Any) -> Optional[str]:
+    """Check if payload contains an HTML <table> and return the HTML table string if found."""
+    if payload is None:
+        return None
+    if isinstance(payload, str):
+        if "<table" in payload.lower():
+            m = re.search(r'(<table\b.*?(?:</table>|$))', payload, re.IGNORECASE | re.DOTALL)
+            if m:
+                h = m.group(1).strip()
+                if "<tr" in h.lower() or "<td" in h.lower() or "<th" in h.lower():
+                    if not h.lower().endswith("</table>"):
+                        h += "</table>"
+                    return h
+        return None
+    if isinstance(payload, list):
+        joined = "\n".join(str(x) for x in payload if isinstance(x, str))
+        t = _extract_html_table(joined)
+        if t:
+            return t
+        for item in payload:
+            t = _extract_html_table(item)
+            if t:
+                return t
+        return None
+    if isinstance(payload, dict):
+        for k in ("html", "text", "content", "table"):
+            if k in payload:
+                t = _extract_html_table(payload[k])
+                if t:
+                    return t
+        for v in payload.values():
+            if isinstance(v, (str, list, dict)):
+                t = _extract_html_table(v)
+                if t:
+                    return t
+    return None
+
+
+def _try_apply_html_table_to_region(page, target_region, table_html: str, **opts) -> bool:
+    """Convert a region (e.g. TextRegion) to a TableRegion with proportional cell geometry using replace_table_region_from_html."""
+    if page is None or target_region is None or not table_html:
+        return False
+    from pageplus.utils.mappings.table_json import replace_table_region_from_html
+    tr_id = target_region.get_id() if hasattr(target_region, "get_id") else getattr(target_region, "id", "")
+    offset = opts.get("offset", (0, 0))
+    snippet_dim = opts.get("snippet_dim")
+    ok = replace_table_region_from_html(page, tr_id, table_html, offset=offset, snippet_dim=snippet_dim)
+    if ok:
+        logging.info("Converted region %s to TableRegion from HTML table", tr_id)
+    return ok
+
+
+def _convert_to_image_region(page, target_region) -> bool:
+    """Convert a TextRegion element into an ImageRegion element."""
+    if target_region is None:
+        return False
+
+    ns = getattr(target_region, "ns", "http://schema.primaresearch.org/PAGE/gts/pagecontent/2019-07-15")
+    # Change XML tag to ImageRegion
+    target_region.xml_element.tag = f"{{{ns}}}ImageRegion"
+
+    # Remove all child elements other than Coords
+    for child in list(target_region.xml_element):
+        tag_name = ET.QName(child.tag).localname if hasattr(child, "tag") else ""
+        if tag_name != "Coords":
+            target_region.xml_element.remove(child)
+
+    # Empty textlines
+    target_region.textlines = []
+
+    # Update page.regions textregions / imageregions if page is provided
+    if page is not None and hasattr(page, "regions"):
+        if getattr(page.regions, "textregions", None) and target_region in page.regions.textregions:
+            try:
+                page.regions.textregions.remove(target_region)
+            except ValueError:
+                pass
+        if hasattr(page.regions, "imageregions"):
+            if page.regions.imageregions is None:
+                page.regions.imageregions = []
+            if target_region not in page.regions.imageregions:
+                page.regions.imageregions.append(target_region)
+
+    tr_id = target_region.get_id() if hasattr(target_region, "get_id") else getattr(target_region, "id", "")
+    logging.info("Converted TextRegion %s to ImageRegion", tr_id)
+    return True
 
 
 def _extract_lines_from_payload(payload: Any, target_id: Optional[str] = None) -> list[str]:
@@ -784,6 +1128,11 @@ def _textregion_lines_apply(structured: Any, image_path: Path,
         if not target_region or not lines:
             return
 
+        table_html = _extract_html_table(lines)
+        if table_html:
+            if _try_apply_html_table_to_region(page, target_region, table_html, **opts):
+                return
+
         cleaned_lines = []
         for l in lines:
             cl = _clean_markdown_line(l)
@@ -791,6 +1140,8 @@ def _textregion_lines_apply(structured: Any, image_path: Path,
                 cleaned_lines.append(cl)
 
         if not cleaned_lines:
+            if _has_image_tag(lines):
+                _convert_to_image_region(page, target_region)
             return
 
         poly = target_region.get_coordinates(returntype="polygon")
@@ -888,12 +1239,20 @@ def _textregion_lines_apply(structured: Any, image_path: Path,
                 except Exception:
                     pass
 
+        table_html = _extract_html_table(payload) or _extract_html_table(raw_text)
+        if target_region is not None and table_html:
+            if _try_apply_html_table_to_region(page, target_region, table_html, **opts):
+                return None
+
         extracted_lines = _extract_lines_from_payload(payload if payload is not None else raw_text, target_id=element_id)
         if not extracted_lines and raw_text:
             extracted_lines = _extract_lines_from_payload(raw_text, target_id=element_id)
 
-        if target_region is not None and extracted_lines:
-            _apply_lines_to_region(target_region, extracted_lines)
+        if target_region is not None:
+            if extracted_lines:
+                _apply_lines_to_region(target_region, extracted_lines)
+            elif _has_image_tag(payload) or _has_image_tag(raw_text):
+                _convert_to_image_region(page, target_region)
 
     # Handle batch dict or list with regions
     if isinstance(payload, dict) and ("regions" in payload or "textregions" in payload):
@@ -909,9 +1268,14 @@ def _textregion_lines_apply(structured: Any, image_path: Path,
                                 tr = r
                                 break
                     if tr is not None:
+                        table_html = _extract_html_table(r_dict)
+                        if table_html and _try_apply_html_table_to_region(page, tr, table_html, **opts):
+                            continue
                         lines = _extract_lines_from_payload(r_dict, target_id=r_id)
                         if lines:
                             _apply_lines_to_region(tr, lines)
+                        elif _has_image_tag(r_dict):
+                            _convert_to_image_region(page, tr)
 
     elif isinstance(payload, dict):
         # Handle dict mapping {region_id: content}
@@ -925,9 +1289,14 @@ def _textregion_lines_apply(structured: Any, image_path: Path,
                         tr = r
                         break
             if tr is not None:
+                table_html = _extract_html_table(r_content)
+                if table_html and _try_apply_html_table_to_region(page, tr, table_html, **opts):
+                    continue
                 lines = _extract_lines_from_payload(r_content, target_id=r_id)
                 if lines:
                     _apply_lines_to_region(tr, lines)
+                elif _has_image_tag(r_content):
+                    _convert_to_image_region(page, tr)
 
     return None
 
@@ -939,6 +1308,8 @@ register_postprocessor("segmentation_to_page", _layout_only_to_xml)  # legacy al
 register_postprocessor("table_json_to_page", _table_json_to_xml)
 register_postprocessor("table_correction_apply", _table_correction_apply)
 register_postprocessor("table_html_correction_apply", _table_html_correction_apply)
+register_postprocessor("table_html_coords_apply", _table_html_coords_apply)
+register_postprocessor("table_cells_bbox_apply", _table_cells_bbox_apply)
 register_postprocessor("table2html_apply", _table_html_correction_apply)
 register_postprocessor("table_html_to_page", _table_html_to_xml)
 register_postprocessor("markdown_to_page", _markdown_to_xml)

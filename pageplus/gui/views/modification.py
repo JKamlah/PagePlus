@@ -76,7 +76,8 @@ def show_modification(bridge: ModificationBridge) -> None:
                      "📐 Text-Layout",
                      "✨ Text-Attributes",
                      "📝 Text-Content",
-                     "🔧 Repair"]
+                     "🔧 Repair",
+                     "🔄 Remapping/Updating"]
         tabs = st.tabs(tab_names)
 
         with tabs[0]:  # Format&Metadata
@@ -1321,6 +1322,80 @@ def show_modification(bridge: ModificationBridge) -> None:
                         st.success(result["output"])
                     else:
                         st.error(result["output"])
+
+        with tabs[5]:  # Remapping/Updating
+            st.subheader("🔄 Remapping & Updating Operations")
+            st.write(
+                "Apply postprocessing mappings (such as converting OCR JSON to TextLines, "
+                "HTML tables to TableRegions, or Markdown) directly to your loaded PAGE-XML "
+                "files without re-running the OCR model."
+            )
+
+            with st.expander("Remap from Data (JSON / Markdown / Text)", expanded=True):
+                st.markdown("##### 1. Select Input Data Folder or File")
+                st.caption(
+                    "Select the folder containing the OCR results (e.g. `json/`, `markdown/`, or collection root). "
+                    "If left blank, PagePlus will search for a `json/` or `markdown/` folder adjacent to each loaded XML file."
+                )
+
+                col_dir_btn, col_dir_clear = st.columns([1, 1])
+                with col_dir_btn:
+                    if st.button("📁 Browse Data Directory", key="remap_pick_dir_btn"):
+                        picked = pick_directory(initial_dir=Path.home())
+                        if picked:
+                            st.session_state.remap_input_data_dir = picked
+                            st.rerun()
+                with col_dir_clear:
+                    if st.session_state.get("remap_input_data_dir"):
+                        if st.button("Clear Data Directory", key="remap_clear_dir_btn"):
+                            del st.session_state.remap_input_data_dir
+                            st.rerun()
+
+                input_data_path_val = st.text_input(
+                    "Data Directory / File Path",
+                    value=st.session_state.get("remap_input_data_dir", ""),
+                    placeholder="/path/to/folder_with_json_or_txt",
+                    key="remap_input_data_dir_input",
+                    help="Enter path to directory containing json, txt, or md files matching XML file stems."
+                )
+                if input_data_path_val != st.session_state.get("remap_input_data_dir", ""):
+                    st.session_state.remap_input_data_dir = input_data_path_val
+
+                st.markdown("##### 2. Select Postprocessor Mapping")
+                mappings_info = bridge.get_available_postprocessor_mappings() if hasattr(bridge, "get_available_postprocessor_mappings") else []
+                mapping_ids = [m["id"] for m in mappings_info] if mappings_info else ["textregion_lines_apply"]
+                mapping_names = {m["id"]: m["name"] for m in mappings_info}
+
+                default_idx = 0
+                if "textregion_lines_apply" in mapping_ids:
+                    default_idx = mapping_ids.index("textregion_lines_apply")
+
+                selected_mapping = st.selectbox(
+                    "Postprocessor Mapping",
+                    options=mapping_ids,
+                    index=default_idx,
+                    format_func=lambda mid: mapping_names.get(mid, mid),
+                    key="remap_selected_mapping",
+                    help="The mapping function to transform the structured data / text into PAGE-XML elements."
+                )
+
+                st.markdown("##### 3. Run Options")
+                dry_run = st.checkbox("Dry run (simulate without writing to disk)", key="remap_dry_run")
+
+                if st.button("🚀 Remap / Update PAGE-XML", key="remap_run_btn", type="primary"):
+                    params = {
+                        "data_dir": input_data_path_val.strip() if input_data_path_val else None,
+                        "mapping": selected_mapping,
+                        "dry_run": dry_run,
+                        "outputdir": st.session_state.get('modification_dir'),
+                    }
+                    record_operation("remap_from_data", **params)
+                    with st.spinner(f"Remapping {len(selected_files)} file(s) with '{selected_mapping}'...", show_time=True):
+                        result = bridge.remap_from_data(files=selected_files, **params)
+                    if result.get("success"):
+                        st.success(result.get("output", "Remapping completed successfully!"))
+                    else:
+                        st.error(result.get("output", "Remapping failed."))
 
     with main_tabs[1]:
         st.subheader("Batch Processing")

@@ -146,6 +146,67 @@ def render_table_html_payload(page, region_filter=None) -> str:
         return json.dumps([{"html": h} for h in html_tables], ensure_ascii=False, indent=2)
 
 
+def render_table_html_coords_payload(page, region_filter=None) -> str:
+    """Serialize TableRegion elements in a Page into HTML <table> representation with percentage coordinates."""
+    import json
+    from pageplus.utils.mappings.table_json import table_xml_to_html_with_coords
+
+    html_tables = []
+    page_regions = getattr(page, "regions", None)
+    table_regions = getattr(page_regions, "tableregions", []) if page_regions else []
+
+    if not table_regions and hasattr(page, "root") and page.root is not None:
+        ns = getattr(page, "ns", "http://schema.primaresearch.org/PAGE/gts/pagecontent/2019-07-15")
+        table_regions = list(page.root.iter(f"{{{ns}}}TableRegion"))
+
+    for tr in table_regions:
+        if region_filter is not None and not _safe_filter(region_filter, tr):
+            continue
+        try:
+            h_str = table_xml_to_html_with_coords(tr)
+            if h_str:
+                html_tables.append(h_str)
+        except Exception:
+            pass
+
+    if not html_tables:
+        return json.dumps({"html": '<table id="t0" width="100%" height="100%"></table>'}, ensure_ascii=False, indent=2)
+    elif len(html_tables) == 1:
+        return json.dumps({"html": html_tables[0]}, ensure_ascii=False, indent=2)
+    else:
+        return json.dumps([{"html": h} for h in html_tables], ensure_ascii=False, indent=2)
+
+
+def render_table_cells_prompt_payload(page, region_filter=None) -> str:
+    """Serialize TableRegion elements in a Page into a prompt describing columns and rows for cell bbox detection."""
+    from pageplus.utils.mappings.table_json import table_xml_to_cells_prompt
+
+    page_regions = getattr(page, "regions", None)
+    table_regions = getattr(page_regions, "tableregions", []) if page_regions else []
+
+    if not table_regions and hasattr(page, "root") and page.root is not None:
+        ns = getattr(page, "ns", "http://schema.primaresearch.org/PAGE/gts/pagecontent/2019-07-15")
+        table_regions = list(page.root.iter(f"{{{ns}}}TableRegion"))
+
+    prompts = []
+    for tr in table_regions:
+        if region_filter is not None and not _safe_filter(region_filter, tr):
+            continue
+        try:
+            p_str = table_xml_to_cells_prompt(tr)
+            if p_str:
+                prompts.append(p_str)
+        except Exception:
+            pass
+
+    if not prompts:
+        return (
+            "The user wants me to identify the bounding boxes for the cells in the table shown in the image.\n\n"
+            "I will now create the JSON output with the bounding boxes for each cell ('bbox_2d') :\n[]\n"
+        )
+    return "\n\n".join(prompts)
+
+
 def render_page_xml_payload(
     page,
     *,
@@ -159,6 +220,10 @@ def render_page_xml_payload(
 ) -> str:
     """Serialize a ``Page`` into a compact JSON or HTML payload for correction prompts.
     """
+    if mapping == "table_cells_bbox_apply":
+        return render_table_cells_prompt_payload(page, region_filter=region_filter)
+    if mapping == "table_html_coords_apply":
+        return render_table_html_coords_payload(page, region_filter=region_filter)
     if mapping in ("table_html_correction_apply", "table2html_apply", "table_html_to_page"):
         return render_table_html_payload(page, region_filter=region_filter)
 

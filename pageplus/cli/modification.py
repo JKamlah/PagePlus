@@ -2892,6 +2892,172 @@ def update_reading_order_index(
             logging.info(f"[DRY RUN] Would write updated xml file to: {xml_file}")
 
 
+@app.command(name="remap-from-data")
+@app.command(name="remap")
+def remap_from_data(
+    inputs: Annotated[List[str], typer.Argument(
+        exists=True,
+        help="Direct input of XML files or directories containing XML files.",
+        callback=transform_inputs
+    )] = None,
+    data_dir: Annotated[Optional[str], typer.Option(
+        help="Path to folder or file containing input data (e.g. JSON, raw text, or Markdown files)."
+    )] = None,
+    mapping: Annotated[str, typer.Option(
+        help="Name of the postprocessor mapping to apply (default: textregion_lines_apply)."
+    )] = "textregion_lines_apply",
+    outputdir: Annotated[Optional[str], typer.Option(
+        help="Filename of the output directory. If not specified, input files will be overwritten.",
+        callback=transform_output
+    )] = None,
+    dry_run: Annotated[bool, typer.Option(
+        help="Perform a dry run without writing any files."
+    )] = False,
+) -> str:
+    """
+    Applies an LLM/OCR postprocessor mapping from external data files (JSON, Markdown, text) to existing PAGE-XML files.
+    """
+    from pageplus.utils.llm.templates.postprocess import get_postprocessor
+
+    xml_files = collect_xml_files(map(Path, inputs))
+    if not xml_files:
+        raise FileNotFoundError("No XML files found in the input paths.")
+
+    data_path = Path(data_dir).expanduser().resolve() if data_dir else None
+    postproc = get_postprocessor(mapping)
+
+    def _find_data_file(xml_f: Path) -> Optional[Path]:
+        stem = xml_f.stem
+        # 1. If explicit file was passed as data_dir
+        if data_path and data_path.is_file():
+            return data_path
+
+        # 2. Check within data_path if provided
+        if data_path and data_path.is_dir():
+            for rel in (
+                f"{stem}.json",
+                f"json/{stem}.json",
+                f"png/json/{stem}.json",
+                f"{stem}.raw.txt",
+                f"{stem}.txt",
+                f"{stem}.md",
+                f"markdown/{stem}.md",
+            ):
+                cand = data_path / rel
+                if cand.exists():
+                    return cand
+            # Try recursive match in data_path
+            matches = list(data_path.rglob(f"{stem}.json"))
+            if matches:
+                return matches[0]
+            matches_all = [m for m in data_path.rglob(f"{stem}.*") if m.suffix.lower() in (".json", ".txt", ".md")]
+            if matches_all:
+                return matches_all[0]
+
+        # 3. If data_path is not specified, check next to the XML file
+        if data_path is None:
+            for rel in (
+                f"json/{stem}.json",
+                f"{stem}.json",
+                f"{stem}.raw.txt",
+                f"{stem}.txt",
+                f"{stem}.md",
+                f"markdown/{stem}.md",
+            ):
+                cand = xml_f.parent / rel
+                if cand.exists():
+                    return cand
+
+        return None
+
+    updated_count = 0
+    missing_count = 0
+    error_count = 0
+
+    for xml_file in track(sorted(xml_files), description=f"Remapping with '{mapping}'..."):
+        filename = xml_file.name
+        data_file = _find_data_file(xml_file)
+        if not data_file:
+            logging.warning(f"No matching data file found for {filename}")
+            missing_count += 1
+            continue
+
+        try:
+            page = Page(xml_file)
+        except Exception as e:
+            logging.error(f"Failed to open {xml_file}: {e}")
+            error_count += 1
+            continue
+
+        # Load payload from data_file
+        try:
+            if data_file.suffix.lower() == ".json":
+                import json
+                try:
+                    with open(data_file, "r", encoding="utf-8") as f:
+                        structured = json.load(f)
+                except Exception:
+                    import json_repair
+                    with open(data_file, "r", encoding="utf-8") as f:
+                        structured = json_repair.repair_json(f.read(), return_objects=True)
+                raw_text = json.dumps(structured) if isinstance(structured, (dict, list)) else str(structured)
+            else:
+                with open(data_file, "r", encoding="utf-8") as f:
+                    raw_text = f.read()
+                structured = raw_text
+        except Exception as e:
+            logging.error(f"Failed to read data file {data_file}: {e}")
+            error_count += 1
+            continue
+
+        # Locate associated image
+        img_path = None
+        try:
+            img_name = page.imageFilename() if hasattr(page, "imageFilename") else None
+            if img_name:
+                cand = xml_file.parent / img_name
+                if cand.exists():
+                    img_path = cand
+        except Exception:
+            pass
+
+        if not img_path or not img_path.exists():
+            for ext in (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"):
+                cand = xml_file.with_suffix(ext)
+                if cand.exists():
+                    img_path = cand
+                    break
+        if not img_path:
+            img_path = xml_file
+
+        try:
+            out = postproc(structured, img_path, page=page, text=raw_text)
+            fout = xml_file if outputdir is None else determine_output_path(xml_file, outputdir, filename)
+
+            if not dry_run:
+                if isinstance(out, str) and "<PcGts" in out:
+                    Path(fout).parent.mkdir(parents=True, exist_ok=True)
+                    Path(fout).write_text(out, encoding="utf-8")
+                else:
+                    page.save_xml(fout)
+                logging.info(f"Wrote remapped xml file to: {fout}")
+            else:
+                logging.info(f"[DRY RUN] Would write remapped xml file to: {fout}")
+
+            updated_count += 1
+        except Exception as e:
+            logging.error(f"Postprocessing failed for {filename}: {e}")
+            error_count += 1
+
+    summary = (
+        f"Remapped {updated_count} files using '{mapping}'. "
+        f"(Missing data: {missing_count}, Errors: {error_count})"
+    )
+    logging.info(summary)
+    print(f"[green]{summary}[/green]")
+    return summary
+
+
 if __name__ == "__main__":
     app()
 

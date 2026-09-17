@@ -13,7 +13,7 @@ from pageplus.cli.modification import (delete_fill_characters, delete_text, dele
                                        replace_tag, reduce_polygon_points, simplify_polygon, set_page_version,
                                        sort, sort_and_merge,
                                        sort_regions, sort_two_column, text_mapping, top_tier_textregion,
-                                       translate_lines, update_reading_order_index)
+                                       translate_lines, update_reading_order_index, remap_from_data)
 from pageplus.gui.cli_bridges.base import CLIBridge
 from pageplus.gui.utils.undo import UndoManager
 
@@ -964,4 +964,69 @@ class ModificationBridge(CLIBridge):
             }
         except Exception as e:
             return {"success": False, "output": str(e)}
+
+    def remap_from_data(
+        self,
+        files: List[str],
+        data_dir: Optional[str] = None,
+        mapping: str = "textregion_lines_apply",
+        dry_run: bool = False,
+        outputdir: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Apply a postprocessing mapping from external data files (JSON, Markdown, text) to XML files."""
+        try:
+            if not dry_run:
+                UndoManager.add_undo_state("Remap from Data")
+            res = remap_from_data(
+                inputs=files,
+                data_dir=data_dir,
+                mapping=mapping,
+                outputdir=outputdir,
+                dry_run=dry_run,
+            )
+            return {
+                "success": True,
+                "output": res if isinstance(res, str) else "Remapping completed successfully",
+            }
+        except Exception as e:
+            return {"success": False, "output": str(e)}
+
+    @staticmethod
+    def get_available_postprocessor_mappings() -> List[Dict[str, str]]:
+        """Return registered postprocessor mappings with friendly labels."""
+        from pageplus.utils.llm.templates.postprocess import list_postprocessors
+
+        labels = {
+            "textregion_lines_apply": "Text Recognition (Region -> Lines): textregion_lines_apply",
+            "table_json_to_page": "Table JSON: table_json_to_page",
+            "table_html_to_page": "Table HTML: table_html_to_page",
+            "markdown_to_page": "Markdown to PAGE-XML: markdown_to_page",
+            "pp_layout_json_to_page": "PP-Layout JSON: pp_layout_json_to_page",
+            "pp_layout_extend_json_to_page": "PP-Layout Extend JSON: pp_layout_extend_json_to_page",
+            "pp_layout_extend_table_json_to_page": "PP-Layout Extend Table JSON: pp_layout_extend_table_json_to_page",
+            "mistral_ocr_to_page": "Mistral OCR: mistral_ocr_to_page",
+            "text_only_apply": "Text Only Update: text_only_apply",
+            "text_correction_apply": "Text Correction Update: text_correction_apply",
+            "layout_correction_apply": "Layout Correction Update: layout_correction_apply",
+            "layout_and_text_to_xml": "Layout & Text: layout_and_text_to_xml",
+            "layout_only_to_xml": "Layout Only: layout_only_to_xml",
+            "reading_order_apply": "Reading Order: reading_order_apply",
+            "reading_order_text_correction_apply": "Reading Order & Text: reading_order_text_correction_apply",
+            "table_correction_apply": "Table Correction: table_correction_apply",
+            "table_html_correction_apply": "Table HTML Correction: table_html_correction_apply",
+            "table2html_apply": "Table to HTML: table2html_apply",
+            "field_tagging_apply": "Field Tagging: field_tagging_apply",
+            "segmentation_to_page": "Segmentation: segmentation_to_page",
+            "gemini2d_to_page": "Gemini 2D: gemini2d_to_page",
+        }
+
+        registered = list_postprocessors()
+        ordered = []
+        if "textregion_lines_apply" in registered:
+            ordered.append("textregion_lines_apply")
+        for m in sorted(registered):
+            if m not in ordered:
+                ordered.append(m)
+
+        return [{"id": m, "name": labels.get(m, m)} for m in ordered]
 
