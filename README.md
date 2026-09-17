@@ -99,7 +99,7 @@ Here is a list of available commands, grouped by module:
 -   **`dinglehopper`**: OCR evaluation metrics and comparison tools.
 -   **`escriptorium` / `transkribus`**: Commands for interacting with transcription platforms.
 -   **`export`**: `alto`, `dsv`, `fulltext`, `page-pdf`, and more.
--   **`gemini` / `litellm`**: Integrations with large language models.
+-   **`gemini` / `llm-ocr`**: Integrations with large language models.
 -   **`ingest`**: Commands for importing and processing various file formats.
 -   **`kraken` / `tesseract`**: Commands for performing OCR.
 -   **`mets`**: Tools for working with METS files.
