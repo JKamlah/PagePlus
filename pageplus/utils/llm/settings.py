@@ -42,6 +42,30 @@ class LLMSettings(API):
     environment: Environments = Environments.PAGEPLUS
     keep_alive_time: float = 60.0
 
+    def get(self, key: str, default: Any = None) -> Any:
+        """Lookup a configuration key from Settings (.env) or os.environ."""
+        try:
+            from pageplus.gui.utils.settings import Settings
+            val = Settings().get(key, default)
+            if val is not None:
+                return val
+        except Exception:
+            pass
+        val = get_key(get_env_path(), key)
+        if val is not None:
+            return val
+        import os
+        return os.environ.get(key, default)
+
+    def set(self, key: str, value: Any) -> None:
+        """Set a configuration key in Settings (.env)."""
+        try:
+            from pageplus.gui.utils.settings import Settings
+            Settings().set(key, value)
+        except Exception:
+            set_key(get_env_path(), key, str(value) if value is not None else "")
+
+
     @property
     def llmprovider(self) -> LLMProvider:
         prov = self.provider.split('__')[0] if self.provider else ''
@@ -282,7 +306,7 @@ def spec_from_gemini_settings(
     is_batch: bool = False,
 ) -> OCRBackendSpec:
     from pageplus.utils.llm.core.specs import GeminiOptions, GeminiBatchOptions
-    stier = service_tier or settings.get("GEMINI_SERVICE_TIER", "auto")
+    stier = service_tier or (settings.get("GEMINI_SERVICE_TIER", "auto") if hasattr(settings, "get") else "auto") or "auto"
     if is_batch:
         options = GeminiBatchOptions(
             api_key=settings.api_key,

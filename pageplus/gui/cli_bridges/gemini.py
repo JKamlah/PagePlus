@@ -169,7 +169,8 @@ class GeminiBridge:
                 recognize_level=RecognizeLevel(recognize_level),
                 multi_stage=multi_stage,
                 thinking_budget=thinking_budget,
-                task_mode=TaskMode(task_mode))
+                task_mode=TaskMode(task_mode),
+                system_prompt=system_prompt)
             return {
                 "success": True,
                 "output": "OCR completed successfully.",

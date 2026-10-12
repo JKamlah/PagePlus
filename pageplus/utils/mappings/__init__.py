@@ -21,6 +21,13 @@ from pageplus.utils.mappings.table_json import (
     replace_table_region_from_html,
     table_html_to_page,
 )
+from pageplus.utils.mappings.rctable import (
+    rctable_json_to_page,
+    rctable_to_page,
+    build_rctable_region_element,
+    replace_rctable_region_by_id,
+    rctable_to_page_xml,
+)
 from pageplus.utils.mappings.markdown import markdown2pagexml
 from pageplus.utils.mappings.pp_layout import pp_layout_json_to_page
 from pageplus.utils.mappings.pp_layout_extend import pp_layout_extend_json_to_page
@@ -51,6 +58,11 @@ __all__ = [
     "gemini2d_to_page",
     "gemini2d_preprocess",
     "table_json_to_page",
+    "rctable_json_to_page",
+    "rctable_to_page",
+    "build_rctable_region_element",
+    "replace_rctable_region_by_id",
+    "rctable_to_page_xml",
     "table_xml_to_html",
     "table2html",
     "replace_table_region_from_html",

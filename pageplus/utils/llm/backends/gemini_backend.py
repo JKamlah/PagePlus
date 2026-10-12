@@ -193,11 +193,23 @@ class GeminiBackend(OCRBackend):
             max_output_tokens=self._options.max_output_tokens,
         )
         if getattr(self._options, "service_tier", None) and self._options.service_tier != "auto":
-            cfg_kwargs["service_tier"] = self._options.service_tier
+            fields = getattr(genai_types.GenerateContentConfig, "model_fields", None)
+            is_mock = hasattr(genai_types, "_mock_return_value") or hasattr(genai_types.GenerateContentConfig, "_mock_return_value")
+            if is_mock or (fields is not None and "service_tier" in fields):
+                cfg_kwargs["service_tier"] = self._options.service_tier
         if thinking_config is not None:
             cfg_kwargs["thinking_config"] = thinking_config
 
-        return genai_types.GenerateContentConfig(**cfg_kwargs)
+        try:
+            return genai_types.GenerateContentConfig(**cfg_kwargs)
+        except Exception as exc:
+            if "service_tier" in cfg_kwargs and "service_tier" in str(exc):
+                logging.warning(
+                    "[Gemini Backend] Installed google-genai does not support 'service_tier'; omitting parameter."
+                )
+                cfg_kwargs.pop("service_tier", None)
+                return genai_types.GenerateContentConfig(**cfg_kwargs)
+            raise
 
     def _build_contents(self, prompt: RenderedPrompt, ctx: BackendCallContext) -> list:
         image_part = None

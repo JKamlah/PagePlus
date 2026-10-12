@@ -96,6 +96,21 @@ def _table_json_to_xml(structured: Any, image_path: Path,
     return table_json_to_page(structured, image_path)
 
 
+def _rctable_to_xml(structured: Any, image_path: Path,
+                    page=None, **opts) -> str:
+    from pageplus.utils.mappings import rctable_to_page
+    return rctable_to_page(structured, image_path)
+
+
+def _rctable_correction_apply(structured: Any, image_path: Path,
+                              page=None, **opts) -> Any:
+    from pageplus.utils.mappings import replace_rctable_region_by_id, rctable_to_page
+    if page is not None and isinstance(structured, dict):
+        replace_rctable_region_by_id(page, structured)
+        return page
+    return rctable_to_page(structured, image_path)
+
+
 def _markdown_to_xml(structured: Any, image_path: Path,
                      page=None, **opts) -> str:
     """Markdown (plain text) output -> fresh PAGE XML string.
@@ -1306,6 +1321,8 @@ register_postprocessor("gemini2d_to_page", _layout_and_text_to_xml)  # legacy al
 register_postprocessor("layout_only_to_xml", _layout_only_to_xml)
 register_postprocessor("segmentation_to_page", _layout_only_to_xml)  # legacy alias
 register_postprocessor("table_json_to_page", _table_json_to_xml)
+register_postprocessor("rctable_to_page", _rctable_to_xml)
+register_postprocessor("rctable_correction_apply", _rctable_correction_apply)
 register_postprocessor("table_correction_apply", _table_correction_apply)
 register_postprocessor("table_html_correction_apply", _table_html_correction_apply)
 register_postprocessor("table_html_coords_apply", _table_html_coords_apply)

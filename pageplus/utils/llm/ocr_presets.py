@@ -63,6 +63,13 @@ STEP_DEFINITIONS: Dict[str, Dict[str, Any]] = {
         "family": "fresh",
         "uses_builtin_template": False,
     },
+    "RCTable": {
+        "task_mode": "layout_and_text",
+        "mapping": "rctable_to_page",
+        "task_level": "Page",
+        "family": "fresh",
+        "uses_builtin_template": False,
+    },
     "Field-Tagging": {
         "task_mode": "layout_correction",
         "mapping": "field_tagging_apply",
@@ -87,6 +94,8 @@ MAPPING_CHOICES: List[str] = [
     "gemini2d_to_page",      # JSON bbox+text -> fresh PAGE XML
     "segmentation_to_page",  # JSON regions -> fresh PAGE XML
     "table_json_to_page",    # JSON tables -> fresh PAGE XML
+    "rctable_to_page",       # Dual Row-Column JSON (RCTable) -> fresh PAGE XML
+    "rctable_correction_apply", # RCTable -> update TableRegion
     "table_correction_apply",# Crop table XML+image -> detect merged cells & proportions -> replace by ID
     "table_html_correction_apply", # HTML table -> correct structure & text -> replace by ID
     "table_html_coords_apply",     # HTML table with % coords -> update coordinates -> replace by ID
@@ -179,6 +188,21 @@ TABLE_RECOGNITION_PROMPT = (
     "\"rows\": 3, \"cols\": 3, \"cells\": [{\"row\": 0, \"col\": 0, \"rowspan\": 1, \"colspan\": 1, \"value\": \"text\"}]}]}."
 )
 
+RCTABLE_PROMPT = (
+    "You are an expert Document Layout Analysis and Table Recognition AI (RCTable). "
+    "Your task is to recognise the content of this page as a table and output a structured, "
+    "cell-indexed Row-Column grid JSON.\n\n"
+    "Capture 100% of the text content verbatim as written (preserving archaic spellings, punctuation, and line breaks as \\n).\n\n"
+    "If there are merged cells, indicate the information with '#REMOVE-MERGED-(ROW or COLUMN)':\n"
+    "- Merged across Columns (horizontal span): Place full text in the first column, and indicate merged columns with '#REMOVE-MERGED-COLUMN'.\n"
+    "- Merged across Rows (vertical span): Place full text in the first row, and indicate merged rows with '#REMOVE-MERGED-ROW'.\n\n"
+    "Return JSON only with 'columns' and 'rows':\n"
+    "{\n"
+    '  "columns": [{"box_2d": [ymin, xmin, ymax, xmax], "cells": ["header", "info", ...]}],\n'
+    '  "rows": [{"box_2d": [ymin, xmin, ymax, xmax], "cells": ["cell 0", "cell 1", ...]}\n'
+    "}"
+)
+
 TABLE_CORRECTION_PROMPT = (
     "You are an expert table structure analysis and OCR correction AI.\n"
     "You receive a cropped table image along with an initial table JSON structure containing:\n"
@@ -239,6 +263,38 @@ TEXTREGION_LINES_PROMPT = (
     "and diacritics. Output only the transcribed lines with no commentary or markdown code fences."
 )
 
+SIMPLE_TABLE_PROMPT = (
+    "**Role:** You are a hyper-precise Optical Character Recognition (OCR) engine.\n"
+    "**Task:** Process the provided image and extract absolutely all discernible textual content, no matter how small or isolated.\n"
+    "**Accuracy:** Prioritize extreme accuracy and completeness. Your primary directive is to detect and transcribe *every* visible textual element. This explicitly includes:\n"
+    "    *   Single, isolated characters (alphanumeric, e.g., 'A', '1').\n"
+    "    *   Single, isolated symbols and punctuation (e.g., '-', '_', '.', ',', '*', '$', '%', '+', '=', '/', '\\', '©', '®', '™', and any other Unicode characters).\n"
+    "    *   Fragmented or partially obscured characters/symbols.\n"
+    "    *   Separate the fraction from the number before it with a space.\n"
+    "    *   Ignore leaders with no context like dots, dashes or underscores.\n"
+    "**Contextual Sensitivity:** Pay **critical attention** to structured layouts like tables, forms, lists, and diagrams. Ensure that the content within **every distinct area** (like table cells, form fields) is extracted, *even if that content is solely a single character or symbol* (e.g., a hyphen '-' used as a placeholder or connector in a table cell). Do not dismiss small marks if they represent textual information.\n"
+    "**Output Format:** Generate a JSON output containing a list of detected objects (text lines and tables) and preserve reading order.\n"
+    "**JSON Object Structure:**\n"
+    "For each detected text line outside tables, provide:\n"
+    "    *   \"box_2d\": A list of four integers representing the bounding box coordinates for each line (as small as possible, containing all the text) of the detected text line in the format [y_min, x_min, y_max, x_max].\n"
+    "    *   \"text_content\": A string containing the exact text transcribed from the bounding box. Preserve case, spacing, and all characters precisely as detected.\n"
+    "    *   \"type\": One of the following contextual roles or styles of the line (do not use other!): \"heading\", \"header\", \"paragraph\", \"page-number\", \"marginalia\", \"footnote\", \"drop-capital\", \"toc\", \"music\", \"chem\", \"advert\", \"map\", \"maths\", \"graphic\", \"image\"\n"
+    "    *   \"style\": (Optional) Select if it apply to the style of the font in the line: \"handwriting\", \"bold\", \"italic\"\n\n"
+    "For each detected table on the page, represent the table as an object with:\n"
+    "    *   \"type\": \"table\"\n"
+    "    *   \"box_2d\": Approximate bounding box coordinates [y_min, x_min, y_max, x_max] of the entire table on a 0-1000 scale.\n"
+    "    *   \"columns\": A list of column objects defining the column structure and heading information only:\n"
+    "        *   \"box_2d\": Approximate bounding box coordinates for the column [y_min, x_min, y_max, x_max].\n"
+    "        *   \"cells\": Array containing ONLY the column heading text string(s) (e.g., [\"First Column Heading-1\"]). Do NOT include data row content here!\n"
+    "    *   \"rows\": A list of row objects defining the data rows (excluding headings):\n"
+    "        *   \"box_2d\": Approximate bounding box coordinates for the row [y_min, x_min, y_max, x_max].\n"
+    "        *   \"cells\": Array containing the data cell text strings for this row from left to right (strictly one item per column). Do NOT repeat the column headings here!\n"
+    "    *   **Priority - Content & Grid Alignment Over Coordinates:** Correctly mapping and aligning the row and column text content into a fitting grid is far more important than exact bounding box coordinates. Ensure every row has exactly the same number of cells as there are columns (use empty strings \"\" or \"-\" for blank cells) so columns never drift out of alignment.\n"
+    "    *   (Optional) If there are merged cells, mark placeholder positions with \"#REMOVE-MERGED-COLUMN\" (horizontal merge) or \"#REMOVE-MERGED-ROW\" (vertical merge).\n\n"
+    "**Granularity:** Operate at the highest possible granularity. If a single character or symbol exists independently in a location (like a hyphen in an otherwise empty table cell), it MUST be detected and reported as its own text object (or as part of the cell's content if appropriate for the region grouping).\n"
+    "**Strictness:** Adhere strictly to the specified JSON structure and content requirements. Do not add extra keys, omit required keys, or deviate from the requested format. Report everything detected."
+)
+
 
 # ---------------------------------------------------------------------------
 # Default presets (provider/model left blank: chosen at run time in the UI).
@@ -284,6 +340,9 @@ def _preset(
 DEFAULT_PRESETS: List[Dict[str, Any]] = [
     _preset("allinone", "All-in-One OCR", "All-in-One",
             description="Layout + text in one pass (built-in template)."),
+    _preset("simple_table", "Simple Table (All-in-One)", "All-in-One",
+            system_prompt=SIMPLE_TABLE_PROMPT, mapping="gemini2d_to_page",
+            description="All-in-One OCR with Simple Table (Row-Column grid) recognition mapped to PageXML TableRegion."),
     _preset("markdown_ocr", "Markdown OCR (All-in-One)", "All-in-One",
             system_prompt=MARKDOWN_OCR_PROMPT, mapping="markdown_to_page",
             description="Whole-page transcription to Markdown, mapped to PAGE XML."),
@@ -305,6 +364,16 @@ DEFAULT_PRESETS: List[Dict[str, Any]] = [
     _preset("table", "Table Recognition", "TableRecognition",
             system_prompt=TABLE_RECOGNITION_PROMPT,
             description="Transcribe tables to TableRegions/TableCells."),
+    _preset("rctable", "RCTable (Row-Column Table)", "RCTable",
+            system_prompt=RCTABLE_PROMPT,
+            mapping="rctable_to_page",
+            description="Recognise page content as a table using Row-Column grid JSON with #REMOVE-MERGED-(ROW or COLUMN) for merged cells."),
+    _preset("rctable_correction", "RCTable Correction (Crop TableRegion)", "RCTable",
+            system_prompt=RCTABLE_PROMPT,
+            task_mode="layout_correction",
+            task_level="TableRegion",
+            mapping="rctable_correction_apply",
+            description="Crop TableRegion and refine table structure via RCTable format with #REMOVE-MERGED-(ROW or COLUMN)."),
     _preset("table_correction", "Table Recognition & Structure Correction", "TableRecognition",
             system_prompt=TABLE_CORRECTION_PROMPT,
             task_mode="layout_correction",

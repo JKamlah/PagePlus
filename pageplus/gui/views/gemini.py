@@ -643,6 +643,8 @@ def show_gemini(bridge: "GeminiBridge") -> None:
 
                 selected_stages = []
                 process_type = "OCR"  # Default process type
+                operation_mode = "OCR"
+                process_selection = "All-in-One"
 
                 if config_mode == "🎯 Quick Mode (Single Stage)":
                     st.markdown("#### 🎯 Quick Mode Settings")

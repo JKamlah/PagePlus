@@ -132,6 +132,7 @@ else:
         calls_per_minute: int,
         thinking_budget: int,
         max_concurrency: int,
+        system_prompt: Optional[str] = None,
     ) -> PagePlusOCRPipeline:
         spec = spec_from_gemini_settings(
             llm_api,
@@ -139,9 +140,16 @@ else:
             thinking_budget=thinking_budget,
         )
         spec.execution = ExecutionStrategy.WHOLE_PAGE
+        profile = None
+        if system_prompt:
+            from dataclasses import replace
+            from pageplus.utils.llm.templates import resolve_profile
+            base_profile = resolve_profile(spec.provider, spec.model, task_mode)
+            profile = replace(base_profile, system_prompt=system_prompt)
         return PagePlusOCRPipeline.from_spec(
             spec,
             task_mode=task_mode,
+            profile=profile,
             retry_policy=RetryPolicy(max_attempts=3),
             max_concurrency=max_concurrency,
         )
@@ -268,6 +276,59 @@ else:
                     print(f"[yellow]No existing PAGE XML at {out_xml}; skipping table merge.[/yellow]")
 
     @app.command()
+    def rctable(
+        inputs: Annotated[List[str], typer.Argument(exists=True, help="Image files.",
+                                                    callback=transform_inputs)],
+        outputdir: Annotated[str, typer.Option(help="Output directory.")] = None,
+        snippet_region: Annotated[str, typer.Option(help="Region ID to crop before processing.")] = None,
+        create_page: Annotated[bool, typer.Option(help="Write PAGE XML.")] = True,
+        thinking_budget: Annotated[int, typer.Option(help="Thinking tokens.")] = 0,
+        dry_run: Annotated[bool, typer.Option()] = False,
+    ):
+        """Extract table structure using Gemini and the RCTable (Row-Column) format."""
+        from pageplus.stages.rctable import RCTableStage
+
+        stage = RCTableStage()
+        for image_path in map(Path, inputs):
+            print(f"Processing RCTable for {image_path}...")
+            crop_bbox = None
+            if snippet_region:
+                xml_path = image_path.parent / "page" / image_path.with_suffix('.xml').name
+                if not xml_path.exists():
+                    xml_path = image_path.with_suffix('.xml')
+                if xml_path.exists():
+                    page = Page(xml_path)
+                    for region in (page.regions.tableregions or []) + (page.regions.textregions or []):
+                        if region.get_id() == snippet_region:
+                            coords_str = region.xml_element.find(f"{{{page.ns}}}Coords").get("points")
+                            if coords_str:
+                                pts = [tuple(map(int, pt.split(','))) for pt in coords_str.split()]
+                                xs = [p[0] for p in pts]
+                                ys = [p[1] for p in pts]
+                                crop_bbox = [min(xs), min(ys), max(xs), max(ys)]
+                            break
+
+            result = stage.process(
+                image_path,
+                output_dir=outputdir,
+                crop_bbox=crop_bbox,
+                thinking_budget=thinking_budget,
+            )
+
+            if not result.get("success"):
+                print(f"[red]RCTable failed for {image_path}: {result.get('error')}[/red]")
+                continue
+
+            print(f"[green]RCTable recognized successfully for {image_path}.[/green]")
+            if result.get("xml_path"):
+                print(f"PAGE XML saved to {result['xml_path']}")
+            elif create_page and not dry_run and result.get("xml_content"):
+                out_xml = Path(outputdir) / image_path.with_suffix('.xml').name if outputdir else image_path.with_suffix('.xml')
+                out_xml.parent.mkdir(parents=True, exist_ok=True)
+                out_xml.write_text(result["xml_content"], encoding="utf-8")
+                print(f"Saved PAGE XML to {out_xml}")
+
+    @app.command()
     def ocr_multithread(
         inputs: Annotated[List[str], typer.Argument(exists=True, help="Image files or folders.",
                                                     callback=transform_inputs)],
@@ -283,6 +344,7 @@ else:
         dry_run: Annotated[bool, typer.Option()] = False,
         overwrite: Annotated[bool, typer.Option()] = True,
         thinking_budget: Annotated[int, typer.Option()] = 0,
+        system_prompt: Annotated[Optional[str], typer.Option(help="Custom system prompt.")] = None,
     ):
         """Concurrent OCR over many images. Semaphore-bounded (``jobs``) async calls replace the old ThreadPoolExecutor."""
         images_paths: List[Path] = []
@@ -298,7 +360,8 @@ else:
         pipeline = _pipeline(task_mode,
                              calls_per_minute=calls_per_minute,
                              thinking_budget=thinking_budget,
-                             max_concurrency=jobs)
+                             max_concurrency=jobs,
+                             system_prompt=system_prompt)
 
         documents: List[PagePlusDocumentPage] = []
         for img in images_paths:
