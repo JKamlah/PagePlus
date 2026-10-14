@@ -36,8 +36,8 @@ To install PagePlus, you will need Python 3.11+ and [Poetry](https://python-poet
 
 1.  Clone the repository:
     ```sh
-    git clone https://github.com/your-username/pageplus.git
-    cd pageplus
+    git clone --branch feature/nodes  https://github.com/JKamlah/PagePlus.git
+    cd PagePlus
     ```
     
     *(Note: current recommended is latest `feature/*` branch, not the `main` branch) e.g. `git checkout feature/nodes`*
